@@ -5,6 +5,11 @@
 # how PG* / BACKUP_* / RCLONE_* variables reach backup.sh.
 set -eu
 
+# `docker compose run backup restore.sh ...` runs the given command instead.
+if [ $# -gt 0 ]; then
+    exec "$@"
+fi
+
 CRON_EXPR=${BACKUP_CRON:-30 1 * * *}
 
 mkdir -p /etc/crontabs
