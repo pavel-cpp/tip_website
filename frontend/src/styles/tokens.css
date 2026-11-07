@@ -1,0 +1,149 @@
+/*
+ * Design tokens. Dark is the default (approved mockup); light is a derived palette.
+ * Colours are declared per theme; everything else is shared. src/styles/tokens.test.ts
+ * parses this file and enforces the contrast pairs below, so edit both together.
+ *
+ * Contrast pairs checked (WCAG 2.x ratio, enforced in tokens.test.ts):
+ *   text on bg / bg-elev / bg-input / bg-hover ........ >= 4.5   (dark and light)
+ *   text-muted on bg / bg-elev / bg-input ............. >= 4.5
+ *   text-faint on bg-elev / bg-input (placeholders) ... >= 4.5
+ *   accent-text on bg / bg-elev ....................... >= 4.5
+ *   accent-contrast on accent (primary button label) .. >= 4.5
+ *   danger, ok on bg-elev (text and icons) ............ >= 4.5
+ *   border-strong on bg-elev / bg-input (controls) .... >= 3     (light)
+ *   accent on bg-elev (focus ring, icons) ............. >= 3
+ *   user-1..6 on bg-elev (outlines, cursors) .......... >= 3
+ */
+
+/* The attribute selectors also match nested elements, so a subtree can show the other theme (/design). */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #131418;
+  --bg-elev: #1b1c21;
+  --bg-input: #0e0f12;
+  --bg-hover: #23252c;
+  --bg-overlay: rgba(5, 6, 8, 0.65);
+  --border: #2b2d35;
+  --border-strong: #3a3d47;
+
+  --text: #e8e9ec;
+  --text-muted: #8d919c;
+  --text-faint: #80848f;
+
+  --accent: #3b7bff;
+  --accent-hover: #5a90ff;
+  --accent-text: #5a90ff;
+  --accent-soft: rgba(59, 123, 255, 0.16);
+  --accent-contrast: #0b1020;
+  --danger: #ff8a4c;
+  --ok: #3ddc97;
+
+  --user-1: #ff6b9d;
+  --user-2: #ffb84d;
+  --user-3: #3ddc97;
+  --user-4: #6cb4ff;
+  --user-5: #b18cff;
+  --user-6: #ff9559;
+
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --skeleton-base: #1f2127;
+  --skeleton-shine: rgba(255, 255, 255, 0.06);
+  --meta-theme-color: #131418;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f4f5f8;
+  --bg-elev: #ffffff;
+  --bg-input: #ffffff;
+  --bg-hover: #eceef3;
+  --bg-overlay: rgba(20, 22, 30, 0.45);
+  --border: #dcdfe6;
+  --border-strong: #7f8596;
+
+  --text: #15171c;
+  --text-muted: #545a69;
+  --text-faint: #626877;
+
+  --accent: #1f5fe0;
+  --accent-hover: #174fc2;
+  --accent-text: #1a52c4;
+  --accent-soft: rgba(31, 95, 224, 0.12);
+  --accent-contrast: #ffffff;
+  --danger: #b23c06;
+  --ok: #0c7048;
+
+  --user-1: #c4175f;
+  --user-2: #a8500a;
+  --user-3: #0b7a50;
+  --user-4: #1a65b8;
+  --user-5: #7343d4;
+  --user-6: #bd400b;
+
+  --shadow-pop: 0 18px 44px rgba(20, 24, 40, 0.18);
+  --shadow-card: 0 1px 2px rgba(20, 24, 40, 0.06);
+  --skeleton-base: #e7e9ef;
+  --skeleton-shine: rgba(255, 255, 255, 0.7);
+  --meta-theme-color: #f4f5f8;
+}
+
+:root {
+  /* Radii */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  /* Spacing scale (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Layout */
+  --topbar-h: 58px;
+  --touch-target: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+
+  /* Typography */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 24px;
+  --fw-regular: 400;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+  --lh-tight: 1.25;
+  --lh-normal: 1.5;
+
+  /* Stacking */
+  --z-sticky: 10;
+  --z-menu: 30;
+  --z-modal: 50;
+  --z-toast: 60;
+  --z-tooltip: 70;
+
+  /* Motion (docs/06-frontend.md, section 10.2). Spring params live in src/lib/motion.ts. */
+  --dur-press: 80ms;
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0, 0, 0, 1);
+  --ease-out: cubic-bezier(0.3, 0, 1, 1);
+}
