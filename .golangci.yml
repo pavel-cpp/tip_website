@@ -1,0 +1,101 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - depguard
+    - errcheck
+    - errorlint
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nolintlint
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    depguard:
+      rules:
+        # Layering from CLAUDE.md. internal/arch_test.go checks the same rules via `go list -deps`.
+        domain:
+          files: ["**/internal/domain/**"]
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/pavel-cpp/tip_website/backend/internal/domain
+        service:
+          files: ["**/internal/service/**"]
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/pavel-cpp/tip_website/backend/internal/service
+            - github.com/pavel-cpp/tip_website/backend/internal/domain
+        handler:
+          files: ["**/internal/handler/**"]
+          deny:
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/repository
+              desc: handlers talk to services only
+        repository:
+          files: ["**/internal/repository/**"]
+          deny:
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/service
+              desc: repositories implement service ports without importing them
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/handler
+              desc: repositories must not know the transport
+        platform:
+          files: ["**/internal/platform/**"]
+          deny:
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/service
+              desc: platform must not depend on business logic
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/handler
+              desc: platform must not depend on the transport
+            - pkg: github.com/pavel-cpp/tip_website/backend/internal/repository
+              desc: platform must not depend on storage
+    gosec:
+      excludes:
+        - G104 # unchecked errors are covered by errcheck
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: error-return
+        - name: error-naming
+        - name: error-strings
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: indent-error-flow
+        - name: errorf
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: superfluous-else
+        - name: unused-parameter
+        - name: unreachable-code
+        - name: redefines-builtin-id
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, revive]
+      - path: internal/platform/dbtest
+        linters: [revive]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/pavel-cpp/tip_website
