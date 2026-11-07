@@ -1,0 +1,2694 @@
+openapi: 3.1.0
+info:
+  title: TIP Web API
+  version: 1.0.0
+  summary: REST contract of the TIP Web backend (tipd).
+  description: |
+    REST API of TIP Web, an internal tool for contest operators: projects, participant tables,
+    ticket images, real-time collaboration and role-based administration.
+
+    All paths are relative to the server base path `/api/v1`. Bodies are JSON (UTF-8), fields are
+    `camelCase`, timestamps are RFC 3339 in UTC. Identifiers are UUIDs. Row and project `version`
+    values are integers that grow on every write (optimistic concurrency).
+
+    ## Authentication
+
+    * Login returns a token pair: a short-lived access JWT (HS256, 15 minutes) in the body and a
+      refresh JWT (30 days) in the `httpOnly` cookie `tip_rt` (`Secure; SameSite=Strict; Path=/api/v1/auth`).
+    * Protected requests send `Authorization: Bearer <accessToken>`. The user's permissions travel inside
+      the access token (`roles`, `perms` claims) and are checked without database lookups.
+    * `401 TOKEN_EXPIRED` and `401 TOKEN_STALE` mean: call `POST /auth/refresh`, then repeat the request once.
+      `TOKEN_STALE` means roles or permissions changed (the permission epoch `pe` in the token is outdated);
+      the refreshed token carries the current permissions.
+    * `401 UNAUTHENTICATED` means the token is missing, malformed, blacklisted (logout, deactivation,
+      password change); the client must go to the login screen.
+    * `401 REFRESH_INVALID` means the refresh token is expired, burnt, revoked or reused (a second use later
+      than 10 seconds after rotation closes the whole chain); a new login is required.
+    * Redis holds token state. When it is unavailable `login`, `refresh` and `logout` answer
+      `503 AUTH_UNAVAILABLE`; other requests do so only when `REDIS_FAIL_MODE=closed`.
+    * Cookie endpoints (`/auth/refresh`, `/auth/logout`) additionally check `Sec-Fetch-Site`/`Origin`;
+      cross-origin requests get `403 FORBIDDEN`.
+    * With `FORCE_PASSWORD_CHANGE=true` a user holding a temporary password gets
+      `403 PASSWORD_CHANGE_REQUIRED` everywhere except `/me`, `/me/password`, `/auth/refresh`, `/auth/logout`.
+
+    ## Permissions
+
+    Every protected operation lists the permission codes it requires in the vendor extension
+    `x-required-permissions` (the catalog is documented in `docs/02-architecture.md`, section 5.1).
+    An empty list means the endpoint needs authentication only. Self-service profile endpoints need the
+    implicit `profile.edit` right, which every signed-in user has and which is not part of the catalog,
+    so they also use an empty list. A missing permission yields `403 FORBIDDEN`; a hidden resource yields `404 NOT_FOUND`.
+
+    ## Errors
+
+    Every error uses the `Error` envelope: `{"error": {"code", "message", "details"}}`. `code` is a stable
+    machine-readable value from a closed enum, `message` is a human-readable English text, `details` is optional.
+    Validation errors carry per-field information in `details.fields`. `500 INTERNAL` only carries the request id.
+    Every response has an `X-Request-Id` header (an incoming one is accepted and echoed).
+
+    ## Caching
+
+    `GET /projects/{id}/participants`, `GET /projects/{id}/image` and avatar endpoints return a strong `ETag`
+    and honour `If-None-Match` (answering `304 Not Modified` without a body). Project images are served with
+    `ETag` equal to the SHA-256 of the content and `Cache-Control: public, max-age=31536000, immutable`
+    (the URL carries a `v` query parameter that changes together with the content).
+
+    ## WebSocket protocol
+
+    OpenAPI cannot model WebSockets, so the realtime channel is described here.
+    Endpoint: `GET /api/v1/projects/{id}/ws` (HTTP upgrade, `Origin` is checked). The token is never put in the URL.
+    Frames are text JSON of the form `{"t": "<type>", ...}`, at most 4 KiB each, at most 20 messages per second.
+
+    Lifecycle:
+    1. The client connects and must send `auth` as its first frame within 5 seconds. A missing `auth`, an invalid
+       token or a missing `project.view` permission closes the socket with code `1008`.
+       Connection rights come from the token `perms`: data needs `participant.view`, taking locks needs `participant.edit`.
+    2. The server answers `hello`; the client then fetches `GET /projects/{id}/participants` (resync) and renders.
+    3. The server closes with `1013` (slow client or overload), `1008` (no/expired token, no rights, deactivated user)
+       or `1001` (restart). The client reconnects with exponential backoff and jitter (1 s up to 15 s) and resyncs.
+    4. A lock not renewed for 45 seconds is released by the server, which broadcasts `unlock`.
+    5. When permissions change the server sends `reauth`; the client refreshes the token pair and sends a new `auth`
+       within 5 seconds, otherwise the socket is closed with `1008`.
+
+    Client to server frames:
+
+    | `t` | fields | meaning |
+    |---|---|---|
+    | `auth` | `token` | First frame: access JWT. Repeated after every `/auth/refresh` and in reply to `reauth`. |
+    | `ping` | none | Heartbeat every 15 s; renews all locks of the client. |
+    | `cursor` | `rowId?`, `field?` | The user is on this row/cell (not exclusive). `rowId=null` clears it. |
+    | `lock.acquire` | `rowId` | Start editing a row. |
+    | `lock.release` | `rowId` | Finish editing (blur, Enter, Esc). |
+
+    Server to client frames:
+
+    | `t` | fields | meaning |
+    |---|---|---|
+    | `hello` | `you`, `peers:[{id,displayName,color,avatarUrl}]`, `cursors:{userId:{rowId,field}}`, `locks:{rowId:{by,expiresAt}}`, `serverTime` | First message. |
+    | `reauth` | none | Permissions changed: refresh the pair and send a new `auth`. |
+    | `presence` | `peers` | Who is online. |
+    | `cursor` | `userId`, `rowId?`, `field?` | Another participant's cursor. |
+    | `lock` / `unlock` | `rowId`, `by`, `expiresAt` | A row was locked or released; `by` is the editing user id. |
+    | `lock.denied` | `rowId`, `by` | Reply to `lock.acquire` when the row is taken. |
+    | `rows.upsert` | `items:[Participant]` | Rows changed or added; apply when `version` is greater than the local one. |
+    | `rows.delete` | `ids` | Rows deleted. |
+    | `project.updated` | `project` | Project changed (settings, status `finished` makes the UI read-only). |
+    | `error` | `code`, `message` | Limit violations etc.; on `RATE_LIMITED` the connection is closed. |
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /api/v1
+    description: Same origin as the web application.
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+    description: Liveness and readiness probes.
+  - name: Auth
+    description: Login, token refresh and logout.
+  - name: Profile
+    description: The signed-in user's own profile.
+  - name: Users
+    description: User administration and avatars.
+  - name: Roles
+    description: Permission catalog and role management.
+  - name: Admin
+    description: Audit log and system status.
+  - name: Projects
+    description: Projects, their placeholders and ticket images.
+  - name: Participants
+    description: Participant tables, import, export and printing log.
+  - name: Diagnostics
+    description: Frontend error reports.
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      operationId: getHealthz
+      summary: Liveness probe
+      description: Returns 200 while the process is alive.
+      security: []
+      responses:
+        "200":
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example: { status: ok }
+  /readyz:
+    get:
+      tags: [Health]
+      operationId: getReadyz
+      summary: Readiness probe
+      description: Pings PostgreSQL and Redis and checks that `DATA_DIR` is usable.
+      security: []
+      responses:
+        "200":
+          description: All dependencies are available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+              example: { status: ok, checks: { postgres: ok, redis: ok, dataDir: ok } }
+        "503":
+          description: At least one dependency is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+              example: { status: unavailable, checks: { postgres: ok, redis: fail, dataDir: ok } }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Sign in
+      description: |
+        Verifies the credentials and returns the access token in the body together with the refresh token in the
+        `tip_rt` cookie. When `user.passwordTemporary` is true the UI recommends changing the password
+        (it may be postponed unless `FORCE_PASSWORD_CHANGE=true`). Rate limited per IP and login.
+      security: []
+      x-required-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example: { login: a.sharafutdinov, password: correct-horse-battery }
+      responses:
+        "200":
+          description: Signed in.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetRefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/BadCredentials"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshToken
+      summary: Rotate the token pair
+      description: |
+        Exchanges the refresh cookie for a new pair. The old refresh token is burnt in Redis; presenting it again
+        within 10 seconds is idempotent, later it is treated as reuse (`401 REFRESH_INVALID`, chain closed).
+        Roles and permissions in the new access token are read from the database.
+      security:
+        - refreshCookie: []
+      x-required-permissions: []
+      responses:
+        "200":
+          description: A new pair was issued.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetRefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/RefreshInvalid"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Sign out
+      description: |
+        Blacklists the current access token `jti`, revokes the whole refresh chain and clears the cookie.
+        The UI always calls it.
+      x-required-permissions: []
+      responses:
+        "204":
+          description: Signed out.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/ClearRefreshCookie"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /me:
+    get:
+      tags: [Profile]
+      operationId: getMe
+      summary: Get the current user
+      x-required-permissions: []
+      responses:
+        "200":
+          description: The current user with roles and effective permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Profile]
+      operationId: updateMe
+      summary: Update the own profile
+      description: Requires the implicit `profile.edit` right that every signed-in user has.
+      x-required-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMeRequest"
+            example: { displayName: Azam Tursunov, color: "#ffb84d", locale: uz, theme: dark }
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/password:
+    post:
+      tags: [Profile]
+      operationId: changePassword
+      summary: Change the own password
+      description: |
+        Clears `passwordTemporary`, writes a per-user revocation cutoff in Redis (all earlier access and refresh
+        tokens become invalid) and issues a fresh pair for the current client. A wrong `current` password is
+        reported as `400 VALIDATION` with a field error on `current`, so that the client does not treat it as
+        a lost session.
+      x-required-permissions: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed; a new pair was issued.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/SetRefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /me/avatar:
+    put:
+      tags: [Profile]
+      operationId: putMyAvatar
+      summary: Upload the own avatar
+      description: PNG or JPEG up to 2 MiB. The server resizes it to 256x256.
+      x-required-permissions: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AvatarUpload"
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMedia"
+        "422":
+          $ref: "#/components/responses/ImageInvalid"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "507":
+          $ref: "#/components/responses/DiskLow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Profile]
+      operationId: deleteMyAvatar
+      summary: Remove the own avatar
+      x-required-permissions: []
+      responses:
+        "200":
+          description: The updated user (`avatarUrl` is null).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /users/{id}/avatar:
+    get:
+      tags: [Users]
+      operationId: getUserAvatar
+      summary: Get a user's avatar image
+      x-required-permissions: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: The avatar image (256x256 JPEG).
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List users
+      x-required-permissions: [user.view]
+      responses:
+        "200":
+          description: All users.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user
+      description: |
+        The server generates a random 16 character password (`crypto/rand`) and returns it once as `tempPassword`;
+        only its hash is stored and `passwordTemporary` is true. Without `role.manage` only the default role
+        (`worker`) is assigned; passing `roleIds` requires `role.manage`.
+      x-required-permissions: [user.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+            example: { login: m.karimov, displayName: Murod Karimov, color: "#6cb4ff" }
+      responses:
+        "201":
+          description: The user was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateUserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/users/{id}:
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Update or deactivate a user
+      description: |
+        Deactivation writes a revocation cutoff in Redis (access and refresh tokens die at once, the WebSocket is closed).
+        Deactivating the last active admin yields `409 LAST_ADMIN`.
+      x-required-permissions: [user.manage]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/LastAdmin"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/users/{id}/roles:
+    put:
+      tags: [Users]
+      operationId: setUserRoles
+      summary: Replace the roles of a user
+      description: |
+        Bumps the permission epoch `pe`: the user's tokens get `401 TOKEN_STALE` and refresh transparently.
+        Removing the admin role from the last active admin yields `409 LAST_ADMIN`.
+      x-required-permissions: [role.manage]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetUserRolesRequest"
+      responses:
+        "200":
+          description: The updated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/LastAdmin"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/users/{id}/reset-password:
+    post:
+      tags: [Users]
+      operationId: resetUserPassword
+      summary: Reset a user's password
+      description: |
+        Generates a new random password (returned once), invalidates the user's tokens via the Redis cutoff and sets
+        `passwordTemporary=true`.
+      x-required-permissions: [user.manage]
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: The new temporary password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TempPasswordResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/permissions:
+    get:
+      tags: [Roles]
+      operationId: listPermissions
+      summary: Permission catalog
+      description: The catalog drives the checkbox matrix of the admin panel.
+      x-required-permissions: [role.manage]
+      responses:
+        "200":
+          description: All permissions known to the server.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Permission"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/roles:
+    get:
+      tags: [Roles]
+      operationId: listRoles
+      summary: List roles
+      x-required-permissions: [role.manage]
+      responses:
+        "200":
+          description: All roles with user counts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Roles]
+      operationId: createRole
+      summary: Create a role
+      description: The server adds dependent permissions (for example `participant.edit` implies `participant.view`).
+      x-required-permissions: [role.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: The role was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/roles/{id}:
+    get:
+      tags: [Roles]
+      operationId: getRole
+      summary: Get a role with its users
+      x-required-permissions: [role.manage]
+      parameters:
+        - $ref: "#/components/parameters/RoleId"
+      responses:
+        "200":
+          description: The role and the users who hold it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleDetailResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Roles]
+      operationId: updateRole
+      summary: Update a role
+      description: Bumps the permission epoch. The `admin` role cannot be edited (`409 ROLE_SYSTEM`).
+      x-required-permissions: [role.manage]
+      parameters:
+        - $ref: "#/components/parameters/RoleId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoleRequest"
+      responses:
+        "200":
+          description: The updated role.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/RoleSystem"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Roles]
+      operationId: deleteRole
+      summary: Delete a role
+      description: Fails with `ROLE_IN_USE` while users hold the role and with `ROLE_SYSTEM` for system roles.
+      x-required-permissions: [role.manage]
+      parameters:
+        - $ref: "#/components/parameters/RoleId"
+      responses:
+        "204":
+          description: The role was deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/RoleConflict"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /admin/audit:
+    get:
+      tags: [Admin]
+      operationId: listAudit
+      summary: Audit log
+      description: Newest first; paginate with `before` set to the previous page's `next`. Entries carry IDs and numbers only, never personal data.
+      x-required-permissions: [audit.view]
+      parameters:
+        - name: limit
+          in: query
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: before
+          in: query
+          description: Return entries with an id lower than this value.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: projectId
+          in: query
+          description: Restrict to one project.
+          schema:
+            type: string
+            format: uuid
+        - name: actor
+          in: query
+          description: Restrict to actions of one user (user id).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: A page of audit entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditPage"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /admin/system:
+    get:
+      tags: [Admin]
+      operationId: getSystem
+      summary: System status
+      description: Version, uptime, database and disk usage, retention settings and health checks (Postgres, Redis, disk, Loki, last local and external backup).
+      x-required-permissions: [system.view]
+      responses:
+        "200":
+          description: Current system state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /projects:
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: List projects
+      description: |
+        Requires `project.view`; asking for `finished` projects also needs `project.view_finished`.
+        Without `project.view_finished` only active projects are returned.
+      x-required-permissions: [project.view]
+      parameters:
+        - name: status
+          in: query
+          description: Filter by status.
+          schema:
+            $ref: "#/components/schemas/ProjectStatus"
+        - name: q
+          in: query
+          description: Case-insensitive title search.
+          schema:
+            type: string
+            maxLength: 120
+      responses:
+        "200":
+          description: Project cards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectCard"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Create a project
+      description: The project starts with default placeholders.
+      x-required-permissions: [project.create]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+            example: { title: Tashkent City BMW giveaway }
+      responses:
+        "201":
+          description: The project was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      operationId: getProject
+      summary: Get a project
+      description: Also registers the caller in `contributors`.
+      x-required-permissions: [project.view]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: The project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      tags: [Projects]
+      operationId: updateProject
+      summary: Update a project
+      description: "Optimistic concurrency: `version` must equal the current project version, otherwise `409 VERSION_CONFLICT`."
+      x-required-permissions: [project.update]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: The updated project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectWriteConflict"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Projects]
+      operationId: deleteProject
+      summary: Delete a project
+      description: Irreversible; written to the audit log.
+      x-required-permissions: [project.delete]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "204":
+          description: The project was deleted.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/finish:
+    post:
+      tags: [Projects]
+      operationId: finishProject
+      summary: Finish a project
+      description: The project becomes read-only.
+      x-required-permissions: [project.finish]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: The finished project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/reopen:
+    post:
+      tags: [Projects]
+      operationId: reopenProject
+      summary: Return a finished project to active
+      x-required-permissions: [project.finish]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: The reopened project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/image:
+    put:
+      tags: [Projects]
+      operationId: putProjectImage
+      summary: Upload the ticket image
+      description: |
+        Multipart upload of a PNG or JPEG up to 10 MiB and 16 megapixels; images larger than 4096 px on the
+        long side are downscaled. Failures: 413, 415, 422, 507.
+      x-required-permissions: [project.update]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ImageUpload"
+      responses:
+        "200":
+          description: The updated project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectFinished"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMedia"
+        "422":
+          $ref: "#/components/responses/ImageInvalid"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "507":
+          $ref: "#/components/responses/DiskLow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    get:
+      tags: [Projects]
+      operationId: getProjectImage
+      summary: Download the original ticket image
+      description: "Served with `ETag` equal to the SHA-256 of the content and `Cache-Control: immutable`."
+      x-required-permissions: [project.view]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: The original image.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              description: Always `public, max-age=31536000, immutable`.
+              schema:
+                type: string
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /projects/{id}/participants:
+    get:
+      tags: [Participants]
+      operationId: listParticipants
+      summary: List participants
+      description: |
+        Without `q` all rows are returned (up to 20 000). The response carries a strong `ETag`; send it back in
+        `If-None-Match` to get `304 Not Modified`.
+      x-required-permissions: [participant.view]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: q
+          in: query
+          description: Substring filter on name and phone.
+          schema:
+            type: string
+            maxLength: 200
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Participant rows and the table revision.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantList"
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Participants]
+      operationId: createParticipants
+      summary: Add participants
+      description: Either `count` empty rows (1 to 5000) or explicit `items`. Numbers are allocated atomically and never reused.
+      x-required-permissions: [participant.edit]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateParticipantsRequest"
+            examples:
+              byCount:
+                summary: Ten empty rows
+                value: { count: 10 }
+              byItems:
+                summary: Explicit rows
+                value:
+                  items:
+                    - { name: Sharafutdin Azimov, phone: "+7 926 071-91-98" }
+      responses:
+        "201":
+          description: The created rows.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantItems"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectFinished"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /participants/{id}:
+    patch:
+      tags: [Participants]
+      operationId: updateParticipant
+      summary: Edit a participant row
+      description: |
+        `version` is the row version the client edited. A stale version yields `409 VERSION_CONFLICT` with the
+        current row in `details.current`; a row locked by another user yields `409 ROW_LOCKED`.
+      x-required-permissions: [participant.edit]
+      parameters:
+        - $ref: "#/components/parameters/ParticipantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateParticipantRequest"
+            example: { name: Sharafutdin Azimov, version: 7 }
+      responses:
+        "200":
+          description: The updated row.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParticipantResponse"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ParticipantWriteConflict"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/participants/printed:
+    post:
+      tags: [Participants]
+      operationId: logPrinted
+      summary: Record that tickets were printed
+      description: Writes an audit entry with row ids only; row state is not changed.
+      x-required-permissions: [participant.print]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParticipantIds"
+      responses:
+        "204":
+          description: Recorded.
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/participants/delete:
+    post:
+      tags: [Participants]
+      operationId: deleteParticipants
+      summary: Delete several rows
+      x-required-permissions: [participant.delete]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParticipantIds"
+      responses:
+        "200":
+          description: Number of deleted rows.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedCount"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectFinished"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/participants/clear:
+    post:
+      tags: [Participants]
+      operationId: clearParticipants
+      summary: Delete all rows of a project
+      description: '`confirmTitle` must equal the project title, otherwise `400 VALIDATION`.'
+      x-required-permissions: [participant.clear]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClearParticipantsRequest"
+      responses:
+        "200":
+          description: Number of deleted rows.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletedCount"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectFinished"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/participants/import:
+    post:
+      tags: [Participants]
+      operationId: importParticipants
+      summary: Import participants from XLSX or CSV
+      description: |
+        With `dryRun=1` nothing is written and the response is a preview of the rows and their errors.
+        `mode=append` adds rows, `mode=replace` clears the table first.
+      x-required-permissions: [participant.import]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: dryRun
+          in: query
+          description: Preview only (`1` or `true`).
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ImportUpload"
+      responses:
+        "200":
+          description: Import result or dry-run preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ProjectFinished"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMedia"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "507":
+          $ref: "#/components/responses/DiskLow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/export.xlsx:
+    get:
+      tags: [Participants]
+      operationId: exportParticipantsXlsx
+      summary: Export participants as XLSX
+      description: Columns are number, name, phone.
+      x-required-permissions: [participant.export]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: The workbook.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /projects/{id}/export.csv:
+    get:
+      tags: [Participants]
+      operationId: exportParticipantsCsv
+      summary: Export participants as CSV
+      description: Columns are number, name, phone (UTF-8).
+      x-required-permissions: [participant.export]
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: The CSV file.
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /client-errors:
+    post:
+      tags: [Diagnostics]
+      operationId: reportClientError
+      summary: Report a frontend error
+      description: Public, rate limited, body at most 8 KiB. The report is written to the structured logs.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientError"
+      responses:
+        "204":
+          description: Accepted.
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access JWT (HS256, 15 minutes) obtained from `POST /auth/login` or `POST /auth/refresh`.
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: tip_rt
+      description: Refresh JWT in an httpOnly cookie, set by the server.
+
+  headers:
+    ETag:
+      description: Strong entity tag; send it back in `If-None-Match`.
+      schema:
+        type: string
+        example: '"3f2a9c01"'
+    SetRefreshCookie:
+      description: '`tip_rt=<refresh JWT>; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth`.'
+      schema:
+        type: string
+    ClearRefreshCookie:
+      description: Expires the `tip_rt` cookie.
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds to wait before retrying.
+      schema:
+        type: integer
+        minimum: 0
+        example: 30
+
+  parameters:
+    ProjectId:
+      name: id
+      in: path
+      required: true
+      description: Project id.
+      schema:
+        type: string
+        format: uuid
+    ParticipantId:
+      name: id
+      in: path
+      required: true
+      description: Participant row id.
+      schema:
+        type: string
+        format: uuid
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: User id.
+      schema:
+        type: string
+        format: uuid
+    RoleId:
+      name: id
+      in: path
+      required: true
+      description: Role id.
+      schema:
+        type: string
+        format: uuid
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: ETag previously received; a match yields `304 Not Modified`.
+      schema:
+        type: string
+
+  responses:
+    NotModified:
+      description: The cached representation is still current.
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+    ValidationFailed:
+      description: Invalid data (`VALIDATION`); `details.fields` lists the offending fields.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            validation:
+              value:
+                error:
+                  code: VALIDATION
+                  message: Invalid request data
+                  details:
+                    fields:
+                      - { field: title, code: too_long, message: must be at most 120 characters }
+    Unauthenticated:
+      description: |
+        The token is missing or invalid (`UNAUTHENTICATED`, go to login), expired (`TOKEN_EXPIRED`, refresh and retry once)
+        or its permission epoch is outdated (`TOKEN_STALE`, refresh and retry once).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unauthenticated:
+              value: { error: { code: UNAUTHENTICATED, message: Authentication required } }
+            tokenExpired:
+              value: { error: { code: TOKEN_EXPIRED, message: Access token expired } }
+            tokenStale:
+              value: { error: { code: TOKEN_STALE, message: "Permissions changed, refresh the token" } }
+    BadCredentials:
+      description: Wrong login or password (`BAD_CREDENTIALS`); the reason is not disclosed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: BAD_CREDENTIALS, message: Invalid login or password } }
+    RefreshInvalid:
+      description: The refresh token is expired, missing, revoked or reused (`REFRESH_INVALID`); sign in again.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: REFRESH_INVALID, message: Refresh token is no longer valid } }
+    Forbidden:
+      description: |
+        `FORBIDDEN` when the permission is missing (or a cookie endpoint was called cross-origin);
+        `PASSWORD_CHANGE_REQUIRED` when `FORCE_PASSWORD_CHANGE=true` and the temporary password was not changed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            forbidden:
+              value: { error: { code: FORBIDDEN, message: Permission denied } }
+            passwordChangeRequired:
+              value: { error: { code: PASSWORD_CHANGE_REQUIRED, message: Change the temporary password first } }
+    NotFound:
+      description: The resource does not exist or is hidden from the caller.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: NOT_FOUND, message: Resource not found } }
+    ProjectFinished:
+      description: The project is finished and read-only (`PROJECT_FINISHED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: PROJECT_FINISHED, message: Project is finished } }
+    ProjectWriteConflict:
+      description: |
+        `VERSION_CONFLICT` (stale `version`, `details.current` holds the current project) or
+        `PROJECT_FINISHED` (the project is read-only).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            versionConflict:
+              value: { error: { code: VERSION_CONFLICT, message: Project was changed by someone else, details: { current: {} } } }
+            projectFinished:
+              value: { error: { code: PROJECT_FINISHED, message: Project is finished } }
+    ParticipantWriteConflict:
+      description: |
+        `ROW_LOCKED` (another user is editing the row, `details.by` is their id), `VERSION_CONFLICT`
+        (stale `version`, `details.current` holds the current row) or `PROJECT_FINISHED`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            rowLocked:
+              value:
+                error:
+                  code: ROW_LOCKED
+                  message: The row is being edited by another user
+                  details: { by: 0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d }
+            versionConflict:
+              value: { error: { code: VERSION_CONFLICT, message: Row was changed by someone else, details: { current: {} } } }
+            projectFinished:
+              value: { error: { code: PROJECT_FINISHED, message: Project is finished } }
+    LastAdmin:
+      description: The last active administrator cannot be deactivated or lose the admin role (`LAST_ADMIN`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: LAST_ADMIN, message: At least one active administrator is required } }
+    RoleSystem:
+      description: A system role cannot be modified this way (`ROLE_SYSTEM`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: ROLE_SYSTEM, message: The admin role cannot be edited } }
+    RoleConflict:
+      description: |
+        `ROLE_IN_USE` (users still hold the role, `details.users` lists them) or `ROLE_SYSTEM` (system roles cannot be deleted).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            roleInUse:
+              value:
+                error:
+                  code: ROLE_IN_USE
+                  message: The role is assigned to users
+                  details: { users: [0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d] }
+            roleSystem:
+              value: { error: { code: ROLE_SYSTEM, message: System roles cannot be deleted } }
+    PayloadTooLarge:
+      description: The body or file exceeds the limit (`TOO_LARGE`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: TOO_LARGE, message: Payload is too large } }
+    UnsupportedMedia:
+      description: The file type is not supported (`UNSUPPORTED_MEDIA`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: UNSUPPORTED_MEDIA, message: Only PNG and JPEG are supported } }
+    ImageInvalid:
+      description: The image cannot be decoded or has too many pixels (`IMAGE_INVALID`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: IMAGE_INVALID, message: The image cannot be decoded } }
+    RateLimited:
+      description: Too many requests (`RATE_LIMITED`).
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: RATE_LIMITED, message: Too many requests } }
+    AuthUnavailable:
+      description: Redis is unavailable, so token state cannot be checked (`AUTH_UNAVAILABLE`); retry later.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: AUTH_UNAVAILABLE, message: Authentication backend is unavailable } }
+    DiskLow:
+      description: Not enough free disk space (`DISK_LOW`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: DISK_LOW, message: Not enough free disk space } }
+    InternalError:
+      description: Unexpected failure (`INTERNAL`); `message` contains only the request id.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: { code: INTERNAL, message: "request id 0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d" } }
+
+  schemas:
+    ErrorCode:
+      type: string
+      description: Stable machine-readable error code.
+      enum:
+        - VALIDATION
+        - UNAUTHENTICATED
+        - AUTH_UNAVAILABLE
+        - TOKEN_EXPIRED
+        - TOKEN_STALE
+        - REFRESH_INVALID
+        - BAD_CREDENTIALS
+        - FORBIDDEN
+        - PASSWORD_CHANGE_REQUIRED
+        - NOT_FOUND
+        - ROW_LOCKED
+        - VERSION_CONFLICT
+        - PROJECT_FINISHED
+        - LAST_ADMIN
+        - ROLE_IN_USE
+        - ROLE_SYSTEM
+        - TOO_LARGE
+        - UNSUPPORTED_MEDIA
+        - IMAGE_INVALID
+        - RATE_LIMITED
+        - DISK_LOW
+        - INTERNAL
+    FieldError:
+      type: object
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: Name of the offending request field (dotted path for nested fields).
+          example: title
+        code:
+          type: string
+          description: Short machine-readable reason.
+          example: too_long
+        message:
+          type: string
+          example: must be at most 120 characters
+    ErrorDetails:
+      type: object
+      description: Optional context; which members are present depends on the error code.
+      additionalProperties: true
+      properties:
+        fields:
+          type: array
+          description: Per-field validation problems (`VALIDATION`).
+          items:
+            $ref: "#/components/schemas/FieldError"
+        by:
+          type: string
+          format: uuid
+          description: Id of the user who holds the row lock (`ROW_LOCKED`).
+        current:
+          type: object
+          description: Current state of the conflicting row or project (`VERSION_CONFLICT`).
+          additionalProperties: true
+        users:
+          type: array
+          description: Ids of the users who still hold the role (`ROLE_IN_USE`).
+          items:
+            type: string
+            format: uuid
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              $ref: "#/components/schemas/ErrorCode"
+            message:
+              type: string
+              description: Human-readable English text.
+            details:
+              $ref: "#/components/schemas/ErrorDetails"
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    CheckStatus:
+      type: string
+      enum: [ok, fail]
+    ReadinessResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        checks:
+          type: object
+          required: [postgres, redis, dataDir]
+          properties:
+            postgres:
+              $ref: "#/components/schemas/CheckStatus"
+            redis:
+              $ref: "#/components/schemas/CheckStatus"
+            dataDir:
+              $ref: "#/components/schemas/CheckStatus"
+
+    Color:
+      type: string
+      description: Hex colour `#rrggbb`.
+      pattern: '^#[0-9a-fA-F]{6}$'
+      example: "#6cb4ff"
+    Locale:
+      type: string
+      enum: [ru, uz]
+    Theme:
+      type: string
+      enum: [dark, light, system]
+    PermissionCode:
+      type: string
+      description: Permission from the catalog (`docs/02-architecture.md`, section 5.1).
+      enum:
+        - project.view
+        - project.view_finished
+        - project.create
+        - project.update
+        - project.finish
+        - project.delete
+        - participant.view
+        - participant.edit
+        - participant.print
+        - participant.export
+        - participant.import
+        - participant.delete
+        - participant.clear
+        - user.view
+        - user.manage
+        - role.manage
+        - audit.view
+        - system.view
+    RoleRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+    User:
+      type: object
+      required: [id, login, displayName, roles, permissions, color, avatarUrl, locale, theme, passwordTemporary]
+      properties:
+        id:
+          type: string
+          format: uuid
+        login:
+          type: string
+          pattern: '^[a-z0-9._-]{3,32}$'
+          example: a.sharafutdinov
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoleRef"
+        permissions:
+          type: array
+          description: Effective permissions (the same set as the `perms` claim of the access token).
+          items:
+            $ref: "#/components/schemas/PermissionCode"
+        color:
+          $ref: "#/components/schemas/Color"
+        avatarUrl:
+          type: [string, "null"]
+          description: Avatar URL, or null when there is none (the client draws initials).
+          example: /api/v1/users/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/avatar?v=3f2a
+        locale:
+          $ref: "#/components/schemas/Locale"
+        theme:
+          $ref: "#/components/schemas/Theme"
+        passwordTemporary:
+          type: boolean
+          description: True while the user still has a generated password.
+      example:
+        id: 0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d
+        login: a.sharafutdinov
+        displayName: Sharafutdin Azimov
+        roles:
+          - { id: 0198f2f0-1111-7c1e-9b57-2f4d5a6b7c8d, name: admin }
+        permissions: [project.view, project.create, participant.edit, role.manage]
+        color: "#6cb4ff"
+        avatarUrl: /api/v1/users/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/avatar?v=3f2a
+        locale: ru
+        theme: dark
+        passwordTemporary: false
+    UserResponse:
+      type: object
+      required: [user]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+    AdminUser:
+      type: object
+      required: [user, isActive, lastLoginAt]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        isActive:
+          type: boolean
+        lastLoginAt:
+          type: [string, "null"]
+          format: date-time
+    UserRef:
+      type: object
+      description: Compact user reference used in contributor lists and role details.
+      required: [id, displayName, color, avatarUrl]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        color:
+          $ref: "#/components/schemas/Color"
+        avatarUrl:
+          type: [string, "null"]
+
+    LoginRequest:
+      type: object
+      required: [login, password]
+      properties:
+        login:
+          type: string
+          minLength: 1
+          maxLength: 64
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 256
+    TokenResponse:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: Access JWT.
+        expiresIn:
+          type: integer
+          description: Access token lifetime in seconds.
+          example: 900
+    LoginResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenResponse"
+        - type: object
+          required: [user]
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+    UpdateMeRequest:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        color:
+          $ref: "#/components/schemas/Color"
+        locale:
+          $ref: "#/components/schemas/Locale"
+        theme:
+          $ref: "#/components/schemas/Theme"
+    ChangePasswordRequest:
+      type: object
+      required: [current, new]
+      properties:
+        current:
+          type: string
+          format: password
+          maxLength: 256
+        new:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 256
+    AvatarUpload:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: PNG or JPEG, at most 2 MiB.
+    CreateUserRequest:
+      type: object
+      required: [login, displayName]
+      properties:
+        login:
+          type: string
+          pattern: '^[a-z0-9._-]{3,32}$'
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        roleIds:
+          type: array
+          description: Requires `role.manage`; omitted means the default role.
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        color:
+          $ref: "#/components/schemas/Color"
+    CreateUserResponse:
+      type: object
+      required: [user, tempPassword]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        tempPassword:
+          type: string
+          minLength: 16
+          maxLength: 16
+          description: Generated password, shown exactly once.
+    TempPasswordResponse:
+      type: object
+      required: [tempPassword]
+      properties:
+        tempPassword:
+          type: string
+          minLength: 16
+          maxLength: 16
+          description: New generated password, shown exactly once.
+    UpdateUserRequest:
+      type: object
+      minProperties: 1
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+        isActive:
+          type: boolean
+    SetUserRolesRequest:
+      type: object
+      required: [roleIds]
+      properties:
+        roleIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+
+    Permission:
+      type: object
+      required: [code, group, description]
+      properties:
+        code:
+          $ref: "#/components/schemas/PermissionCode"
+        group:
+          type: string
+          description: Display group of the permission.
+          example: Participants
+        description:
+          type: string
+    Role:
+      type: object
+      required: [id, name, description, isSystem, permissions, userCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 300
+        isSystem:
+          type: boolean
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/PermissionCode"
+        userCount:
+          type: integer
+          minimum: 0
+    RoleResponse:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+    RoleDetailResponse:
+      type: object
+      required: [role, users]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRef"
+    CreateRoleRequest:
+      type: object
+      required: [name, description, permissions]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 300
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/PermissionCode"
+    UpdateRoleRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+        description:
+          type: string
+          maxLength: 300
+        permissions:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/PermissionCode"
+
+    AuditEntry:
+      type: object
+      required: [id, at, actorId, actorLogin, action, projectId, entityId, meta, ip]
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        actorId:
+          type: [string, "null"]
+          format: uuid
+        actorLogin:
+          type: string
+          description: Login snapshot, readable after the user is deleted.
+        action:
+          type: string
+          description: Dotted action name.
+          example: project.finish
+        projectId:
+          type: [string, "null"]
+          format: uuid
+        entityId:
+          type: [string, "null"]
+          format: uuid
+        meta:
+          type: object
+          description: Ids and numbers only, never names or phones.
+          additionalProperties: true
+        ip:
+          type: [string, "null"]
+    AuditPage:
+      type: object
+      required: [items, next]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        next:
+          type: [integer, "null"]
+          format: int64
+          description: Value for the next `before`, or null on the last page.
+    SystemCheck:
+      type: object
+      required: [name, status, detail]
+      properties:
+        name:
+          type: string
+          example: postgres
+        status:
+          type: string
+          enum: [ok, warn, fail]
+        detail:
+          type: string
+    SystemStatus:
+      type: object
+      required: [version, uptime, db, disk, retention, checks]
+      properties:
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Process uptime in seconds.
+          minimum: 0
+        db:
+          type: object
+          required: [sizeBytes, pool]
+          properties:
+            sizeBytes:
+              type: integer
+              format: int64
+            pool:
+              type: object
+              required: [open, inUse, idle, maxOpen]
+              properties:
+                open:
+                  type: integer
+                inUse:
+                  type: integer
+                idle:
+                  type: integer
+                maxOpen:
+                  type: integer
+        disk:
+          type: object
+          required: [free, total]
+          properties:
+            free:
+              type: integer
+              format: int64
+              description: Free bytes.
+            total:
+              type: integer
+              format: int64
+              description: Total bytes.
+        retention:
+          type: object
+          required: [obsDays, auditDays]
+          properties:
+            obsDays:
+              type: integer
+            auditDays:
+              type: integer
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/SystemCheck"
+
+    ProjectStatus:
+      type: string
+      enum: [active, finished]
+    Placeholder:
+      type: object
+      description: Text style and position of one ticket field; `x` and `y` are pixels of the original image (centre of the text).
+      required: [font, size, stroke, color, strokeColor, bold, italic, underline, x, y]
+      properties:
+        font:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Font family from the application's allow list.
+        size:
+          type: integer
+          minimum: 6
+          maximum: 400
+        stroke:
+          type: integer
+          minimum: 0
+          maximum: 50
+        color:
+          $ref: "#/components/schemas/Color"
+        strokeColor:
+          $ref: "#/components/schemas/Color"
+        bold:
+          type: boolean
+        italic:
+          type: boolean
+        underline:
+          type: boolean
+        x:
+          type: integer
+          minimum: 0
+        y:
+          type: integer
+          minimum: 0
+      example:
+        { font: Montserrat, size: 34, stroke: 2, color: "#FFFFFF", strokeColor: "#141619", bold: true, italic: false, underline: false, x: 512, y: 120 }
+    Placeholders:
+      type: object
+      required: [number, name, phone]
+      properties:
+        number:
+          $ref: "#/components/schemas/Placeholder"
+        name:
+          $ref: "#/components/schemas/Placeholder"
+        phone:
+          $ref: "#/components/schemas/Placeholder"
+    PlaceholdersPatch:
+      type: object
+      minProperties: 1
+      description: Placeholders to replace; omitted ones stay unchanged.
+      properties:
+        number:
+          $ref: "#/components/schemas/Placeholder"
+        name:
+          $ref: "#/components/schemas/Placeholder"
+        phone:
+          $ref: "#/components/schemas/Placeholder"
+    ProjectImage:
+      type: object
+      required: [url, name, w, h, bytes]
+      properties:
+        url:
+          type: string
+          example: /api/v1/projects/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/image?v=ab12
+        name:
+          type: string
+          description: Original file name.
+          maxLength: 255
+        w:
+          type: integer
+          minimum: 1
+        h:
+          type: integer
+          minimum: 1
+        bytes:
+          type: integer
+          minimum: 1
+    CardImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+    Project:
+      type: object
+      required: [id, title, status, version, image, placeholders, contributors, participantCount, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        version:
+          type: integer
+          minimum: 1
+        image:
+          description: Ticket image metadata, or null while no image is uploaded.
+          oneOf:
+            - $ref: "#/components/schemas/ProjectImage"
+            - type: "null"
+        placeholders:
+          $ref: "#/components/schemas/Placeholders"
+        contributors:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRef"
+        participantCount:
+          type: integer
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+    ProjectCard:
+      type: object
+      description: Compact project subset for the project list.
+      required: [id, title, status, image, contributors, participantCount]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        image:
+          oneOf:
+            - $ref: "#/components/schemas/CardImage"
+            - type: "null"
+        contributors:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRef"
+        participantCount:
+          type: integer
+          minimum: 0
+    ProjectResponse:
+      type: object
+      required: [project]
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+    CreateProjectRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+    UpdateProjectRequest:
+      type: object
+      required: [version]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        placeholders:
+          $ref: "#/components/schemas/PlaceholdersPatch"
+        version:
+          type: integer
+          minimum: 1
+    ImageUpload:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: PNG or JPEG, at most 10 MiB and 16 megapixels.
+
+    Participant:
+      type: object
+      required: [id, projectId, number, name, phone, version, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        number:
+          type: integer
+          minimum: 1
+        name:
+          type: string
+          maxLength: 200
+        phone:
+          type: string
+          maxLength: 40
+        version:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+      example:
+        id: 0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d
+        projectId: 0198f2ef-0000-7c1e-9b57-2f4d5a6b7c8d
+        number: 5
+        name: Sharafutdin Azimov
+        phone: "+7 926 071-91-98"
+        version: 7
+        updatedAt: "2026-11-07T10:11:12Z"
+    ParticipantInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          default: ""
+        phone:
+          type: string
+          maxLength: 40
+          default: ""
+    ParticipantList:
+      type: object
+      required: [items, rev]
+      properties:
+        items:
+          type: array
+          maxItems: 20000
+          items:
+            $ref: "#/components/schemas/Participant"
+        rev:
+          type: integer
+          format: int64
+          description: Monotonic revision of the project's table, usable as a resync marker.
+    ParticipantItems:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Participant"
+    ParticipantResponse:
+      type: object
+      required: [item]
+      properties:
+        item:
+          $ref: "#/components/schemas/Participant"
+    CreateParticipantsRequest:
+      description: Exactly one of the two shapes.
+      oneOf:
+        - type: object
+          title: ByCount
+          required: [count]
+          additionalProperties: false
+          properties:
+            count:
+              type: integer
+              minimum: 1
+              maximum: 5000
+        - type: object
+          title: ByItems
+          required: [items]
+          additionalProperties: false
+          properties:
+            items:
+              type: array
+              minItems: 1
+              maxItems: 5000
+              items:
+                $ref: "#/components/schemas/ParticipantInput"
+    UpdateParticipantRequest:
+      type: object
+      required: [version]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        phone:
+          type: string
+          maxLength: 40
+        version:
+          type: integer
+          minimum: 1
+    ParticipantIds:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 20000
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+    DeletedCount:
+      type: object
+      required: [deleted]
+      properties:
+        deleted:
+          type: integer
+          minimum: 0
+    ClearParticipantsRequest:
+      type: object
+      required: [confirmTitle]
+      properties:
+        confirmTitle:
+          type: string
+          minLength: 1
+          maxLength: 120
+          description: Must equal the project title.
+    ImportUpload:
+      type: object
+      required: [file, mode]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: XLSX or CSV file.
+        mode:
+          type: string
+          enum: [append, replace]
+    ImportRowError:
+      type: object
+      required: [row, field, code, message]
+      properties:
+        row:
+          type: integer
+          minimum: 1
+          description: 1-based row number in the uploaded file.
+        field:
+          type: string
+          enum: [name, phone]
+        code:
+          type: string
+          example: too_long
+        message:
+          type: string
+    ImportResult:
+      type: object
+      required: [dryRun, mode, total, valid, imported, errors]
+      properties:
+        dryRun:
+          type: boolean
+        mode:
+          type: string
+          enum: [append, replace]
+        total:
+          type: integer
+          minimum: 0
+          description: Data rows found in the file.
+        valid:
+          type: integer
+          minimum: 0
+          description: Rows without errors.
+        imported:
+          type: integer
+          minimum: 0
+          description: Rows written (always 0 for a dry run).
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/ImportRowError"
+
+    ClientError:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          maxLength: 2000
+        stack:
+          type: string
+          maxLength: 4000
+        url:
+          type: string
+          maxLength: 1000
+        ua:
+          type: string
+          maxLength: 500
+        release:
+          type: string
+          maxLength: 64

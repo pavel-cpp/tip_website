@@ -1,0 +1,15 @@
+# Run: npx @redocly/cli lint --config backend/api/redocly.yaml backend/api/openapi.yaml
+# (not executed during authoring: Node was not available; the spec is validated by spec_test.go).
+extends:
+  - recommended
+rules:
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-tag-defined: error
+  no-unused-components: error
+  no-invalid-media-type-examples: error
+  security-defined: error
+  # Public servers list is a same-origin base path on purpose.
+  no-server-example.com: off
+  # Operation 4xx coverage is enforced per operation by hand; probes have none.
+  operation-4xx-response: warn
