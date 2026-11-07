@@ -1,0 +1,80 @@
+# Caddy: automatic HTTPS, reverse proxy to tipd, Grafana on a sub-domain.
+# Prometheus and Loki are intentionally not proxied: they stay on the
+# internal Docker network. Variables come from the caddy service environment.
+
+{
+	email {$ACME_EMAIL}
+	# The admin API stays on localhost inside the container; the compose
+	# healthcheck uses it. Slow-header clients are cut off early.
+	servers {
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+# Shared snippets -----------------------------------------------------------
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# One JSON access log line per request on stdout (picked up by Vector).
+(access_log) {
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Application -------------------------------------------------------------
+
+{$DOMAIN} {
+	import security_headers
+	import access_log
+	encode zstd gzip
+
+	# Metrics and pprof live on the internal listener; never expose them even
+	# if the app ever serves them on the public port.
+	@internal path /metrics /debug/pprof /debug/pprof/*
+	respond @internal 404
+
+	# Image uploads are limited to 10 MB by the app; leave headroom for the
+	# multipart envelope.
+	request_body {
+		max_size 12MB
+	}
+
+	# WebSocket upgrades are proxied transparently. The Content-Security-Policy
+	# header is set by tipd, which knows the exact asset origins.
+	reverse_proxy tipd:8080 {
+		lb_try_duration 5s
+		health_uri /healthz
+		health_interval 15s
+	}
+}
+
+# Grafana -----------------------------------------------------------------
+# Two layers: Caddy basic auth first, then Grafana's own login. Grafana would
+# treat the Basic header as its own credentials, so it is stripped upstream.
+
+{$GRAFANA_DOMAIN} {
+	import security_headers
+	import access_log
+	encode zstd gzip
+
+	basic_auth {
+		{$GRAFANA_BASIC_AUTH_USER} {$GRAFANA_BASIC_AUTH_HASH}
+	}
+
+	reverse_proxy grafana:3000 {
+		header_up -Authorization
+	}
+}
