@@ -1,0 +1,28 @@
+# Alert delivery: e-mail over SMTP (GF_SMTP_* in prod.env) and a generic
+# webhook. There is no Telegram (unreachable from a Russian server). ${VAR}
+# values come from the Grafana container environment. Channels that are not
+# configured keep harmless defaults and simply fail to deliver.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: tip-admins
+    receivers:
+      - uid: tip-email
+        type: email
+        settings:
+          addresses: "${ALERT_EMAIL_TO}"
+          singleEmail: true
+      - uid: tip-webhook
+        type: webhook
+        settings:
+          url: "${ALERT_WEBHOOK_URL}"
+          httpMethod: POST
+
+policies:
+  - orgId: 1
+    receiver: tip-admins
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

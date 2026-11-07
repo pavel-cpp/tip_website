@@ -1,0 +1,82 @@
+# Vector: Docker logs -> parse -> drop noise -> Loki.
+# Only `service` and `level` become Loki labels. High-cardinality fields
+# (request_id, user_id, route) stay inside the JSON line and are searched with
+# `| json` in LogQL (docs/05-observability.md section 1).
+data_dir: /tmp/vector
+
+# Local API used only by the compose healthcheck.
+api:
+  enabled: true
+  address: 127.0.0.1:8686
+
+sources:
+  docker:
+    type: docker_logs
+    # Only containers of this stack carrying the tip.logs label are read.
+    include_labels:
+      - tip.logs=true
+
+  internal:
+    type: internal_metrics
+    scrape_interval_secs: 30
+
+transforms:
+  parse:
+    type: remap
+    inputs: [docker]
+    source: |
+      .service = string(.label."com.docker.compose.service") ?? string(.container_name) ?? "unknown"
+      msg = string(.message) ?? ""
+
+      # Structured services (tipd, caddy) emit one JSON object per line.
+      parsed, err = parse_json(msg)
+      level = ""
+      if err == null && is_object(parsed) {
+        level = downcase(string(parsed.level) ?? "")
+      }
+
+      # Plain-text services (postgres, redis, grafana): guess from keywords.
+      if level == "" {
+        if match(msg, r'(?i)\b(panic|fatal|error)\b') {
+          level = "error"
+        } else if match(msg, r'(?i)\b(warn|warning)\b') {
+          level = "warn"
+        } else {
+          level = "info"
+        }
+      }
+      if level == "warning" { level = "warn" }
+      if level == "err" { level = "error" }
+      .level = level
+
+  drop_noise:
+    type: filter
+    inputs: [parse]
+    # Health probes would dominate the volume otherwise.
+    condition: '!contains(string!(.message), "/healthz") && !contains(string!(.message), "/readyz")'
+
+sinks:
+  loki:
+    type: loki
+    inputs: [drop_noise]
+    endpoint: http://loki:3100
+    # Send the original line unchanged so LogQL `| json` works on it.
+    encoding:
+      codec: text
+    labels:
+      service: "{{ service }}"
+      level: "{{ level }}"
+    remove_label_fields: true
+    out_of_order_action: accept
+    batch:
+      max_bytes: 262144
+      timeout_secs: 5
+    buffer:
+      type: memory
+      max_events: 500
+      when_full: block
+
+  prometheus:
+    type: prometheus_exporter
+    inputs: [internal]
+    address: 0.0.0.0:9598

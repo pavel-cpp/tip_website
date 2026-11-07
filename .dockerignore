@@ -1,0 +1,20 @@
+# Keep the build context small: only backend/ and frontend/ are needed.
+.git
+.claude
+.idea
+.vscode
+docs
+ref
+deploy
+.obsidian
+graphify-out
+*.md
+.env
+.env.*
+
+# Never copy host build output or dependencies into the image build.
+**/node_modules
+frontend/dist
+backend/web/dist
+**/*.test
+**/*.exe
