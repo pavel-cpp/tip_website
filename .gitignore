@@ -41,7 +41,8 @@ ref/
 # Node / frontend build output
 node_modules/
 frontend/dist/
-backend/web/dist/
+backend/web/dist/*
+!backend/web/dist/.gitkeep
 
 # Local environment files (keep only the example)
 .env.*
