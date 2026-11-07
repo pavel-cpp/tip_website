@@ -19,15 +19,18 @@ import (
 type fakeRepo struct {
 	projects map[string]domain.Project
 	touched  []string
-	details  map[string]ProjectDetails
+	details  map[string]domain.ProjectDetails
 	saveErr  error
 }
 
 func newFakeRepo() *fakeRepo {
-	return &fakeRepo{projects: map[string]domain.Project{}, details: map[string]ProjectDetails{}}
+	return &fakeRepo{projects: map[string]domain.Project{}, details: map[string]domain.ProjectDetails{}}
 }
 
-func (r *fakeRepo) Create(_ context.Context, p domain.Project) error { r.projects[p.ID] = p; return nil }
+func (r *fakeRepo) Create(_ context.Context, p domain.Project) error {
+	r.projects[p.ID] = p
+	return nil
+}
 func (r *fakeRepo) Get(_ context.Context, id string) (domain.Project, error) {
 	p, ok := r.projects[id]
 	if !ok {
@@ -55,7 +58,7 @@ func (r *fakeRepo) Delete(_ context.Context, id string) error {
 	delete(r.projects, id)
 	return nil
 }
-func (r *fakeRepo) List(_ context.Context, f ProjectFilter) ([]domain.Project, error) {
+func (r *fakeRepo) List(_ context.Context, f domain.ProjectFilter) ([]domain.Project, error) {
 	var out []domain.Project
 	for _, p := range r.projects {
 		if f.Status != nil && p.Status != *f.Status {
@@ -69,8 +72,8 @@ func (r *fakeRepo) List(_ context.Context, f ProjectFilter) ([]domain.Project, e
 	slices.SortFunc(out, func(a, b domain.Project) int { return strings.Compare(a.ID, b.ID) })
 	return out, nil
 }
-func (r *fakeRepo) Details(_ context.Context, ids []string, _ int) (map[string]ProjectDetails, error) {
-	out := map[string]ProjectDetails{}
+func (r *fakeRepo) Details(_ context.Context, ids []string, _ int) (map[string]domain.ProjectDetails, error) {
+	out := map[string]domain.ProjectDetails{}
 	for _, id := range ids {
 		out[id] = r.details[id]
 	}
@@ -224,7 +227,7 @@ func TestPermissionDenied(t *testing.T) {
 	v := mustCreate(t, e, "P")
 	none := actor()
 	tests := map[string]func() error{
-		"list":   func() error { _, err := e.svc.List(ctx, none, ProjectFilter{}); return err },
+		"list":   func() error { _, err := e.svc.List(ctx, none, domain.ProjectFilter{}); return err },
 		"create": func() error { _, err := e.svc.Create(ctx, viewer, "x"); return err },
 		"get":    func() error { _, err := e.svc.Get(ctx, none, v.ID); return err },
 		"update": func() error {
@@ -292,30 +295,30 @@ func TestListVisibility(t *testing.T) {
 		return out
 	}
 
-	got, err := e.svc.List(ctx, viewer, ProjectFilter{})
+	got, err := e.svc.List(ctx, viewer, domain.ProjectFilter{})
 	if err != nil || !slices.Equal(ids(got), []string{a.ID}) {
 		t.Fatalf("viewer unfiltered: %v %v", ids(got), err)
 	}
-	if _, err := e.svc.List(ctx, viewer, ProjectFilter{Status: &fin}); !errors.Is(err, domain.ErrForbidden) {
+	if _, err := e.svc.List(ctx, viewer, domain.ProjectFilter{Status: &fin}); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("viewer finished: %v", err)
 	}
-	got, _ = e.svc.List(ctx, admin, ProjectFilter{})
+	got, _ = e.svc.List(ctx, admin, domain.ProjectFilter{})
 	if len(got) != 2 {
 		t.Fatalf("admin sees %d", len(got))
 	}
-	got, _ = e.svc.List(ctx, admin, ProjectFilter{Status: &fin})
+	got, _ = e.svc.List(ctx, admin, domain.ProjectFilter{Status: &fin})
 	if !slices.Equal(ids(got), []string{b.ID}) {
 		t.Fatalf("finished filter: %v", ids(got))
 	}
-	got, _ = e.svc.List(ctx, admin, ProjectFilter{Status: &act, Query: " alp "})
+	got, _ = e.svc.List(ctx, admin, domain.ProjectFilter{Status: &act, Query: " alp "})
 	if !slices.Equal(ids(got), []string{a.ID}) {
 		t.Fatalf("query: %v", ids(got))
 	}
 	bad := domain.ProjectStatus("weird")
-	if _, err := e.svc.List(ctx, admin, ProjectFilter{Status: &bad}); !errors.Is(err, domain.ErrValidation) {
+	if _, err := e.svc.List(ctx, admin, domain.ProjectFilter{Status: &bad}); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("bad status: %v", err)
 	}
-	if _, err := e.svc.List(ctx, admin, ProjectFilter{Query: strings.Repeat("x", 121)}); !errors.Is(err, domain.ErrValidation) {
+	if _, err := e.svc.List(ctx, admin, domain.ProjectFilter{Query: strings.Repeat("x", 121)}); !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("long query: %v", err)
 	}
 }

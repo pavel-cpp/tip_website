@@ -86,7 +86,7 @@ func hidden(a domain.Actor, p domain.Project) error {
 // List returns the projects visible to the actor. Finished projects need
 // project.view_finished: asking for them explicitly without it is FORBIDDEN, and an
 // unfiltered list silently omits them.
-func (s *ProjectService) List(ctx context.Context, a domain.Actor, f ProjectFilter) ([]ProjectView, error) {
+func (s *ProjectService) List(ctx context.Context, a domain.Actor, f domain.ProjectFilter) ([]ProjectView, error) {
 	if err := a.Require(domain.PermProjectView); err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (s *ProjectService) withDetails(ctx context.Context, projects []domain.Proj
 	for i, p := range projects {
 		ids[i] = p.ID
 	}
-	details := map[string]ProjectDetails{}
+	details := map[string]domain.ProjectDetails{}
 	if len(ids) > 0 {
 		var err error
 		if details, err = s.d.Repo.Details(ctx, ids, maxContributors); err != nil {

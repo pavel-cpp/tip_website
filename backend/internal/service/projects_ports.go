@@ -8,33 +8,10 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
 
-// ProjectFilter narrows the project list.
-type ProjectFilter struct {
-	// Status limits the list to one status; nil means any.
-	Status *domain.ProjectStatus
-	// Query is a case-insensitive title substring; empty means no filter.
-	Query string
-}
-
-// UserRef is the compact user reference shown on project cards.
-type UserRef struct {
-	ID          string
-	DisplayName string
-	Color       string
-	// AvatarSHA is the hash of the stored avatar; empty when the user has none.
-	AvatarSHA string
-}
-
-// ProjectDetails holds the data of a project that lives outside the projects table.
-type ProjectDetails struct {
-	Contributors     []UserRef
-	ParticipantCount int
-}
-
 // ProjectView is a project together with its contributors and participant count.
 type ProjectView struct {
 	domain.Project
-	ProjectDetails
+	domain.ProjectDetails
 }
 
 // ProjectRepository is the persistence port of the projects service
@@ -52,10 +29,10 @@ type ProjectRepository interface {
 	// Delete removes the project; domain.ErrNotFound when it does not exist.
 	Delete(ctx context.Context, id string) error
 	// List returns matching projects, newest first.
-	List(ctx context.Context, f ProjectFilter) ([]domain.Project, error)
+	List(ctx context.Context, f domain.ProjectFilter) ([]domain.Project, error)
 	// Details returns contributors (most recent first, at most maxContributors each) and
 	// participant counts for the given projects.
-	Details(ctx context.Context, ids []string, maxContributors int) (map[string]ProjectDetails, error)
+	Details(ctx context.Context, ids []string, maxContributors int) (map[string]domain.ProjectDetails, error)
 	// TouchContributor registers the user as a contributor or refreshes last_seen_at.
 	TouchContributor(ctx context.Context, projectID, userID string, at time.Time) error
 	// CountImageRefs returns how many projects reference the image hash.
