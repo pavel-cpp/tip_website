@@ -1,0 +1,441 @@
+# Grafana-managed alert rules (docs/05-observability.md section 7).
+# Generated once from a template and kept as a plain file; edit it directly.
+# Each rule: A = Prometheus query, B = reduce(last), C = threshold.
+# VERIFY: the metric vector_component_errors_total was not checked against a
+# running Vector. The file loads cleanly in Grafana 11.4.0 (checked).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: tip
+    folder: TIP
+    interval: 1m
+    rules:
+      - uid: tip-tipd-down
+        title: "tipd is down"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "min(up{job=\"tipd\"})"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        noDataState: Alerting
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "tipd metrics endpoint is unreachable for 2 minutes (readyz probe proxy)"
+        labels:
+          severity: critical
+      - uid: tip-redis-down
+        title: "Redis is down"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "min(tip_redis_up)"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        noDataState: Alerting
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "tipd reports Redis as unavailable"
+        labels:
+          severity: critical
+      - uid: tip-blacklist-errors
+        title: "Token blacklist check errors"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "sum(increase(tip_blacklist_checks_total{result=\"error\"}[5m]))"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Access-token blacklist checks are failing (Redis problems)"
+        labels:
+          severity: warning
+      - uid: tip-5xx
+        title: "5xx ratio above 2%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "sum(rate(tip_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(tip_http_requests_total[5m]))"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0.02]
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "More than 2% of requests fail with 5xx over 5 minutes"
+        labels:
+          severity: critical
+      - uid: tip-disk-low
+        title: "Disk free below 1.5 GB"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "min(node_filesystem_avail_bytes{mountpoint=\"/\"})"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1500000000]
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "Free disk space is below 1.5 GB: see the runbook section on disk filling up"
+        labels:
+          severity: critical
+      - uid: tip-rss-high
+        title: "tipd RSS above 90% of its limit"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "max(process_resident_memory_bytes{job=\"tipd\"})"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [90596966]
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "tipd resident memory is above 90% of the 96 MiB container limit"
+        labels:
+          severity: warning
+      - uid: tip-ws-slow-clients
+        title: "WebSocket slow-client disconnects growing"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "sum(increase(tip_ws_slow_client_disconnects_total[10m]))"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Clients are being disconnected for being too slow"
+        labels:
+          severity: warning
+      - uid: tip-log-dropped
+        title: "Log events are being dropped"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "sum(increase(tip_log_dropped_total[10m]))"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "The non-blocking logger drops events (stdout cannot keep up)"
+        labels:
+          severity: warning
+      - uid: tip-backup-old
+        title: "Backup older than 36 hours"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "time() - max by (target) (backup_last_success_timestamp)"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [129600]
+        noDataState: Alerting
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "The last successful backup (local or off-site) is older than 36 hours"
+        labels:
+          severity: critical
+      - uid: tip-loki-down
+        title: "Loki is down"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "min(up{job=\"loki\"})"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        noDataState: Alerting
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: "Loki is unreachable, logs are not stored"
+        labels:
+          severity: warning
+      - uid: tip-vector-stalled
+        title: "Vector is not delivering logs"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: "min(up{job=\"vector\"}) - clamp_max(sum(increase(vector_component_errors_total{component_id=\"loki\"}[10m])) or vector(0), 1)"
+              instant: true
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              refId: C
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+        noDataState: Alerting
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: "Vector is down or reports delivery errors towards Loki"
+        labels:
+          severity: warning
