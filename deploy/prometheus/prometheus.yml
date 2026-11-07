@@ -1,0 +1,31 @@
+# Prometheus: scrape every 15 s, a few thousand series in total.
+# Retention flags (time from OBS_RETENTION_DAYS and size 300MB) are set on the
+# command line in docker-compose.prod.yml.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: tipd
+    # Internal listener: /metrics and pprof are never published by Caddy.
+    static_configs:
+      - targets: ["tipd:9090"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node_exporter:9100"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  # Vector internal metrics (see deploy/vector/vector.yaml), used to detect
+  # that logs are no longer delivered to Loki.
+  - job_name: vector
+    static_configs:
+      - targets: ["vector:9598"]
