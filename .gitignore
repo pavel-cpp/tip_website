@@ -49,3 +49,6 @@ backend/web/dist/
 
 # Agent worktrees
 .claude/worktrees/
+
+# Production secrets (only the .example file is tracked)
+deploy/prod.env
