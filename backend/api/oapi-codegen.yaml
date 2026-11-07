@@ -1,0 +1,22 @@
+# Generates DTOs and a chi server interface from openapi.yaml into package gen.
+#
+# The Go module lives in backend/, so run the generator from backend/ (a `go run` from the
+# repository root fails: there is no go.mod there). `output` below is relative to backend/:
+#   cd backend
+#   go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml
+# Equivalent from the repository root once a go.work exists:
+#   go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config backend/api/oapi-codegen.yaml backend/api/openapi.yaml
+# (then `output` must be read relative to the root; prefer the backend/ form).
+# The generated code imports github.com/go-chi/chi/v5 and github.com/oapi-codegen/runtime
+# (run `go get` for both in the stream that first commits the generated file).
+#
+# Strict server is not generated: handlers write responses themselves so that
+# cookies, ETag and error envelopes stay under explicit control.
+package: gen
+output: internal/handler/http/gen/api.gen.go
+generate:
+  models: true
+  chi-server: true
+  strict-server: false
+output-options:
+  skip-prune: false
