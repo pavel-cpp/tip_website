@@ -43,3 +43,11 @@ End your work with a short report: what was built (files/packages), commands run
 
 ## Dev machine notes
 Windows 11 + Git Bash. Go and `golangci-lint`, `goose`, `gopls` are in `~/go/bin`. Node LTS is installed via winget (may need a new shell for PATH). Docker Desktop may be stopped.
+
+## Rules for parallel API streams
+* Generated code is read-only: `backend/internal/handler/http/gen/api.gen.go` (run `task gen`) and `frontend/src/api/schema.gen.ts`. If the contract must change, report it; the lead edits `backend/api/openapi.yaml` and regenerates.
+* Shared handler helpers already exist in `backend/internal/handler/http`: `fail(w, r, err)` (domain error -> envelope, logs once), `writeJSON`, `decodeJSON`, `actorOrFail`, `WithActor`/`ActorFrom`. Do not reimplement them; prefix any new unexported helper with your area name to avoid name clashes at merge.
+* Each backend stream implements ITS operations of `gen.ServerInterface` in its own files (`handler/http/<area>.go`), declares its interfaces in `service/<area>_ports.go` (not in `ports.go`), and does NOT edit `cmd/tipd/main.go`, `handler/http/server.go` or `service/ports.go`; the lead wires streams together after merge. In handler tests embed `gen.Unimplemented` one level deeper than your handler struct so your methods win.
+* Frontend streams add i18n keys under their own namespace in BOTH `ru` and `uz` dictionaries, use the generated API types, and keep pages in their own files.
+* Line endings are LF (`.gitattributes`). If testcontainers' reaper fails on this machine, run tests with `TESTCONTAINERS_RYUK_DISABLED=true`.
+* Start by running `git merge --ff-only dev` in your worktree: it may have been created from an older commit.
