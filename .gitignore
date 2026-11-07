@@ -31,3 +31,18 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Reference materials (mockups, old desktop app, demo): not part of the project
+ref/
+
+# Obsidian vault settings are personal (docs/ is the vault)
+.obsidian/
+
+# Node / frontend build output
+node_modules/
+frontend/dist/
+backend/web/dist/
+
+# Local environment files (keep only the example)
+.env.*
+!.env.example
