@@ -80,19 +80,19 @@ func (h *ClientErrorsHandler) ReportClientError(w http.ResponseWriter, r *http.R
 
 func validateClientError(in gen.ClientError) error {
 	var fields []domain.FieldError
-	check := func(name, v string, max int, required bool) {
+	check := func(name, v string, limit int, required bool) {
 		switch {
 		case required && v == "":
 			fields = append(fields, domain.FieldError{Field: name, Reason: "is required"})
-		case utf8.RuneCountInString(v) > max:
+		case utf8.RuneCountInString(v) > limit:
 			fields = append(fields, domain.FieldError{Field: name, Reason: "is too long"})
 		}
 	}
 	check("message", in.Message, clientErrorMaxMessage, true)
 	for _, f := range []struct {
-		name string
-		v    *string
-		max  int
+		name  string
+		v     *string
+		limit int
 	}{
 		{"stack", in.Stack, clientErrorMaxStack},
 		{"url", in.Url, clientErrorMaxURL},
@@ -100,7 +100,7 @@ func validateClientError(in gen.ClientError) error {
 		{"release", in.Release, clientErrorMaxRelease},
 	} {
 		if f.v != nil {
-			check(f.name, *f.v, f.max, false)
+			check(f.name, *f.v, f.limit, false)
 		}
 	}
 	if len(fields) > 0 {

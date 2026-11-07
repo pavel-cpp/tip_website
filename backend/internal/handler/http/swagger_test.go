@@ -12,7 +12,7 @@ import (
 func swaggerTestRouter(mount bool) http.Handler {
 	r := chi.NewRouter()
 	r.Use(securityHeaders(defaultCSP))
-	MountSwagger(r, mount)
+	MountSwagger(r, mount, []byte("openapi: 3.1.0\ninfo: {}\n"))
 	r.Get("/other", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	return r
 }

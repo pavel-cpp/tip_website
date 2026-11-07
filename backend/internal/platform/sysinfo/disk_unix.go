@@ -13,5 +13,5 @@ func diskUsage(path string) (free, total uint64, err error) {
 		return 0, 0, fmt.Errorf("statfs %s: %w", path, err)
 	}
 	bs := uint64(st.Bsize)                                     //nolint:gosec // block size is positive
-	return uint64(st.Bavail) * bs, uint64(st.Blocks) * bs, nil //nolint:gosec,unconvert // field widths differ per OS
+	return uint64(st.Bavail) * bs, uint64(st.Blocks) * bs, nil //nolint:unconvert // field widths differ per OS
 }
