@@ -118,7 +118,7 @@ func (s *Store) checkLimits(n int64) error {
 		if err != nil {
 			return fmt.Errorf("disk stats: %w", err)
 		}
-		if int64(free)-n < s.minFree {
+		if int64(free)-n < s.minFree { //nolint:gosec // free space cannot exceed int64
 			return domain.ErrDiskLow
 		}
 	}
@@ -214,7 +214,7 @@ func (s *Store) GC(ctx context.Context, referenced map[string]struct{}) (int, er
 		if info.ModTime().After(cutoff) {
 			return nil
 		}
-		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) { //nolint:gosec // private store; only validated hash names reach here
 			return err
 		}
 		removed++

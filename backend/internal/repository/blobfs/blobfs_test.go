@@ -154,7 +154,10 @@ func TestGC(t *testing.T) {
 		t.Fatalf("removed %d, err %v", n, err)
 	}
 	for sha, want := range map[string]bool{keepRef: true, oldOrphan: false, freshOrphan: true} {
-		_, err := s.Open(ctx, sha)
+		r, err := s.Open(ctx, sha)
+		if r != nil {
+			_ = r.Close()
+		}
 		if (err == nil) != want {
 			t.Errorf("%s: exists=%v want %v", sha[:6], err == nil, want)
 		}
@@ -162,7 +165,7 @@ func TestGC(t *testing.T) {
 	// Re-putting an old orphan refreshes its mtime so it is not collected right away.
 	old(freshOrphan)
 	put("fresh")
-	if n, _ := s.GC(ctx, nil); n != 0 {
+	if n, _ := s.GC(ctx, map[string]struct{}{keepRef: {}}); n != 0 {
 		t.Fatalf("refreshed file was collected (%d)", n)
 	}
 }
