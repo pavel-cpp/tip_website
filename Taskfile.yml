@@ -77,9 +77,13 @@ tasks:
       - npm run typecheck
 
   gen:
-    desc: Generate API code (placeholder until backend/api/openapi.yaml lands)
+    desc: Generate API code from backend/api/openapi.yaml (Go DTOs + chi ServerInterface, then TypeScript types)
     cmds:
-      - echo "TODO oapi-codegen (Go DTOs and chi ServerInterface) and openapi-typescript (frontend types)"
+      - cmd: go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -config api/oapi-codegen.yaml api/openapi.yaml
+        dir: backend
+      - cmd: npm run gen:api
+        dir: frontend
+        ignore_error: true # the frontend may not be installed yet
 
   ci:
     desc: Run the same checks as CI
