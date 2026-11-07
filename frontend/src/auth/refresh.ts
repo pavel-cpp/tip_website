@@ -36,7 +36,8 @@ async function doRefresh(): Promise<string> {
 /** Serialises refreshes across tabs (Web Locks); falls back to per-tab de-duplication only. */
 function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
-  return locks ? locks.request(LOCK_NAME, fn) : fn()
+  // locks.request resolves with the callback's result; the DOM typings nest the promise.
+  return locks ? (locks.request(LOCK_NAME, fn) as Promise<T>) : fn()
 }
 
 /**
