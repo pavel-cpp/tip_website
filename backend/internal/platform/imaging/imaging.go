@@ -125,6 +125,16 @@ func (p *Processor) Process(data []byte) (Processed, error) {
 	return Processed{Data: out, SHA256: sum(out), Mime: mime, Width: w, Height: h}, nil
 }
 
+// Normalize is Process flattened to plain values; it satisfies the projects service port
+// without the service having to import this package.
+func (p *Processor) Normalize(data []byte) (out []byte, mime string, width, height int, err error) {
+	r, err := p.Process(data)
+	if err != nil {
+		return nil, "", 0, 0, err
+	}
+	return r.Data, r.Mime, r.Width, r.Height, nil
+}
+
 // Avatar center-crops the image to a square, resizes it to 256x256 and encodes it as JPEG of at
 // most 256 KB.
 func (p *Processor) Avatar(data []byte) (jpegBytes []byte, sha string, err error) {
