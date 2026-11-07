@@ -8,11 +8,12 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pavel-cpp/tip_website/backend/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/pavel-cpp/tip_website/backend/migrations"
 )
 
 // startPostgres boots a throwaway PostgreSQL 18 and returns an open handle.
