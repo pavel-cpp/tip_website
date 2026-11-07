@@ -46,3 +46,6 @@ backend/web/dist/
 # Local environment files (keep only the example)
 .env.*
 !.env.example
+
+# Agent worktrees
+.claude/worktrees/
