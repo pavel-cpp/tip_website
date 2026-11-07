@@ -1,0 +1,93 @@
+version: "3"
+
+# Run `task --list` to see everything. Backend tasks run in backend/, frontend tasks in frontend/.
+
+vars:
+  DEV_COMPOSE: deploy/docker-compose.dev.yml
+
+tasks:
+  dev:up:
+    desc: Start Postgres and Redis for local development
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} up -d --wait
+
+  dev:down:
+    desc: Stop the development services (data volumes are kept)
+    cmds:
+      - docker compose -f {{.DEV_COMPOSE}} down
+
+  backend:build:
+    desc: Build the tipd binary into backend/bin
+    dir: backend
+    cmds:
+      - go build -o bin/tipd ./cmd/tipd
+
+  backend:test:
+    desc: Run backend tests with the race detector
+    dir: backend
+    cmds:
+      - go test -race ./...
+
+  backend:lint:
+    desc: Run golangci-lint
+    dir: backend
+    cmds:
+      - golangci-lint run
+
+  backend:fmt:
+    desc: Format backend code
+    dir: backend
+    cmds:
+      - golangci-lint fmt
+
+  frontend:install:
+    desc: Install frontend dependencies
+    dir: frontend
+    cmds:
+      - npm ci
+
+  frontend:dev:
+    desc: Start the Vite dev server
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  frontend:build:
+    desc: Build the frontend
+    dir: frontend
+    cmds:
+      - npm run build
+
+  frontend:test:
+    desc: Run frontend unit tests
+    dir: frontend
+    cmds:
+      - npm test
+
+  frontend:lint:
+    desc: Lint the frontend
+    dir: frontend
+    cmds:
+      - npm run lint
+
+  frontend:typecheck:
+    desc: Type-check the frontend
+    dir: frontend
+    cmds:
+      - npm run typecheck
+
+  gen:
+    desc: Generate API code (placeholder until backend/api/openapi.yaml lands)
+    cmds:
+      - echo "TODO oapi-codegen (Go DTOs and chi ServerInterface) and openapi-typescript (frontend types)"
+
+  ci:
+    desc: Run the same checks as CI
+    cmds:
+      - task: backend:build
+      - task: backend:lint
+      - task: backend:test
+      - task: frontend:typecheck
+      - task: frontend:lint
+      - task: frontend:test
+      - task: frontend:build
