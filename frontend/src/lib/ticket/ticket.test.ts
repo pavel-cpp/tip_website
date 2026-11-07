@@ -19,6 +19,7 @@ import {
   TICKET_ASPECT,
   TICKET_MM,
   TICKETS_PER_PAGE,
+  type TicketImage,
   type TicketPlaceholder,
   type TicketPlaceholders,
 } from './index'
@@ -164,7 +165,12 @@ describe('renderTicket', () => {
   it('sizes the canvas to the image and scales the context when over the limit', () => {
     const ctx = mockCtx()
     const canvas = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement
-    const image = { naturalWidth: 8000, naturalHeight: 6000, width: 8000, height: 6000 }
+    const image = {
+      naturalWidth: 8000,
+      naturalHeight: 6000,
+      width: 8000,
+      height: 6000,
+    } as unknown as TicketImage
     const scale = renderTicket(canvas, image, all(), { number: '1', name: '', phone: '' })
     expect(scale).toBeLessThan(1)
     expect(canvas.width * canvas.height).toBeLessThanOrEqual(MAX_CANVAS_PIXELS)
@@ -176,11 +182,16 @@ describe('renderTicket', () => {
   it('does not scale a normal image', () => {
     const ctx = mockCtx()
     const canvas = { width: 0, height: 0, getContext: () => ctx } as unknown as HTMLCanvasElement
-    renderTicket(canvas, { naturalWidth: 700, naturalHeight: 400, width: 700, height: 400 }, all(), {
-      number: '',
-      name: '',
-      phone: '',
-    })
+    renderTicket(
+      canvas,
+      { naturalWidth: 700, naturalHeight: 400, width: 700, height: 400 } as unknown as TicketImage,
+      all(),
+      {
+        number: '',
+        name: '',
+        phone: '',
+      },
+    )
     expect([canvas.width, canvas.height]).toEqual([700, 400])
     expect(ctx.scale).not.toHaveBeenCalled()
   })

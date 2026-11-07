@@ -4,7 +4,12 @@ import { PLACEHOLDER_KEYS, type TicketPlaceholder, type TicketPlaceholders, type
 export const MAX_CANVAS_PIXELS = 16_777_216
 
 /** Anything `drawImage` accepts that also reports its intrinsic size. */
-export type TicketImage = CanvasImageSource & { naturalWidth?: number; width: number; height: number }
+export type TicketImage = CanvasImageSource & {
+  naturalWidth?: number
+  naturalHeight?: number
+  width: number
+  height: number
+}
 
 export function fontSpec(p: TicketPlaceholder): string {
   return `${p.italic ? 'italic ' : ''}${p.bold ? '700' : '400'} ${p.size}px "${p.font}", sans-serif`
