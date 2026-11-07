@@ -1,0 +1,7 @@
+# Keep LF endings everywhere so gofmt, linters and Docker builds behave the same on Windows and Linux.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff2 binary

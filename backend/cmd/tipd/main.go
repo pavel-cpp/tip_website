@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/pressly/goose/v3"
 	"github.com/rs/zerolog"
 
 	httpapi "github.com/pavel-cpp/tip_website/backend/internal/handler/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/platform/metrics"
 	"github.com/pavel-cpp/tip_website/backend/internal/repository/postgres"
 	"github.com/pavel-cpp/tip_website/backend/internal/service"
+	"github.com/pavel-cpp/tip_website/backend/migrations"
 )
 
 // Set at build time with -ldflags "-X main.version=... -X main.commit=...".
@@ -87,12 +89,8 @@ func migrate() error {
 }
 
 // runMigrations applies the embedded goose migrations.
-//
-// TODO(wiring): the migrations package is created by another stream. Once it exists, call
-// db.Migrate(ctx, conn, migrations.FS, ".", goose.WithLogger(logging.Goose{L: logger})) here.
-func runMigrations(_ context.Context, _ *sql.DB, logger zerolog.Logger) error {
-	logger.Warn().Msg("migrations not wired")
-	return nil
+func runMigrations(ctx context.Context, conn *sql.DB, logger zerolog.Logger) error {
+	return db.Migrate(ctx, conn, migrations.FS, ".", goose.WithLogger(logging.Goose{L: logger}))
 }
 
 func serve() error {
