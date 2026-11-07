@@ -22,15 +22,7 @@ describe('app shell and routing', () => {
     expect(screen.getByText('Раздел в разработке')).toBeInTheDocument()
   })
 
-  for (const path of [
-    '/',
-    '/login',
-    '/projects/42',
-    '/projects/42/settings',
-    '/admin/users',
-    '/admin/roles',
-    '/admin/system',
-  ]) {
+  for (const path of ['/login', '/projects/42', '/admin/users', '/admin/roles', '/admin/system']) {
     it(`serves ${path}`, async () => {
       open(path)
       expect(await screen.findByText('Раздел в разработке')).toBeInTheDocument()

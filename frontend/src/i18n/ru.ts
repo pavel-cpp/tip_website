@@ -1,3 +1,4 @@
+import { projectsRu } from '../features/projects/messages.ru'
 import type { Message } from './types'
 
 // Source of truth for UI text. uz.ts must provide exactly the same keys (enforced by the type and by i18n.test.ts).
@@ -153,6 +154,8 @@ export const ru = {
   'design.panel.title': 'Панель',
   'design.panel.body': 'Содержимое панели',
   'design.motion.bounce': 'Пружина',
+
+  ...projectsRu,
 } as const satisfies Record<string, Message>
 
 export type MessageKey = keyof typeof ru
