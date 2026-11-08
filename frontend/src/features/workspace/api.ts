@@ -38,6 +38,9 @@ export function useParticipants(projectId: string, enabled = true) {
     queryKey: participantKeys.list(projectId),
     queryFn: ({ signal }) => fetchParticipants(projectId, signal),
     enabled,
+    // One quick retry: a failing list must show its error with "Retry" within about 3 s, not skeletons for 10.
+    retry: 1,
+    retryDelay: 600,
   })
 }
 

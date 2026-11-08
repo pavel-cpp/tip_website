@@ -21,6 +21,9 @@ import { isSuspiciousPhone } from './tableLogic'
 
 export type SheetSaveResult = 'ok' | 'error' | 'closed'
 
+/** A name is one line: pasted line breaks become single spaces. */
+const oneLine = (v: string) => v.replace(/\s*[\r\n]+\s*/g, ' ')
+
 export interface RowSheetProps {
   /** The row being edited; null closes the sheet. */
   row: Participant | null
@@ -167,6 +170,15 @@ function SheetForm({
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState(false)
   const phoneRef = useRef<HTMLInputElement>(null)
+  const nameRef = useRef<HTMLTextAreaElement>(null)
+
+  // The name field grows with its text so a long name is always fully visible.
+  useLayoutEffect(() => {
+    const el = nameRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }, [name])
 
   // A colleague's change arrives while nothing is typed yet: show it instead of the stale values.
   const base = useRef({ id: row.id, name: row.name, phone: row.phone })
@@ -217,10 +229,12 @@ function SheetForm({
     <div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="sheet-grab" aria-hidden="true" />
       <header className="sheet-head">
-        <h2 id={titleId} className="sheet-title">
-          {t('workspace.sheet.title', { number: row.number })}
-        </h2>
-        <span className="sheet-pos muted">{t('workspace.sheet.position', { index: position, total })}</span>
+        <div className="sheet-heading">
+          <h2 id={titleId} className="sheet-title">
+            {t('workspace.sheet.title', { number: row.number })}
+          </h2>
+          <span className="sheet-pos muted">{t('workspace.sheet.position', { index: position, total })}</span>
+        </div>
         <Button
           variant="ghost"
           iconOnly
@@ -248,15 +262,17 @@ function SheetForm({
         <div className="sheet-form">
           <label className="field">
             <span className="field-label">{t('workspace.col.name')}</span>
-            <input
-              className="sheet-input"
+            <textarea
+              ref={nameRef}
+              className="sheet-input sheet-name"
               name="participant-name"
+              rows={1}
               value={name}
               readOnly={!canEdit}
               maxLength={200}
               autoComplete="off"
               enterKeyHint="next"
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(oneLine(e.target.value))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()

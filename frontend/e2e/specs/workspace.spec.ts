@@ -79,7 +79,11 @@ test('delete with Undo restores the row, and a plain delete is committed', async
   await expect.poll(async () => (await admin.participants(project.id)).length, { timeout: 15_000 }).toBe(2)
 })
 
-test('export XLSX downloads a spreadsheet', async ({ admin, signedIn }) => {
+test('export XLSX downloads a spreadsheet', async ({ admin, signedIn, viewport }) => {
+  test.skip(
+    (viewport?.width ?? 1024) < 700,
+    'phones keep these actions in the toolbar menu (workspace-phone.spec.ts)',
+  )
   const { project } = await seeded(admin)
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
@@ -95,7 +99,11 @@ test('export XLSX downloads a spreadsheet', async ({ admin, signedIn }) => {
   expect(bytes.length).toBeGreaterThan(1000)
 })
 
-test('import: dry run previews the file, confirming adds the rows', async ({ admin, signedIn }) => {
+test('import: dry run previews the file, confirming adds the rows', async ({ admin, signedIn, viewport }) => {
+  test.skip(
+    (viewport?.width ?? 1024) < 700,
+    'phones keep these actions in the toolbar menu (workspace-phone.spec.ts)',
+  )
   const { project } = await seeded(admin, people.slice(0, 1))
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
@@ -117,7 +125,11 @@ test('import: dry run previews the file, confirming adds the rows', async ({ adm
   expect(await admin.participants(project.id)).toHaveLength(3)
 })
 
-test('copy and save actions follow the selection', async ({ admin, signedIn, browserName }) => {
+test('copy and save actions follow the selection', async ({ admin, signedIn, browserName, viewport }) => {
+  test.skip(
+    (viewport?.width ?? 1024) < 700,
+    'phones keep these actions in the toolbar menu (workspace-phone.spec.ts)',
+  )
   const { project } = await seeded(admin)
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
@@ -137,7 +149,11 @@ test('copy and save actions follow the selection', async ({ admin, signedIn, bro
   void browserName
 })
 
-test('without rows the ticket actions are disabled', async ({ admin, signedIn }) => {
+test('without rows the ticket actions are disabled', async ({ admin, signedIn, viewport }) => {
+  test.skip(
+    (viewport?.width ?? 1024) < 700,
+    'phones keep these actions in the toolbar menu (workspace-phone.spec.ts)',
+  )
   const project = await admin.createProject(uniq('Empty '))
   await admin.uploadImage(project.id)
   const page = await signedIn(adminCreds())

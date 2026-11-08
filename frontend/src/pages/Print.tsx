@@ -4,6 +4,7 @@ import { useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
 import { logPrinted, useParticipants } from '../features/workspace/api'
 import { isIOS } from '../features/workspace/platform'
+import { formatDuration, remainingMs } from '../features/workspace/printEstimate'
 import { clearPrintJob, getPrintJob } from '../features/workspace/printJob'
 import { renderPrintBatch } from '../features/workspace/ticketActions'
 import { useI18n } from '../i18n'
@@ -55,6 +56,7 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
   const imageEl = useImageElement(blobUrl)
   const [urls, setUrls] = useState<string[]>([])
   const [progress, setProgress] = useState(0)
+  const startedAt = useRef(0)
   const [failed, setFailed] = useState<string | null>(null)
   const rows = useMemo(() => {
     const byId = new Map((list.data?.items ?? []).map((r) => [r.id, r]))
@@ -76,6 +78,7 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
     const { imageEl, placeholders, rows } = latest.current
     if (!ready || !imageEl || !placeholders) return
     let cancelled = false
+    startedAt.current = Date.now()
     const made: string[] = []
     void renderPrintBatch(
       { image: imageEl, placeholders },
@@ -104,6 +107,7 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
   )
 
   const total = rows.length
+  const left = remainingMs(progress, total, startedAt.current ? Date.now() - startedAt.current : 0)
   const done = urls.length > 0 && urls.length === total
   const pages = useMemo(() => paginate(urls.length), [urls.length])
   const css = useMemo(() => printCss(), [])
@@ -146,7 +150,10 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
             ) : done ? (
               t('workspace.print.ready', { count: total, pages: pages.length })
             ) : (
-              t('workspace.print.rendering', { done: formatNumber(progress), total: formatNumber(total) })
+              <>
+                {t('workspace.print.rendering', { done: formatNumber(progress), total: formatNumber(total) })}
+                {left !== null && ` · ${t('workspace.print.remaining', { time: formatDuration(left, t) })}`}
+              </>
             )}
           </div>
           <button

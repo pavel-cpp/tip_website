@@ -61,6 +61,8 @@ export interface RealtimeOptions {
 }
 
 export const PING_MS = 15_000
+/** How long after a ping any frame may take before the connection is declared half-open. */
+export const PONG_TIMEOUT_MS = 10_000
 export const BACKOFF_MIN_MS = 1000
 export const BACKOFF_MAX_MS = 15_000
 export const CURSOR_THROTTLE_MS = 100
@@ -102,6 +104,9 @@ export class RealtimeClient {
 
   private retryTimer: ReturnType<typeof setTimeout> | undefined
   private pingTimer: ReturnType<typeof setInterval> | undefined
+  private pongTimer: ReturnType<typeof setTimeout> | undefined
+  /** Set once the server has answered a ping, so older servers without a pong never trigger the watchdog. */
+  private pongSupported = false
   private cursorTimer: ReturnType<typeof setTimeout> | undefined
   private cursorWanted: CursorPos = { rowId: null }
   private cursorSent: CursorPos | null = null
@@ -277,7 +282,15 @@ export class RealtimeClient {
       return
     }
     if (!frame || typeof frame !== 'object') return
+    // Any traffic proves the path works, whether or not it is an answer to our ping.
+    if (this.pongTimer !== undefined) {
+      clearTimeout(this.pongTimer)
+      this.pongTimer = undefined
+    }
     switch (frame.t) {
+      case 'pong':
+        this.pongSupported = true
+        break
       case 'hello':
         this.attempts = 0
         this.authRetried = false
@@ -414,12 +427,43 @@ export class RealtimeClient {
 
   private startPing(): void {
     this.stopPing()
-    this.pingTimer = setInterval(() => this.send({ t: 'ping' }), PING_MS)
+    this.pingTimer = setInterval(() => this.ping(), PING_MS)
+  }
+
+  private ping(): void {
+    const sock = this.socket
+    if (!this.send({ t: 'ping' }) || !this.pongSupported || this.pongTimer !== undefined) return
+    // A socket that swallows writes (cable pulled, phone moved out of range) never closes by itself.
+    this.pongTimer = setTimeout(() => {
+      this.pongTimer = undefined
+      if (this.socket === sock) this.dropSocket()
+    }, PONG_TIMEOUT_MS)
   }
 
   private stopPing(): void {
     clearInterval(this.pingTimer)
     this.pingTimer = undefined
+    clearTimeout(this.pongTimer)
+    this.pongTimer = undefined
+  }
+
+  /** Abandons the current socket as dead and starts the usual reconnect cycle. */
+  private dropSocket(): void {
+    const sock = this.socket
+    this.socket = null
+    this.authed = false
+    this.stopPing()
+    clearTimeout(this.cursorTimer)
+    this.cursorTimer = undefined
+    if (sock) {
+      detachHandlers(sock)
+      try {
+        sock.close(1000)
+      } catch {
+        // The socket is already unusable; nothing to clean up.
+      }
+    }
+    if (!this.stopped) this.scheduleReconnect()
   }
 
   // ---- browser events
@@ -433,6 +477,12 @@ export class RealtimeClient {
     // iOS Safari kills background sockets without a close event; pageshow also covers the back/forward cache.
     const onPageShow = () => this.forceReconnect()
     const onPageHide = () => this.emit({ type: 'hidden' })
+    // The browser knows the network is gone long before a dead socket times out: show it at once.
+    const onOffline = () => {
+      if (this.stopped) return
+      this.attempts = Math.max(this.attempts, OFFLINE_AFTER - 1)
+      this.dropSocket()
+    }
     const onOnline = () => {
       if (!this.isOnline) this.forceReconnect()
     }
@@ -440,7 +490,9 @@ export class RealtimeClient {
     window.addEventListener('pageshow', onPageShow)
     window.addEventListener('pagehide', onPageHide)
     window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
     this.detach.push(
+      () => window.removeEventListener('offline', onOffline),
       () => document.removeEventListener('visibilitychange', onVisibility),
       () => window.removeEventListener('pageshow', onPageShow),
       () => window.removeEventListener('pagehide', onPageHide),

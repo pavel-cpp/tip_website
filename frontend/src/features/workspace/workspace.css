@@ -680,7 +680,10 @@
 }
 
 /* ---------- U1 additions ---------- */
+/* Not shared with the settings page's .breadcrumb: that stylesheet is not loaded here. */
 .ws-head .breadcrumb {
+  flex: 1;
+  display: flex;
   gap: var(--space-2);
   align-items: center;
 }
@@ -703,9 +706,27 @@
   color: var(--text-muted);
   white-space: nowrap;
 }
+/* The banner floats over the header row so its appearance never moves the rows the user is aiming at. */
+.ws {
+  position: relative;
+}
 .ws-offline {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  left: 0;
+  right: 0;
+  min-height: var(--control-h, 44px);
+  box-shadow: var(--shadow-pop);
   border-color: var(--danger);
   background: var(--bg-elev);
+  animation: ws-offline-in var(--dur-base) var(--ease-standard) both;
+}
+@keyframes ws-offline-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
 }
 .ws-tool-text {
   font-weight: var(--fw-semibold);
@@ -754,17 +775,16 @@
   cursor: pointer;
 }
 .pt-unsent {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  translate: 0 -50%;
-  padding: 1px 8px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-pill);
-  background: var(--bg-elev);
   color: var(--text-muted);
-  font-size: var(--fs-xs);
-  pointer-events: none;
 }
 
 /* Polish: one focus indicator, a search that wraps instead of shrinking, a plain zoom value. */
@@ -825,4 +845,18 @@
 body[data-import-open] .toast-region {
   opacity: 0;
   visibility: hidden;
+}
+
+/* Toasts stay clear of the table footer (desktop) and of the bottom bar (phone). */
+body[data-workspace] .toast-region {
+  bottom: calc(var(--space-6) + var(--safe-bottom) + 56px);
+}
+@media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
+  body[data-workspace] .toast-region {
+    bottom: calc(var(--space-4) + var(--safe-bottom) + 68px);
+  }
+}
+.pt-state-title {
+  margin: 0;
+  font-size: var(--fs-lg);
 }

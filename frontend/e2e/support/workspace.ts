@@ -86,8 +86,8 @@ export class WorkspacePage {
   async selectAllAndPrint(): Promise<void> {
     if (await this.isCards()) {
       await this.page.getByRole('button', { name: this.t('workspace.select.enter') }).click()
-      await this.bulkBar.getByRole('button', { name: this.t('workspace.select.all') }).click()
-      await this.bulkBar.getByRole('button', { name: this.t('workspace.bulk.print') }).click()
+      await this.page.getByRole('checkbox', { name: this.t('workspace.select.all') }).check()
+      await this.bulkBar.getByRole('button', { name: /^(Печать|Chop etish)/ }).click()
       return
     }
     await this.grid.getByRole('checkbox', { name: this.t('workspace.selectVisible') }).check()

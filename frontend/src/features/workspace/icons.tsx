@@ -59,6 +59,19 @@ const paths = {
       <path d="M4.500 7l1.200 1.200L8 5.800M13 7h8M3 15h6v5H3zM13 17.500h8" />
     </>
   ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  more: (
+    <>
+      <circle cx="5" cy="12" r="1.200" />
+      <circle cx="12" cy="12" r="1.200" />
+      <circle cx="19" cy="12" r="1.200" />
+    </>
+  ),
   maximize: <path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4" />,
   restore: <path d="M9 5v4H5M15 5v4h4M9 19v-4H5M15 19v-4h4" />,
   zoomIn: (

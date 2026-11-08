@@ -7,6 +7,7 @@ import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
+import { WsIcon } from './icons'
 import type { RowCursor, RowLockOwner } from './presence'
 import { COLUMNS, type Column, isSuspiciousPhone } from './tableLogic'
 
@@ -195,6 +196,17 @@ function ParticipantRowImpl({
                   <span className="pt-text" data-mono={c !== 'name' || undefined}>
                     {value}
                   </span>
+                  {c === 'number' && unsent && !failed && (
+                    // Beside the number (not over the cells) so it never hides the name or the phone.
+                    <span
+                      className="pt-unsent"
+                      role="img"
+                      aria-label={t('workspace.row.unsent')}
+                      title={`${t('workspace.row.unsent')}: ${t('workspace.row.unsentTitle')}`}
+                    >
+                      <WsIcon name="clock" size={14} />
+                    </span>
+                  )}
                   {suspicious && (
                     <span className="pt-warn" title={t('workspace.phone.suspicious')}>
                       <Icon name="alert" size={16} />
@@ -220,11 +232,6 @@ function ParticipantRowImpl({
             </div>
           )
         })}
-        {unsent && !failed && (
-          <span className="pt-unsent" title={t('workspace.row.unsentTitle')}>
-            {t('workspace.row.unsent')}
-          </span>
-        )}
         {owner && (
           <span className="pt-lock-tip" role="status">
             <UserAvatar user={owner} size={18} />

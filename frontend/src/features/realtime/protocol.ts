@@ -36,6 +36,8 @@ export type ServerFrame =
       serverTime: string
     }
   | { t: 'reauth' }
+  /** Answer to a client ping; servers that do not send it are simply not watched for half-open sockets. */
+  | { t: 'pong' }
   | { t: 'presence'; peers: Peer[] }
   | ({ t: 'cursor'; userId: string } & CursorPos)
   | { t: 'lock' | 'unlock'; rowId: string; by: string; expiresAt: string }

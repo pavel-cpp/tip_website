@@ -8,7 +8,7 @@ import { AppLink } from '../components/AppLink'
 import { AvatarStack } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
-import { Menu } from '../components/Menu'
+import { Menu, type MenuItem } from '../components/Menu'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { Skeleton, useSkeleton } from '../components/Skeleton'
@@ -30,13 +30,16 @@ import {
   useParticipants,
   useUpdateParticipant,
 } from '../features/workspace/api'
+import { BulkBar } from '../features/workspace/BulkBar'
 import { AddRowsDialog, CopyFallbackDialog, ImportDialog } from '../features/workspace/Dialogs'
 import { WsIcon, type WsIconName } from '../features/workspace/icons'
 import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineBanner'
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
+import { PhoneToolbar } from '../features/workspace/PhoneToolbar'
 import { copyShortcutLabel } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
+import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
 import { TicketPanel } from '../features/workspace/TicketPanel'
 import { countSuspiciousPhones, filterRows, planPaste, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
@@ -159,6 +162,18 @@ function WorkspaceView({ project }: { project: Project }) {
   const canDelete = canDeletePerm && !finished
   const canImport = canImportPerm && !finished
 
+  const narrow = useNarrow()
+  // Phone selection mode: its bulk bar takes the bottom toolbar's place.
+  const [selectMode, setSelectMode] = useState(false)
+
+  // Lifts toasts above the table footer / bottom bar (see workspace.css).
+  useEffect(() => {
+    document.body.dataset.workspace = ''
+    return () => {
+      delete document.body.dataset.workspace
+    }
+  }, [])
+
   // ---- data
   const list = useParticipants(project.id, canView)
   const allRows = list.data?.items
@@ -255,11 +270,23 @@ function WorkspaceView({ project }: { project: Project }) {
     setPending(new Set(pendingCount.current.keys()))
   }, [])
   const down = useConnectionDown()
+  // The failure toast of a row goes away as soon as a retry of that row succeeds.
+  const failToasts = useRef(new Map<string, number>())
+  const clearFailToast = useCallback(
+    (rowId: string) => {
+      const id = failToasts.current.get(rowId)
+      if (id === undefined) return
+      failToasts.current.delete(rowId)
+      toast.dismiss(id)
+    },
+    [toast],
+  )
 
   const attempt = useCallback(
     async (row: Participant, patch: { name?: string; phone?: string }): Promise<CommitResult> => {
       try {
         await update.mutateAsync({ id: row.id, version: row.version, ...patch })
+        clearFailToast(row.id)
         return { status: 'ok' }
       } catch (e) {
         if (isApiError(e)) {
@@ -268,14 +295,18 @@ function WorkspaceView({ project }: { project: Project }) {
           }
           if (e.code === 'ROW_LOCKED') return { status: 'locked', by: e.details?.by as string | undefined }
         }
-        toast.show({
-          message: t('workspace.toast.saveFailed', { number: row.number, reason: errorText(e) }),
-          tone: 'error',
-        })
+        clearFailToast(row.id)
+        failToasts.current.set(
+          row.id,
+          toast.show({
+            message: t('workspace.toast.saveFailed', { number: row.number, reason: errorText(e) }),
+            tone: 'error',
+          }),
+        )
         return { status: 'error' }
       }
     },
-    [update, toast, t],
+    [update, toast, t, clearFailToast],
   )
 
   // Edits of one row run one after another so each PATCH carries the version the previous one produced.
@@ -309,10 +340,23 @@ function WorkspaceView({ project }: { project: Project }) {
   const pendingFocus = useRef(false)
   const [focusNonce, setFocusNonce] = useState(0)
 
+  /** Points the ticket, the selection and the table cursor at one row (after a paste or on "Show"). */
+  const follow = useCallback(
+    (id: string) => {
+      setCurrentId(id)
+      // On phones the selection is a separate mode; the ticket and the print target follow the current row.
+      if (!narrow) setSelected(new Set([id]))
+      setReveal(id)
+      pendingFocus.current = true
+      setFocusNonce((n) => n + 1)
+    },
+    [narrow],
+  )
+
   const addRows = useCallback(
     async (
       vars: { count: number } | { items: ParticipantInput[] },
-      filled?: { count: number; firstId: string },
+      filled?: { count: number; firstId: string; firstNumber: number },
     ) => {
       try {
         const created = await create.mutateAsync(vars)
@@ -320,18 +364,33 @@ function WorkspaceView({ project }: { project: Project }) {
         clearTimeout(freshTimer.current)
         freshTimer.current = setTimeout(() => setFresh(new Set()), FRESH_MS)
         const first = filled?.firstId ?? created[0]?.id
-        if (first) {
+        if (first && 'items' in vars) {
+          follow(first)
+        } else if (first) {
           setReveal(first)
           pendingFocus.current = true
         }
-        toast.show({ message: t('workspace.toast.added', { count: created.length + (filled?.count ?? 0) }) })
+        const firstNumber = filled?.firstNumber ?? created[0]?.number
+        if (first && 'items' in vars && firstNumber !== undefined) {
+          toast.show({
+            message: t('workspace.toast.pasted', {
+              count: created.length + (filled?.count ?? 0),
+              number: firstNumber,
+            }),
+            action: { label: t('workspace.toast.show'), onAction: () => follow(first) },
+          })
+        } else {
+          toast.show({
+            message: t('workspace.toast.added', { count: created.length + (filled?.count ?? 0) }),
+          })
+        }
         return true
       } catch (e) {
         toast.show({ message: errorText(e), tone: 'error' })
         return false
       }
     },
-    [create, toast, t],
+    [create, toast, t, follow],
   )
 
   // Pasted rows fill blank rows first (starting at the current one) and only the rest is appended.
@@ -346,17 +405,20 @@ function WorkspaceView({ project }: { project: Project }) {
         plan.fills.map((f) => commit(f.row, { name: f.item.name, phone: f.item.phone })),
       )
       const ok = plan.fills.filter((_, i) => results[i]?.status === 'ok')
-      const firstId = ok[0]?.row.id
+      const first = ok[0]?.row
+      const filled = first ? { count: ok.length, firstId: first.id, firstNumber: first.number } : undefined
       if (plan.rest.length > 0) {
-        await addRows({ items: plan.rest }, firstId ? { count: ok.length, firstId } : undefined)
-      } else if (firstId) {
-        setReveal(firstId)
-        pendingFocus.current = true
-        setFocusNonce((n) => n + 1)
-        toast.show({ message: t('workspace.toast.added', { count: ok.length }) })
+        await addRows({ items: plan.rest }, filled)
+        if (filled) follow(filled.firstId)
+      } else if (filled) {
+        follow(filled.firstId)
+        toast.show({
+          message: t('workspace.toast.pasted', { count: filled.count, number: filled.firstNumber }),
+          action: { label: t('workspace.toast.show'), onAction: () => follow(filled.firstId) },
+        })
       }
     },
-    [rows, currentId, addRows, commit, toast, t],
+    [rows, currentId, addRows, commit, toast, t, follow],
   )
 
   const onDelete = useCallback(
@@ -390,7 +452,6 @@ function WorkspaceView({ project }: { project: Project }) {
       return next
     })
   // On phones the tabs decide what is shown; the panel layout state only applies to wider screens.
-  const narrow = useNarrow()
   const visible = (p: PanelId) =>
     narrow ? tab === p : !layout.closed[p] && (layout.max === null || layout.max === p)
   const toggleMax = (p: PanelId) => updateLayout((l) => ({ ...l, max: l.max === p ? null : p }))
@@ -412,10 +473,16 @@ function WorkspaceView({ project }: { project: Project }) {
 
   const printTargets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
   const [printWarn, setPrintWarn] = useState<{ bad: number; total: number } | null>(null)
+  const [printBig, setPrintBig] = useState<number | null>(null)
+  // A huge batch takes minutes to render, so say so before the page turns into a progress bar.
+  const startPrint = () => {
+    if (printTargets.length > BIG_PRINT_THRESHOLD) setPrintBig(printTargets.length)
+    else actions.print()
+  }
   const onPrint = () => {
     const bad = countSuspiciousPhones(printTargets)
     if (bad > 0) setPrintWarn({ bad, total: printTargets.length })
-    else actions.print()
+    else startPrint()
   }
 
   const shortcut = copyShortcutLabel()
@@ -424,6 +491,56 @@ function WorkspaceView({ project }: { project: Project }) {
       ? t('workspace.print.withCount', { count: actions.targetCount })
       : t('workspace.print')
   const noPrintReason = !current ? t('workspace.noRowsReason') : undefined
+  // On phones every secondary action sits in one menu so the primary "Print (N)" keeps its full label.
+  const phoneItems: MenuItem[] = []
+  if (canPrint) {
+    phoneItems.push(
+      {
+        id: 'copy',
+        label: t('workspace.copy'),
+        disabled: !current || !source,
+        disabledReason: noPrintReason ?? t('workspace.toast.notReady'),
+        onSelect: actions.copy,
+      },
+      {
+        id: 'save',
+        label:
+          actions.targetCount > 1
+            ? t('workspace.bulk.saveMany', { count: actions.targetCount })
+            : t('workspace.save'),
+        disabled: !current || !source,
+        disabledReason: noPrintReason ?? t('workspace.toast.notReady'),
+        onSelect: () => void actions.save(),
+      },
+    )
+  }
+  if (canImport) {
+    phoneItems.push({
+      id: 'import',
+      label: t('workspace.import'),
+      separatorBefore: phoneItems.length > 0,
+      onSelect: () => setImportOpen(true),
+    })
+  }
+  if (canExport) {
+    phoneItems.push(
+      {
+        id: 'xlsx',
+        label: t('workspace.exportAs.xlsx'),
+        separatorBefore: !canImport && phoneItems.length > 0,
+        onSelect: () => void exportFile('xlsx'),
+      },
+      { id: 'csv', label: t('workspace.exportAs.csv'), onSelect: () => void exportFile('csv') },
+    )
+  }
+  if (canSettings) {
+    phoneItems.push({
+      id: 'settings',
+      label: t('workspace.settings'),
+      separatorBefore: phoneItems.length > 0,
+      onSelect: () => void navigate(`/projects/${project.id}/settings`, { viewTransition: true }),
+    })
+  }
   const ratioOff = project.image ? Math.abs(project.image.w / project.image.h - TICKET_ASPECT) > 0.05 : false
   const picSize = imageEl ? imageSize(imageEl) : null
 
@@ -441,8 +558,11 @@ function WorkspaceView({ project }: { project: Project }) {
           error={
             list.isError ? (
               <>
-                <p>{errorText(list.error)}</p>
-                <Button onClick={() => void list.refetch()}>{t('action.retry')}</Button>
+                <h3 className="pt-state-title">{t('workspace.loadError.title')}</h3>
+                <p className="muted">{errorText(list.error)}</p>
+                <Button onClick={() => void list.refetch()} loading={list.isFetching}>
+                  {t('action.retry')}
+                </Button>
               </>
             ) : undefined
           }
@@ -469,11 +589,8 @@ function WorkspaceView({ project }: { project: Project }) {
           onQueryChange={setQuery}
           cards={narrow}
           onNotify={(message) => toast.show({ message })}
-          canPrint={canPrint}
-          copyReady={!!source && selectedRows.length === 1}
-          onBulkPrint={onPrint}
-          onBulkCopy={actions.copy}
-          onBulkSave={() => void actions.save()}
+          selectMode={selectMode}
+          onSelectModeChange={setSelectMode}
           sheetPreview={(row) => (
             <TicketPanel
               compact
@@ -560,87 +677,118 @@ function WorkspaceView({ project }: { project: Project }) {
         </p>
       )}
 
-      <div className="ws-toolbar" role="toolbar" aria-label={t('workspace.toolbar')}>
-        {canPrint && (
-          <>
-            <ToolButton
-              icon="print"
-              variant="primary"
-              label={printLabel}
-              text={printLabel}
-              disabled={!current}
-              disabledReason={noPrintReason}
-              onClick={onPrint}
-            />
-            <ToolButton
-              icon="copy"
-              label={t('workspace.copy')}
-              hint={`${shortcut}+C`}
-              disabled={!current || !source}
-              disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
-              onClick={actions.copy}
-            />
-            <ToolButton
-              icon="save"
-              label={t('workspace.save')}
-              disabled={!current || !source}
-              disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
-              onClick={() => void actions.save()}
-            />
-          </>
-        )}
-        {(canImport || canExport) && <span className="ws-sep" aria-hidden="true" />}
-        {canImport && (
-          <ToolButton
-            icon="upload"
-            label={t('workspace.import')}
-            text={t('workspace.import')}
-            onClick={() => setImportOpen(true)}
+      {narrow ? (
+        selectMode ? (
+          <BulkBar
+            count={selectedRows.length}
+            canPrint={canPrint}
+            canDelete={canDelete}
+            copyReady={!!source && selectedRows.length === 1}
+            saveReady={!!source}
+            onPrint={onPrint}
+            onCopy={actions.copy}
+            onSave={() => void actions.save()}
+            onDelete={() => {
+              onDelete(selectedRows.map((r) => r.id))
+              setSelectMode(false)
+            }}
+            onDone={() => {
+              setSelectMode(false)
+              setSelected(new Set())
+            }}
           />
-        )}
-        {canExport && (
-          <Menu
-            label={t('workspace.export')}
-            items={[
-              { id: 'xlsx', label: t('workspace.export.xlsx'), onSelect: () => void exportFile('xlsx') },
-              { id: 'csv', label: t('workspace.export.csv'), onSelect: () => void exportFile('csv') },
-            ]}
-            trigger={(props) => (
-              <Tooltip content={t('workspace.export')} side="bottom">
-                <Button {...props} aria-label={t('workspace.export')}>
-                  <WsIcon name="exportTable" />
-                  <span className="ws-tool-text">{t('workspace.export')}</span>
-                </Button>
-              </Tooltip>
-            )}
+        ) : (
+          <PhoneToolbar
+            canPrint={canPrint}
+            printLabel={printLabel}
+            printDisabled={!current ? noPrintReason : undefined}
+            items={phoneItems}
+            onPrint={onPrint}
           />
-        )}
-        {canSettings && (
-          <>
-            <span className="ws-sep" aria-hidden="true" />
+        )
+      ) : (
+        <div className="ws-toolbar" role="toolbar" aria-label={t('workspace.toolbar')}>
+          {canPrint && (
+            <>
+              <ToolButton
+                icon="print"
+                variant="primary"
+                label={printLabel}
+                text={printLabel}
+                disabled={!current}
+                disabledReason={noPrintReason}
+                onClick={onPrint}
+              />
+              <ToolButton
+                icon="copy"
+                label={t('workspace.copy')}
+                hint={`${shortcut}+C`}
+                disabled={!current || !source}
+                disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
+                onClick={actions.copy}
+              />
+              <ToolButton
+                icon="save"
+                label={t('workspace.save')}
+                disabled={!current || !source}
+                disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
+                onClick={() => void actions.save()}
+              />
+            </>
+          )}
+          {(canImport || canExport) && <span className="ws-sep" aria-hidden="true" />}
+          {canImport && (
             <ToolButton
-              icon="settings"
-              label={t('workspace.settings')}
-              onClick={() => void navigate(`/projects/${project.id}/settings`, { viewTransition: true })}
+              icon="upload"
+              label={t('workspace.import')}
+              text={t('workspace.import')}
+              onClick={() => setImportOpen(true)}
             />
-          </>
-        )}
-        {!narrow &&
-          hiddenPanels.map((p) => (
-            <Button key={p} size="sm" variant="ghost" onClick={() => restore(p)}>
-              <WsIcon name={p === 'picture' ? 'image' : 'table'} size={16} />
-              {t('workspace.showPanel', {
-                name: t(p === 'picture' ? 'workspace.panel.picture' : 'workspace.panel.db'),
-              })}
-            </Button>
-          ))}
-        <span className="spacer" />
-        {canPrint && (
-          <span className="ws-hint">
-            {t('workspace.copyHint')} <kbd>{shortcut}</kbd>+<kbd>C</kbd>
-          </span>
-        )}
-      </div>
+          )}
+          {canExport && (
+            <Menu
+              label={t('workspace.export')}
+              items={[
+                { id: 'xlsx', label: t('workspace.export.xlsx'), onSelect: () => void exportFile('xlsx') },
+                { id: 'csv', label: t('workspace.export.csv'), onSelect: () => void exportFile('csv') },
+              ]}
+              trigger={(props) => (
+                <Tooltip content={t('workspace.export')} side="bottom">
+                  <Button {...props} aria-label={t('workspace.export')}>
+                    <WsIcon name="exportTable" />
+                    <span className="ws-tool-text">{t('workspace.export')}</span>
+                  </Button>
+                </Tooltip>
+              )}
+            />
+          )}
+          {canSettings && (
+            <>
+              <span className="ws-sep" aria-hidden="true" />
+              <ToolButton
+                icon="settings"
+                label={t('workspace.settings')}
+                onClick={() => void navigate(`/projects/${project.id}/settings`, { viewTransition: true })}
+              />
+            </>
+          )}
+          {!narrow &&
+            hiddenPanels.map((p) => (
+              <Button key={p} size="sm" variant="ghost" onClick={() => restore(p)}>
+                <WsIcon name={p === 'picture' ? 'image' : 'table'} size={16} />
+                {t('workspace.showPanel', {
+                  name: t(p === 'picture' ? 'workspace.panel.picture' : 'workspace.panel.db'),
+                })}
+              </Button>
+            ))}
+          <span className="spacer" />
+          {canPrint && (
+            <span className="ws-hint">
+              {t('workspace.copyHint')} <kbd>{shortcut}</kbd>+<kbd>C</kbd>
+            </span>
+          )}
+        </div>
+      )}
 
       {actions.progress && (
         <div className="ws-progress" role="status">
@@ -735,7 +883,7 @@ function WorkspaceView({ project }: { project: Project }) {
               variant="primary"
               onClick={() => {
                 setPrintWarn(null)
-                actions.print()
+                startPrint()
               }}
             >
               {t('workspace.printWarn.continue')}
@@ -744,6 +892,34 @@ function WorkspaceView({ project }: { project: Project }) {
         }
       >
         <p>{t('workspace.printWarn.body', { count: printWarn?.bad ?? 0, total: printWarn?.total ?? 0 })}</p>
+      </Modal>
+      <Modal
+        open={printBig !== null}
+        onClose={() => setPrintBig(null)}
+        title={t('workspace.printBig.title')}
+        actions={
+          <>
+            <Button variant="ghost" data-autofocus onClick={() => setPrintBig(null)}>
+              {t('workspace.printBig.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setPrintBig(null)
+                actions.print()
+              }}
+            >
+              {t('workspace.printBig.continue')}
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {t('workspace.printBig.body', {
+            count: printBig ?? 0,
+            time: formatDuration(estimateMs(printBig ?? 0), t),
+          })}
+        </p>
       </Modal>
       <CopyFallbackDialog blob={actions.fallback} onClose={actions.closeFallback} />
     </div>
