@@ -85,14 +85,14 @@ const (
 )
 
 func authSetRefreshCookie(w http.ResponseWriter, token string, expires time.Time, secure bool) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // Secure is true by default; COOKIE_SECURE=false is a development-only switch
 		Name: refreshCookieName, Value: token, Path: refreshCookiePath, Expires: expires,
 		HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode,
 	})
 }
 
 func authClearRefreshCookie(w http.ResponseWriter, secure bool) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // Secure is true by default; COOKIE_SECURE=false is a development-only switch
 		Name: refreshCookieName, Value: "", Path: refreshCookiePath, MaxAge: -1, Expires: time.Unix(0, 0),
 		HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode,
 	})
