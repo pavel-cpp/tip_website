@@ -8,7 +8,8 @@ import (
 	"io/fs"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib" // also registers the "pgx" database/sql driver
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
 )
@@ -24,10 +25,24 @@ const (
 const migrationLockID int64 = 0x7469705f6d696772 // "tip_migr"
 
 // Open creates a pool and verifies connectivity.
-func Open(ctx context.Context, dsn string) (*sql.DB, error) {
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open database: %w", err)
+func Open(ctx context.Context, dsn string, opts ...Option) (*sql.DB, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	var db *sql.DB
+	if o.observer == nil {
+		var err error
+		if db, err = sql.Open("pgx", dsn); err != nil {
+			return nil, fmt.Errorf("open database: %w", err)
+		}
+	} else {
+		cfg, err := pgx.ParseConfig(dsn)
+		if err != nil {
+			return nil, fmt.Errorf("parse database url: %w", err)
+		}
+		cfg.Tracer = queryTracer{obs: o.observer}
+		db = sql.OpenDB(stdlib.GetConnector(*cfg))
 	}
 	db.SetMaxOpenConns(maxOpenConns)
 	db.SetMaxIdleConns(maxIdleConns)
