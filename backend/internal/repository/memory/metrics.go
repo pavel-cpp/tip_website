@@ -15,6 +15,8 @@ type Metrics interface {
 	MessageOut(typ string)
 	SlowClientDisconnect()
 	LockConflict()
+	// RateLimited counts a client frame refused by the per-connection rate limiter.
+	RateLimited()
 }
 
 // NopMetrics discards everything.
@@ -43,6 +45,9 @@ func (NopMetrics) SlowClientDisconnect() {}
 
 // LockConflict implements Metrics.
 func (NopMetrics) LockConflict() {}
+
+// RateLimited implements Metrics.
+func (NopMetrics) RateLimited() {}
 
 // PromMetrics is the Prometheus implementation of Metrics. Message types are a
 // small fixed set, so label cardinality stays bounded.
@@ -96,3 +101,7 @@ func (m *PromMetrics) SlowClientDisconnect() { m.slow.Inc() }
 
 // LockConflict implements Metrics.
 func (m *PromMetrics) LockConflict() { m.conflicts.Inc() }
+
+// RateLimited implements Metrics. The platform counter tip_rate_limited_total{kind="ws"} lives
+// in the shared registry, so the composition root overrides this method; here it is a no-op.
+func (m *PromMetrics) RateLimited() {}

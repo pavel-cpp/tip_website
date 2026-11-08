@@ -310,9 +310,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (t) (rate(tip_ws_messages_in_total[$__rate_interval]))",
+          "expr": "sum by (type) (rate(tip_ws_messages_in_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "{{t}}"
+          "legendFormat": "{{type}}"
         }
       ],
       "fieldConfig": {
@@ -355,9 +355,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (t) (rate(tip_ws_messages_out_total[$__rate_interval]))",
+          "expr": "sum by (type) (rate(tip_ws_messages_out_total[$__rate_interval]))",
           "refId": "A",
-          "legendFormat": "{{t}}"
+          "legendFormat": "{{type}}"
         }
       ],
       "fieldConfig": {

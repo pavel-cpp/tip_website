@@ -23,8 +23,8 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/service"
 )
 
-// participantsAPI is the part of *service.Participants the handler uses.
-type participantsAPI interface {
+// ParticipantsService is the part of *service.Participants the handler uses.
+type ParticipantsService interface {
 	List(ctx context.Context, a domain.Actor, in service.ListInput) (service.ParticipantList, error)
 	Add(ctx context.Context, a domain.Actor, in service.AddInput) ([]domain.Participant, error)
 	Update(ctx context.Context, a domain.Actor, in service.UpdateInput) (domain.Participant, error)
@@ -36,10 +36,10 @@ type participantsAPI interface {
 }
 
 // ParticipantsHandler implements the participant, import and export operations of gen.ServerInterface.
-type ParticipantsHandler struct{ svc participantsAPI }
+type ParticipantsHandler struct{ svc ParticipantsService }
 
 // NewParticipantsHandler returns the handler over the participants service.
-func NewParticipantsHandler(svc participantsAPI) *ParticipantsHandler {
+func NewParticipantsHandler(svc ParticipantsService) *ParticipantsHandler {
 	return &ParticipantsHandler{svc: svc}
 }
 

@@ -14,7 +14,7 @@ type APIDeps struct {
 	Users        UsersService
 	Roles        RolesService
 	Projects     ProjectsService
-	Participants *service.Participants
+	Participants ParticipantsService
 	Audit        *service.Audit
 	System       *service.SystemService
 	// MaxImageBytes bounds an uploaded project image (MAX_IMAGE_MB).

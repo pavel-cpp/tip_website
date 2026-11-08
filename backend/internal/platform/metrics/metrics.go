@@ -32,10 +32,22 @@ type Metrics struct {
 	TokenRefresh *prometheus.CounterVec
 	// Logins counts login attempts by result.
 	Logins *prometheus.CounterVec
+	// BlacklistDuration observes the latency of one revocation lookup.
+	BlacklistDuration prometheus.Histogram
+	// ParticipantsWritten counts participant rows created, edited or imported.
+	ParticipantsWritten prometheus.Counter
+	// TicketsPrinted counts tickets reported as printed.
+	TicketsPrinted prometheus.Counter
+	// Uploads counts accepted and refused uploads by kind (project_image, avatar) and result (ok, rejected, error).
+	Uploads *prometheus.CounterVec
+	// RateLimited counts throttled requests by kind (login, client_errors, api, ws).
+	RateLimited *prometheus.CounterVec
 
-	requests *prometheus.CounterVec
-	duration *prometheus.HistogramVec
-	inFlight prometheus.Gauge
+	requests      *prometheus.CounterVec
+	duration      *prometheus.HistogramVec
+	responseBytes *prometheus.HistogramVec
+	queryDuration *prometheus.HistogramVec
+	inFlight      prometheus.Gauge
 }
 
 // New creates the registry with Go, process, build info and HTTP instruments registered.
@@ -75,7 +87,39 @@ func New(version, commit string) *Metrics {
 			Name: "tip_http_in_flight",
 			Help: "HTTP requests currently being served.",
 		}),
+		responseBytes: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "tip_http_response_bytes",
+			Help:    "HTTP response body size by route pattern.",
+			Buckets: []float64{256, 1 << 10, 4 << 10, 16 << 10, 64 << 10, 256 << 10, 1 << 20, 4 << 20, 16 << 20},
+		}, []string{"route"}),
+		BlacklistDuration: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Name:    "tip_blacklist_check_duration_seconds",
+			Help:    "Latency of one access token revocation lookup.",
+			Buckets: []float64{.0005, .001, .0025, .005, .01, .025, .05, .1, .25, .5, 1},
+		}),
+		queryDuration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "tip_db_query_duration_seconds",
+			Help:    "Database statement latency by statement kind (select, insert, update, delete, tx, other).",
+			Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5},
+		}, []string{"query"}),
+		ParticipantsWritten: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "tip_participants_written_total",
+			Help: "Participant rows created, edited or imported.",
+		}),
+		TicketsPrinted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "tip_tickets_printed_total",
+			Help: "Tickets reported as printed.",
+		}),
+		Uploads: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "tip_uploads_total",
+			Help: "Image uploads by kind and result (ok, rejected, error).",
+		}, []string{"kind", "result"}),
+		RateLimited: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "tip_rate_limited_total",
+			Help: "Requests refused by a rate limiter, by kind (login, client_errors, api, ws).",
+		}, []string{"kind"}),
 	}
+	m.initLabels()
 	build := prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "tip_build_info",
 		Help: "Build information; the value is always 1.",
@@ -86,6 +130,7 @@ func New(version, commit string) *Metrics {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		build, m.LogDropped, m.RedisUp, m.BlacklistChecks, m.TokenRefresh, m.Logins, m.requests, m.duration, m.inFlight,
+		m.responseBytes, m.BlacklistDuration, m.queryDuration, m.ParticipantsWritten, m.TicketsPrinted, m.Uploads, m.RateLimited,
 	)
 	return m
 }
@@ -113,6 +158,10 @@ func (m *Metrics) Middleware(next http.Handler) http.Handler {
 		}
 		m.requests.WithLabelValues(route, r.Method, strconv.Itoa(status)).Inc()
 		m.duration.WithLabelValues(route, r.Method).Observe(time.Since(start).Seconds())
+		m.responseBytes.WithLabelValues(route).Observe(float64(ww.BytesWritten()))
+		if status == http.StatusTooManyRequests {
+			m.RateLimited.WithLabelValues(rateLimitKind(route)).Inc()
+		}
 	})
 }
 

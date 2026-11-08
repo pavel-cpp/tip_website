@@ -219,6 +219,13 @@ func (h *Hub) Shutdown(ctx context.Context) error {
 	}
 }
 
+// ActiveLocks returns the number of row locks currently held; the room sweeper removes expired ones.
+func (h *Hub) ActiveLocks() int {
+	h.lockMu.RLock()
+	defer h.lockMu.RUnlock()
+	return len(h.locks)
+}
+
 func (h *Hub) setLock(l domain.RowLock) {
 	h.lockMu.Lock()
 	h.locks[l.RowID] = l

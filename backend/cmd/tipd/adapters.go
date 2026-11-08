@@ -97,7 +97,9 @@ type meteredTokens struct {
 }
 
 func (t meteredTokens) Revocation(ctx context.Context, q domain.RevocationQuery) (domain.RevocationState, error) {
+	start := time.Now()
 	st, err := t.TokenStore.Revocation(ctx, q)
+	t.m.BlacklistDuration.Observe(time.Since(start).Seconds())
 	result := "ok"
 	switch {
 	case err != nil:
@@ -109,7 +111,8 @@ func (t meteredTokens) Revocation(ctx context.Context, q domain.RevocationQuery)
 	return st, err
 }
 
-// meteredAuth counts logins and refreshes (tip_logins_total, tip_token_refresh_total).
+// meteredAuth counts logins (tip_logins_total). Refresh outcomes are reported by the service
+// itself through AuthDeps.OnRefresh because only it can tell a replay from a reuse.
 type meteredAuth struct {
 	*service.Auth
 	m *metrics.Metrics
@@ -120,14 +123,6 @@ func (a meteredAuth) Login(ctx context.Context, in service.LoginInput) (service.
 	a.m.Logins.WithLabelValues(outcome(err, map[domain.Code]string{
 		domain.CodeBadCredentials: "bad_credentials",
 		domain.CodeRateLimited:    "rate_limited",
-	})).Inc()
-	return s, err
-}
-
-func (a meteredAuth) Refresh(ctx context.Context, token string) (service.Session, error) {
-	s, err := a.Auth.Refresh(ctx, token)
-	a.m.TokenRefresh.WithLabelValues(outcome(err, map[domain.Code]string{
-		domain.CodeRefreshInvalid: "invalid",
 	})).Inc()
 	return s, err
 }
