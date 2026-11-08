@@ -15,10 +15,19 @@ import (
 const image = "postgres:18-alpine"
 
 var (
-	once sync.Once
-	dsn  string
-	err  error
+	once      sync.Once
+	dsn       string
+	err       error
+	container *postgres.PostgresContainer
 )
+
+// Terminate removes the shared container. Test packages call it from TestMain after m.Run so
+// containers do not outlive the test binary when the testcontainers reaper is disabled.
+func Terminate() {
+	if container != nil {
+		_ = testcontainers.TerminateContainer(container)
+	}
+}
 
 // DSN returns a connection string for a throwaway PostgreSQL. It uses TEST_DATABASE_URL when
 // set (CI service container), otherwise starts a container shared by the test binary, and
@@ -30,18 +39,17 @@ func DSN(t *testing.T) string {
 	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 	once.Do(func() {
-		// The container is removed by the testcontainers reaper when the test binary exits.
+		// Removed by Terminate (TestMain) or, as a fallback, by the testcontainers reaper.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		var c *postgres.PostgresContainer
-		c, err = postgres.Run(ctx, image,
+		container, err = postgres.Run(ctx, image,
 			postgres.WithDatabase("tip_test"),
 			postgres.WithUsername("tip"),
 			postgres.WithPassword("tip"),
 			postgres.BasicWaitStrategies(),
 		)
 		if err == nil {
-			dsn, err = c.ConnectionString(ctx, "sslmode=disable")
+			dsn, err = container.ConnectionString(ctx, "sslmode=disable")
 		}
 	})
 	if err != nil {

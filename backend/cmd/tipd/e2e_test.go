@@ -43,9 +43,10 @@ const (
 )
 
 var (
-	redisOnce sync.Once
-	redisURL  string
-	redisErr  error
+	redisOnce      sync.Once
+	redisContainer *tcredis.RedisContainer
+	redisURL       string
+	redisErr       error
 )
 
 // startRedis returns the URL of a throwaway Redis (REDIS_TEST_URL or a shared container).
@@ -60,6 +61,7 @@ func startRedis(t *testing.T) string {
 			redisErr = err
 			return
 		}
+		redisContainer = c
 		redisURL, redisErr = c.ConnectionString(ctx)
 	})
 	if redisErr != nil {

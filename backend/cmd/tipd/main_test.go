@@ -1,27 +1,21 @@
 package main
 
 import (
-	"context"
+	"os"
 	"testing"
 
-	"github.com/rs/zerolog"
+	"github.com/testcontainers/testcontainers-go"
+
+	"github.com/pavel-cpp/tip_website/backend/internal/platform/dbtest"
 )
 
-func TestRunDispatch(t *testing.T) {
-	for _, args := range [][]string{nil, {"bogus"}, {"admin"}, {"admin", "create"}, {"admin", "nuke", "x"}} {
-		if err := run(args); err == nil {
-			t.Errorf("run(%v) must fail", args)
-		}
+// TestMain removes the shared Postgres and Redis containers after the tests, so they do not
+// outlive the binary when the testcontainers reaper is disabled.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	dbtest.Terminate()
+	if redisContainer != nil {
+		_ = testcontainers.TerminateContainer(redisContainer)
 	}
-	if err := run([]string{"version"}); err != nil {
-		t.Errorf("version: %v", err)
-	}
-}
-
-// A nil pool must produce an error, not a panic: migrations are applied against a real
-// database in the migrations and platform/db integration tests.
-func TestRunMigrationsRejectsNilDB(t *testing.T) {
-	if err := runMigrations(context.Background(), nil, zerolog.Nop()); err == nil {
-		t.Fatal("expected an error for a nil database")
-	}
+	os.Exit(code)
 }

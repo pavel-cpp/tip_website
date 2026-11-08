@@ -16,10 +16,20 @@ import (
 )
 
 var (
-	once sync.Once
-	uri  string
-	cerr error
+	once      sync.Once
+	uri       string
+	cerr      error
+	container *tcredis.RedisContainer
 )
+
+// TestMain removes the shared Redis container after the tests, whether or not the reaper runs.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if container != nil {
+		_ = testcontainers.TerminateContainer(container)
+	}
+	os.Exit(code)
+}
 
 // testClient returns a client on a throwaway Redis (REDIS_TEST_URL, else a container shared by
 // the test binary) and skips when Docker is unavailable.
@@ -38,6 +48,7 @@ func testClient(t *testing.T) *goredis.Client {
 				cerr = err
 				return
 			}
+			container = c
 			uri, cerr = c.ConnectionString(ctx)
 		})
 		if cerr != nil {
