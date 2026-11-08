@@ -69,7 +69,9 @@ describe('proactive refresh', () => {
     const mock = stubFetch(({ path }) => {
       if (path !== '/auth/refresh') return undefined
       calls++
-      return calls === 1 ? apiError(503, 'AUTH_UNAVAILABLE') : jsonRes(200, { accessToken: 'again', expiresIn: 900 })
+      return calls === 1
+        ? apiError(503, 'AUTH_UNAVAILABLE')
+        : jsonRes(200, { accessToken: 'again', expiresIn: 900 })
     })
     setAccessToken('old')
     scheduleRefresh(900)
@@ -172,7 +174,8 @@ describe('session', () => {
     await waitFor(() => expect(status()).toBe('anonymous'))
     const logout = mock.mock.calls.find(([u]) => String(u).endsWith('/auth/logout'))
     expect(logout).toBeDefined()
-    expect(new Headers((logout?.[1] as RequestInit).headers).get('Authorization')).toBe('Bearer tok')
+    const init = (logout?.[1] ?? {}) as RequestInit
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer tok')
     expect(getAccessToken()).toBeNull()
   })
 
@@ -226,7 +229,8 @@ describe('guards', () => {
   it('lets a signed-in user in and evaluates permissions', async () => {
     stubFetch(({ path }) => {
       if (path === '/auth/refresh') return jsonRes(200, { accessToken: 't', expiresIn: 900 })
-      if (path === '/me') return jsonRes(200, { user: makeUser({ permissions: ['project.view', 'role.manage'] }) })
+      if (path === '/me')
+        return jsonRes(200, { user: makeUser({ permissions: ['project.view', 'role.manage'] }) })
       return undefined
     })
     guarded('/secret')
@@ -257,7 +261,8 @@ describe('password change prompt', () => {
     stubFetch(({ method, path }) => {
       if (path === '/auth/refresh') return jsonRes(200, { accessToken: 't', expiresIn: 900 })
       if (path === '/me') return jsonRes(200, { user })
-      if (method === 'POST' && path === '/me/password') return jsonRes(200, { accessToken: 'new', expiresIn: 900 })
+      if (method === 'POST' && path === '/me/password')
+        return jsonRes(200, { accessToken: 'new', expiresIn: 900 })
       return undefined
     })
 

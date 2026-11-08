@@ -1,3 +1,4 @@
+import { projectsRu } from '../features/projects/messages.ru'
 import { ruAccess } from './ru.access'
 import type { Message } from './types'
 
@@ -156,6 +157,8 @@ export const ru = {
   'design.panel.title': 'Панель',
   'design.panel.body': 'Содержимое панели',
   'design.motion.bounce': 'Пружина',
+
+  ...projectsRu,
 } as const satisfies Record<string, Message>
 
 export type MessageKey = keyof typeof ru

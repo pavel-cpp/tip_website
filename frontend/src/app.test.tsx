@@ -11,7 +11,8 @@ beforeAll(() => initI18n())
 beforeEach(() => {
   // A signed-in administrator: the refresh cookie is valid and /me answers.
   stubFetch(({ method, path }) => {
-    if (method === 'POST' && path === '/auth/refresh') return jsonRes(200, { accessToken: 't', expiresIn: 900 })
+    if (method === 'POST' && path === '/auth/refresh')
+      return jsonRes(200, { accessToken: 't', expiresIn: 900 })
     if (method === 'GET' && path === '/me') return jsonRes(200, { user: makeUser() })
     if (path.startsWith('/admin/')) return jsonRes(200, [])
     return undefined
@@ -36,7 +37,7 @@ describe('app shell and routing', () => {
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
-  for (const path of ['/', '/projects/42', '/projects/42/settings']) {
+  for (const path of ['/projects/42']) {
     it(`serves ${path}`, async () => {
       open(path)
       expect(await screen.findByText('Раздел в разработке')).toBeInTheDocument()

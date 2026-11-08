@@ -1,3 +1,4 @@
+import { projectsUz } from '../features/projects/messages.uz'
 import type { MessageKey } from './ru'
 import type { Message } from './types'
 import { uzAccess } from './uz.access'
@@ -142,4 +143,6 @@ export const uz: Record<MessageKey, Message> = {
   'design.panel.title': 'Panel',
   'design.panel.body': 'Panel mazmuni',
   'design.motion.bounce': 'Prujina',
+
+  ...projectsUz,
 }

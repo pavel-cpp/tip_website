@@ -1,0 +1,174 @@
+/* Projects screen. Only transform and opacity are animated; motion tokens come from tokens.css. */
+.projects-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+}
+.projects-head .page-title {
+  flex: 1;
+  margin-bottom: 0;
+}
+.projects-search {
+  width: min(280px, 100%);
+}
+/* The label stays for screen readers; the placeholder carries the visible hint. */
+.projects-search .field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.project-section + .project-section {
+  margin-top: var(--space-8);
+}
+.project-section-title {
+  font-size: var(--fs-xl);
+  font-weight: var(--fw-semibold);
+  margin-bottom: var(--space-3);
+}
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.project-card {
+  position: relative;
+  min-height: 216px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+  background: var(--bg-elev);
+  transition:
+    transform var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+  /* backwards: the end state must not stay pinned, or it would override the hover transform */
+  animation: card-in var(--dur-slow) var(--ease-standard) backwards;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (hover: hover) {
+  .project-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+}
+.project-card:focus-within {
+  border-color: var(--accent);
+}
+.project-card-link {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  color: #fff;
+  text-decoration: none;
+}
+.project-card-title {
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+}
+.project-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+}
+.project-card-count {
+  font-size: var(--fs-sm);
+  color: rgb(255 255 255 / 0.78);
+}
+.project-card-open {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.project-card:hover .project-card-open,
+.project-card:focus-within .project-card-open {
+  opacity: 1;
+  transform: none;
+}
+.project-card.is-finished .project-card-link {
+  filter: saturate(0.4);
+  color: rgb(255 255 255 / 0.8);
+}
+.project-card-menu {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  color: #fff;
+  /* Menus sit above the link; hover-capable devices show them on hover/focus only. */
+}
+.project-card-menu .btn {
+  background: rgb(0 0 0 / 0.35);
+  color: #fff;
+}
+@media (hover: hover) {
+  .project-card-menu {
+    opacity: 0;
+    transition: opacity var(--dur-fast) var(--ease-standard);
+  }
+  .project-card:hover .project-card-menu,
+  .project-card:focus-within .project-card-menu {
+    opacity: 1;
+  }
+}
+
+.project-create {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  background: transparent;
+  border-style: dashed;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+.project-create-plus {
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+@media (hover: hover) {
+  .project-create:hover {
+    color: var(--text);
+  }
+  .project-create:hover .project-create-plus {
+    transform: rotate(90deg);
+  }
+}
+
+.state-box {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-3);
+  max-width: 420px;
+  margin: var(--space-10) auto;
+  text-align: center;
+}
+.state-box h2 {
+  font-size: var(--fs-xl);
+}

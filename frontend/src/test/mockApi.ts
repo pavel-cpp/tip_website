@@ -86,4 +86,7 @@ export function stubFetch(handler: MockHandler) {
 
 /** Calls made so far as "METHOD /path" strings. */
 export const callLog = (mock: ReturnType<typeof stubFetch>): string[] =>
-  mock.mock.calls.map(([url, init]) => `${((init as RequestInit | undefined)?.method ?? 'GET').toUpperCase()} ${String(url).replace(/^\/api\/v1/, '')}`)
+  mock.mock.calls.map(
+    ([url, init]) =>
+      `${((init as RequestInit | undefined)?.method ?? 'GET').toUpperCase()} ${String(url).replace(/^\/api\/v1/, '')}`,
+  )
