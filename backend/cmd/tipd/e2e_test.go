@@ -646,9 +646,21 @@ func TestEndToEnd(t *testing.T) {
 	})
 
 	t.Run("metrics are recorded", func(t *testing.T) {
+		c.do("POST", "/api/v1/projects/"+projectID+"/participants/printed", admin.access, "", map[string]any{"ids": []string{firstRow}}).expect(t, 204)
 		rec := httptest.NewRecorder()
 		a.metrics.NewInternalServer(":0").Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
-		for _, want := range []string{`tip_logins_total{result="ok"}`, `tip_logins_total{result="bad_credentials"}`, `tip_blacklist_checks_total{result="ok"}`, `tip_token_refresh_total{result="ok"}`, "tip_redis_up 1", "tip_ws_connections"} {
+		for _, want := range []string{
+			`tip_logins_total{result="ok"}`, `tip_logins_total{result="bad_credentials"}`, `tip_blacklist_checks_total{result="ok"}`, `tip_token_refresh_total{result="ok"}`, "tip_redis_up 1", "tip_ws_connections",
+			// Refresh outcomes seen in the "refresh rotation" subtest.
+			`tip_token_refresh_total{result="idempotent_replay"} 1`, `tip_token_refresh_total{result="reuse_detected"} 1`, `tip_token_refresh_total{result="invalid"}`,
+			// 2 rows added, 1 edited by the worker, 1 added elsewhere, 1 edited over REST while locked by the admin's socket.
+			"tip_participants_written_total 5", "tip_tickets_printed_total 1",
+			`tip_uploads_total{kind="project_image",result="ok"} 1`,
+			`tip_rate_limited_total{kind="ws"} 0`,
+			`tip_db_query_duration_seconds_bucket{query="insert"`, `tip_db_query_duration_seconds_bucket{query="select"`,
+			"tip_blacklist_check_duration_seconds_count", `tip_http_response_bytes_bucket{route="/api/v1/projects/{id}/image"`,
+			"tip_ws_locks_active", "tip_data_dir_free_bytes", "tip_uploads_bytes", "tip_db_size_bytes",
+		} {
 			if !strings.Contains(rec.Body.String(), want) {
 				t.Errorf("missing metric %s", want)
 			}

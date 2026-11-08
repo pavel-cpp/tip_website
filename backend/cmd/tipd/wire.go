@@ -93,7 +93,8 @@ func newApp(ctx context.Context, cfg config.Config, logger zerolog.Logger, m *me
 		}
 	}()
 
-	if a.conn, err = db.Open(ctx, cfg.DatabaseURL.Reveal()); err != nil {
+	observe := db.WithQueryObserver(func(sql string, d time.Duration) { m.ObserveQuery(metrics.QueryKind(sql), d) })
+	if a.conn, err = db.Open(ctx, cfg.DatabaseURL.Reveal(), observe); err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
 	m.RegisterDB(a.conn)
@@ -148,7 +149,8 @@ func (a *app) wire(ctx context.Context) error {
 		return fmt.Errorf("blob store: %w", err)
 	}
 
-	a.hub = memory.NewHub(memory.Config{Clock: clk, Metrics: memory.NewPromMetrics(m.Registry)})
+	a.hub = memory.NewHub(memory.Config{Clock: clk, Metrics: wsMetrics{PromMetrics: memory.NewPromMetrics(m.Registry), m: m}})
+	m.RegisterLocks(a.hub.ActiveLocks)
 	epoch.Subscribe(func(int64) { a.hub.BroadcastReauth("") })
 
 	rawTokens := tokenstore.NewTokenStore(a.redis)
@@ -172,6 +174,7 @@ func (a *app) wire(ctx context.Context) error {
 		Users: a.userRepo, Tokens: a.tokens, Codec: codec, Hasher: a.hasher,
 		Limiter: service.NewMemoryLoginLimiter(clk), Audit: accounts, Epoch: epoch,
 		Clock: clk, IDs: a.ids, OnTokenStoreError: onStoreError,
+		OnRefresh: func(result string) { m.TokenRefresh.WithLabelValues(result).Inc() },
 	})
 	a.users = service.NewUsers(service.UsersDeps{
 		Users: a.userRepo, Avatars: a.userRepo, Roles: roleRepo, Authz: authzRepo, Epoch: epoch, Tx: tx,
@@ -194,6 +197,10 @@ func (a *app) wire(ctx context.Context) error {
 	a.ws = ws.New(ws.Config{Collab: collab, AllowedOrigins: cfg.AllowedOrigins})
 
 	host := sysinfo.Host{BackupMetricsPath: cfg.BackupMetricsPath}
+	dbProbe := sysinfo.Database{DB: a.conn}
+	m.RegisterStorage(metrics.StorageProbes{
+		DataDir: cfg.DataDir, DiskFree: host.DiskUsage, DirSize: host.DirSize, DBSize: dbProbe.Size,
+	})
 	redisPing := rawTokens.Ping
 	redisOnFail := service.CheckFail
 	if cfg.RedisFailMode == config.FailOpen {
@@ -211,7 +218,7 @@ func (a *app) wire(ctx context.Context) error {
 	}
 	systemSvc := service.NewSystemService(service.SystemConfig{
 		Version: version, DataDir: cfg.DataDir, ObsRetentionDays: cfg.ObsRetentionDays, AuditRetentionDays: cfg.AuditRetentionDays,
-	}, clk, time.Now(), host, sysinfo.Database{DB: a.conn}, checks...)
+	}, clk, time.Now(), host, dbProbe, checks...)
 
 	a.router, err = httpapi.NewRouter(httpapi.Deps{
 		Logger: logger, Metrics: m, NewID: a.ids.NewID,
@@ -221,8 +228,9 @@ func (a *app) wire(ctx context.Context) error {
 			{Name: "dataDir", Fn: func(context.Context) error { return dataDirReady(cfg.DataDir) }},
 		},
 		API: &httpapi.APIDeps{
-			Auth: meteredAuth{Auth: authSvc, m: m}, Users: a.users, Roles: rolesSvc, Projects: projectsSvc,
-			Participants: participantsSvc, Audit: auditSvc, System: systemSvc,
+			Auth: meteredAuth{Auth: authSvc, m: m}, Users: meteredUsers{Users: a.users, m: m}, Roles: rolesSvc,
+			Projects:     meteredProjects{ProjectService: projectsSvc, m: m},
+			Participants: meteredParticipants{Participants: participantsSvc, m: m}, Audit: auditSvc, System: systemSvc,
 			MaxImageBytes: int64(cfg.MaxImageMB) << 20,
 		},
 		Auth:           meteredAuth{Auth: authSvc, m: m},

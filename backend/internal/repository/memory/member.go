@@ -81,7 +81,13 @@ func (m *member) CloseReason() domain.CloseReason {
 }
 
 // Allow implements domain.RoomSession.
-func (m *member) Allow() bool { return m.limiter.allow() }
+func (m *member) Allow() bool {
+	if m.limiter.allow() {
+		return true
+	}
+	m.hub.cfg.Metrics.RateLimited()
+	return false
+}
 
 // SetCursor implements domain.RoomSession.
 func (m *member) SetCursor(c domain.Cursor) {
