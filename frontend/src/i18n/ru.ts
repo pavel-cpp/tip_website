@@ -1,3 +1,4 @@
+import { ruAccess } from './ru.access'
 import type { Message } from './types'
 
 // Source of truth for UI text. uz.ts must provide exactly the same keys (enforced by the type and by i18n.test.ts).
@@ -113,6 +114,8 @@ export const ru = {
     many: 'Удалено {count} записей',
     other: 'Удалено {count} записи',
   },
+
+  ...ruAccess,
 
   'design.title': 'Дизайн-система',
   'design.section.buttons': 'Кнопки',

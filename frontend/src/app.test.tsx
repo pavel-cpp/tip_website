@@ -1,11 +1,26 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
+import { clearAccessToken } from './auth/tokenStore'
 import { initI18n, setLocale } from './i18n'
+import { apiError, jsonRes, makeUser, stubFetch } from './test/mockApi'
 
 beforeAll(() => initI18n())
+
+beforeEach(() => {
+  // A signed-in administrator: the refresh cookie is valid and /me answers.
+  stubFetch(({ method, path }) => {
+    if (method === 'POST' && path === '/auth/refresh') return jsonRes(200, { accessToken: 't', expiresIn: 900 })
+    if (method === 'GET' && path === '/me') return jsonRes(200, { user: makeUser() })
+    if (path.startsWith('/admin/')) return jsonRes(200, [])
+    return undefined
+  })
+})
+
 afterEach(async () => {
+  clearAccessToken()
+  vi.unstubAllGlobals()
   await setLocale('ru')
 })
 
@@ -15,27 +30,35 @@ function open(path: string) {
 }
 
 describe('app shell and routing', () => {
-  it('renders lazy placeholder pages inside the shell', async () => {
+  it('renders lazy pages inside the shell for a signed-in user', async () => {
     open('/profile')
-    expect(await screen.findByRole('heading', { name: 'Профиль' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Личный кабинет' })).toBeInTheDocument()
     expect(screen.getByRole('banner')).toBeInTheDocument()
-    expect(screen.getByText('Раздел в разработке')).toBeInTheDocument()
   })
 
-  for (const path of [
-    '/',
-    '/login',
-    '/projects/42',
-    '/projects/42/settings',
-    '/admin/users',
-    '/admin/roles',
-    '/admin/system',
-  ]) {
+  for (const path of ['/', '/projects/42', '/projects/42/settings']) {
     it(`serves ${path}`, async () => {
       open(path)
       expect(await screen.findByText('Раздел в разработке')).toBeInTheDocument()
     })
   }
+
+  for (const [path, heading] of [
+    ['/admin/users', 'Пользователи'],
+    ['/admin/roles', 'Роли'],
+    ['/admin/system', 'Система'],
+  ] as const) {
+    it(`serves ${path}`, async () => {
+      open(path)
+      expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeInTheDocument()
+    })
+  }
+
+  it('serves /login to a visitor without a session', async () => {
+    stubFetch(({ path }) => (path === '/auth/refresh' ? apiError(401, 'REFRESH_INVALID') : undefined))
+    open('/login')
+    expect(await screen.findByRole('button', { name: 'Войти' })).toBeInTheDocument()
+  })
 
   it('shows the 404 page for unknown paths', async () => {
     open('/nope/nothing')
@@ -44,10 +67,10 @@ describe('app shell and routing', () => {
 
   it('switches language without reloading', async () => {
     open('/profile')
-    await screen.findByRole('heading', { name: 'Профиль' })
+    await screen.findByRole('heading', { name: 'Личный кабинет' })
     await userEvent.click(screen.getByRole('button', { name: 'Язык' }))
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Oʻzbekcha' }))
-    expect(await screen.findByRole('heading', { name: 'Profil' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Shaxsiy kabinet' })).toBeInTheDocument()
   })
 
   it('/design lists components and renders in both languages', async () => {

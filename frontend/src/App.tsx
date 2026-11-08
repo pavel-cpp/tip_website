@@ -2,7 +2,9 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import { createQueryClient } from './api/queryClient'
+import { AuthProvider } from './auth/AuthProvider'
 import { onLogout } from './auth/events'
+import { RequireAuth, RequirePerm } from './auth/guards'
 import { Shell } from './components/Shell'
 import { ToastProvider } from './components/Toast'
 import { pages } from './routes'
@@ -26,25 +28,35 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <BrowserRouter>
-          <LogoutRedirect onLoggedOut={() => queryClient.clear()} />
-          <Routes>
-            <Route element={<Shell minimal />}>
-              <Route path="/login" element={<pages.Login />} />
-            </Route>
-            <Route element={<Shell />}>
-              <Route index element={<pages.Projects />} />
-              <Route path="/projects/:id" element={<pages.Workspace />} />
-              <Route path="/projects/:id/settings" element={<pages.ProjectSettings />} />
-              <Route path="/profile" element={<pages.Profile />} />
-              <Route path="/admin/users" element={<pages.AdminUsers />} />
-              <Route path="/admin/roles" element={<pages.AdminRoles />} />
-              <Route path="/admin/system" element={<pages.AdminSystem />} />
-              <Route path="/design" element={<pages.Design />} />
-              <Route path="*" element={<pages.NotFound />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <AuthProvider>
+          <BrowserRouter>
+            <LogoutRedirect onLoggedOut={() => queryClient.clear()} />
+            <Routes>
+              <Route element={<Shell minimal />}>
+                <Route path="/login" element={<pages.Login />} />
+              </Route>
+              <Route element={<Shell />}>
+                <Route element={<RequireAuth />}>
+                  <Route index element={<pages.Projects />} />
+                  <Route path="/projects/:id" element={<pages.Workspace />} />
+                  <Route path="/projects/:id/settings" element={<pages.ProjectSettings />} />
+                  <Route path="/profile" element={<pages.Profile />} />
+                  <Route element={<RequirePerm perm="user.view" />}>
+                    <Route path="/admin/users" element={<pages.AdminUsers />} />
+                  </Route>
+                  <Route element={<RequirePerm perm="role.manage" />}>
+                    <Route path="/admin/roles" element={<pages.AdminRoles />} />
+                  </Route>
+                  <Route element={<RequirePerm perm="system.view" />}>
+                    <Route path="/admin/system" element={<pages.AdminSystem />} />
+                  </Route>
+                </Route>
+                <Route path="/design" element={<pages.Design />} />
+                <Route path="*" element={<pages.NotFound />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
       </ToastProvider>
     </QueryClientProvider>
   )

@@ -1,5 +1,6 @@
 import type { MessageKey } from './ru'
 import type { Message } from './types'
+import { uzAccess } from './uz.access'
 
 // Uzbek, Latin script. Letters: oʻ and gʻ use U+02BB, the glottal stop (tutuq belgisi) uses U+02BC.
 // Needs a native-speaker review before release (see docs/06-frontend.md, section 11.1).
@@ -99,6 +100,8 @@ export const uz: Record<MessageKey, Message> = {
   'page.notFound.home': 'Bosh sahifaga',
 
   'toast.rowsDeleted': { one: '{count} ta yozuv oʻchirildi', other: '{count} ta yozuv oʻchirildi' },
+
+  ...uzAccess,
 
   'design.title': 'Dizayn tizimi',
   'design.section.buttons': 'Tugmalar',
