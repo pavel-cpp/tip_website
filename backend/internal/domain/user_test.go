@@ -2,10 +2,29 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 )
+
+func TestPaletteColor(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		id := fmt.Sprintf("0192f6c0-0000-7000-8000-%012d", i)
+		c := PaletteColor(id)
+		if c != PaletteColor(id) {
+			t.Fatalf("colour of %s is not stable", id)
+		}
+		if err := ValidateColor("color", c); err != nil {
+			t.Fatalf("invalid palette colour %q: %v", c, err)
+		}
+		seen[c] = true
+	}
+	if len(seen) != len(UserPalette) {
+		t.Fatalf("200 ids used %d of %d palette colours", len(seen), len(UserPalette))
+	}
+}
 
 func TestNormalizeLogin(t *testing.T) {
 	tests := []struct {
