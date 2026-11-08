@@ -376,7 +376,9 @@ func (s *ProjectService) Delete(ctx context.Context, a domain.Actor, id string) 
 		if p.Image != nil {
 			sha = p.Image.SHA256
 		}
-		return s.audit(ctx, a, ActionProjectDelete, id, nil)
+		// The row is already gone inside this transaction, so audit_log.project_id (a foreign key)
+		// cannot point at it; the id travels in the metadata instead.
+		return s.audit(ctx, a, ActionProjectDelete, "", map[string]any{"projectId": id, "title": p.Title})
 	})
 	if err != nil {
 		return err

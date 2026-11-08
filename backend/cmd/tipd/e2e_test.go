@@ -539,6 +539,28 @@ func TestEndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("deleting a project keeps its audit trail", func(t *testing.T) {
+		p := decode[gen.ProjectResponse](t, c.do("POST", "/api/v1/projects", admin.access, "", gen.CreateProjectRequest{Title: "Short lived"}).expect(t, 201)).Project
+		id := p.Id.String()
+		c.do("POST", "/api/v1/projects/"+id+"/participants", admin.access, "", map[string]any{
+			"items": []map[string]string{{"name": "Temp Person", "phone": "+998900000000"}},
+		}).expect(t, 201)
+		c.do("DELETE", "/api/v1/projects/"+id, admin.access, "", nil).expect(t, 204)
+		if code := c.do("GET", "/api/v1/projects/"+id, admin.access, "", nil).errCode(t, 404); code != "NOT_FOUND" {
+			t.Fatalf("deleted project lookup: %s", code)
+		}
+		page := decode[gen.AuditPage](t, c.do("GET", "/api/v1/admin/audit", admin.access, "", nil).expect(t, 200))
+		found := false
+		for _, it := range page.Items {
+			if it.Action == "project.delete" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("the audit log must record the deletion")
+		}
+	})
+
 	t.Run("logout revokes the access token", func(t *testing.T) {
 		c.do("POST", "/api/v1/auth/logout", worker.access, worker.refresh, nil).expect(t, 204)
 		if code := c.do("GET", "/api/v1/projects", worker.access, "", nil).errCode(t, 401); code != "UNAUTHENTICATED" {
