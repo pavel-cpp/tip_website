@@ -55,6 +55,33 @@ test('the recommendation can be postponed', async ({ admin, signedIn }) => {
   await expect(page.getByRole('heading', { level: 1, name: t('projects.title') })).toBeVisible()
 })
 
+test('a postponed recommendation does not return after a reload', async ({ admin, signedIn }) => {
+  const user = await admin.createUser()
+  const page = await signedIn({ login: user.login, password: user.tempPassword })
+  const prompt = page.getByRole('dialog', { name: t('auth.prompt.title') })
+  await prompt.getByRole('button', { name: t('auth.prompt.later') }).click()
+  await expect(prompt).toBeHidden()
+  await page.reload()
+  await expect(page.getByRole('heading', { level: 1, name: t('projects.title') })).toBeVisible()
+  await expect(prompt).toHaveCount(0)
+})
+
+test('the one-time password dialog ignores Esc', async ({ signedIn }) => {
+  const admin = await signedIn(adminCreds())
+  await admin.goto('/admin/users')
+  await admin.getByRole('button', { name: t('admin.users.create') }).click()
+  const dialog = admin.getByRole('dialog')
+  await dialog.getByLabel(t('auth.login.login'), { exact: true }).fill(uniq('esc'))
+  await dialog.getByLabel(t('profile.displayName'), { exact: true }).fill('Esc User')
+  await dialog.getByRole('button', { name: t('action.create') }).click()
+  const secret = admin.getByRole('dialog').getByLabel(t('admin.users.tempPassword'))
+  await expect(secret).toBeVisible()
+  await admin.keyboard.press('Escape')
+  await expect(secret).toBeVisible()
+  await admin.getByRole('button', { name: t('admin.users.passwordSaved') }).click()
+  await expect(secret).toBeHidden()
+})
+
 test('a wrong current password is reported in the form', async ({ admin, signedIn }) => {
   test.skip(!FAILED_LOGIN_PROJECTS.includes(test.info().project.name), 'limits failed logins per IP')
   const user = await admin.createUser()

@@ -71,3 +71,14 @@ test('the admin can open every admin screen', async ({ signedIn }) => {
   await bar.goTo('adminSystem')
   await expect(page.getByRole('heading', { level: 1, name: t('nav.adminSystem') })).toBeVisible()
 })
+
+test('operator links and the design gallery stay out of the menu when not configured or in production', async ({
+  signedIn,
+}) => {
+  const page = await signedIn(adminCreds())
+  // The e2e stack runs a production build with Swagger disabled and no Grafana address.
+  const items = await new Topbar(page).menuItems()
+  expect(items.some((i) => i.includes(t('nav.swagger')))).toBe(false)
+  expect(items.some((i) => i.includes(t('nav.grafana')))).toBe(false)
+  expect(items.some((i) => i.includes(t('nav.design')))).toBe(false)
+})
