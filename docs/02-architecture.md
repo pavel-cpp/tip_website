@@ -447,7 +447,8 @@ flowchart LR
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | — (обязательны) | Ключи HMAC для access и refresh JWT, по ≥ 32 байт, разные |
 | `PASSWORD_PEPPER` | — (обязателен) | Секрет для HMAC перед argon2id, ≥ 32 байт; в хэш записывается версия pepper (ротация — перехэширование при входе) |
 | `FORCE_PASSWORD_CHANGE` | `false` | `true` — с временным паролем доступна только смена пароля (403 `PASSWORD_CHANGE_REQUIRED`); `false` — смена лишь рекомендуется |
-| `SWAGGER_ENABLED` | `true` | Swagger UI на `/api/docs` и `/api/openapi.yaml` |
+| `SWAGGER_ENABLED` | `true` | Swagger UI на `/api/docs` и `/api/openapi.yaml`; при `true` ссылка на документацию API показывается в меню администратора |
+| `GRAFANA_URL` | пусто | Публичный адрес Grafana (абсолютный http(s)-URL). Если задан, в меню администратора и на странице «Система» появляется ссылка; пусто — вместо неё подсказка «не настроена». В `docker-compose.prod.yml` берётся из `GRAFANA_DOMAIN` |
 | `REDIS_URL` | — (обязателен) | `redis://:password@redis:6379/0` |
 | `REDIS_FAIL_MODE` | `open` | Проверка access-токенов при недоступном Redis: `open` (пропуск чёрного списка с алертом) или `closed` (503). `login`/`refresh`/`logout` без Redis всегда 503 |
 | `ACCESS_TOKEN_TTL` / `REFRESH_TOKEN_TTL` | `15m` / `720h` | Время жизни токенов |
