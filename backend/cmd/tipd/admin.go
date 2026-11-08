@@ -19,7 +19,7 @@ import (
 
 // adminPasswordEnv names the variable that supplies the password for the admin commands; when
 // it is unset a temporary password is generated and printed once.
-const adminPasswordEnv = "TIP_ADMIN_PASSWORD"
+const adminPasswordEnv = "TIP_ADMIN_PASSWORD" //nolint:gosec // the name of an environment variable, not a credential
 
 const adminUsage = "usage: tipd admin <create|reset-password> <login>"
 

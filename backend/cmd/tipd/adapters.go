@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -150,13 +151,13 @@ func httpPing(client *http.Client, url string) func(context.Context) error {
 		if err != nil {
 			return err
 		}
-		resp, err := client.Do(req) //nolint:gosec // the URL comes from operator configuration
+		resp, err := client.Do(req)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode/100 != 2 {
-			return &http.ProtocolError{ErrorString: resp.Status}
+			return errors.New(resp.Status)
 		}
 		return nil
 	}

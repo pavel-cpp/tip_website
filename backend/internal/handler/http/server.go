@@ -148,19 +148,19 @@ func readyHandler(checks []Check) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
 		defer cancel()
-		var failed []string
+		// The body follows ReadinessResponse of the contract: one ok/fail entry per check.
+		results := make(map[string]string, len(checks))
+		status, code := "ok", http.StatusOK
 		for _, c := range checks {
+			results[c.Name] = "ok"
 			if err := c.Fn(ctx); err != nil {
 				l := logging.FromContext(r.Context())
 				l.Warn().Err(err).Str("check", c.Name).Msg("readiness check failed")
-				failed = append(failed, c.Name)
+				results[c.Name] = "fail"
+				status, code = "unavailable", http.StatusServiceUnavailable
 			}
 		}
-		if len(failed) > 0 {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "unavailable", "failed": failed})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+		writeJSON(w, code, map[string]any{"status": status, "checks": results})
 	}
 }
 

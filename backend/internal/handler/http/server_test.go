@@ -137,13 +137,13 @@ func TestHealthzAndReadyz(t *testing.T) {
 	if rec := do(h, "GET", "/healthz", nil); rec.Code != 200 {
 		t.Errorf("healthz %d", rec.Code)
 	}
-	if rec := do(h, "GET", "/readyz", nil); rec.Code != 200 {
-		t.Errorf("readyz %d", rec.Code)
+	if rec := do(h, "GET", "/readyz", nil); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"db":"ok"`) {
+		t.Errorf("readyz %d %s", rec.Code, rec.Body)
 	}
 
 	h, buf, _ := newTestRouter(t, Check{Name: "db", Fn: func(context.Context) error { return errors.New("down") }})
 	rec := do(h, "GET", "/readyz", nil)
-	if rec.Code != 503 || !strings.Contains(rec.Body.String(), `"db"`) {
+	if rec.Code != 503 || !strings.Contains(rec.Body.String(), `"db":"fail"`) || !strings.Contains(rec.Body.String(), `"unavailable"`) {
 		t.Errorf("readyz failure: %d %s", rec.Code, rec.Body.String())
 	}
 	if strings.Contains(rec.Body.String(), "down") {

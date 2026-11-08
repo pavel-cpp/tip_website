@@ -67,15 +67,26 @@ type app struct {
 	accounts  accountAudit
 	rolesSync func(context.Context) error
 
+	replayWindow time.Duration
+
 	bgWG     sync.WaitGroup
 	bgCancel context.CancelFunc
 }
 
+// appOption tweaks the assembly; production passes none.
+type appOption func(*app)
+
+// withReplayWindow shortens the refresh replay window (service.DefaultReplayWindow) for tests.
+func withReplayWindow(d time.Duration) appOption { return func(a *app) { a.replayWindow = d } }
+
 // newApp wires every layer by hand. It opens the pools, applies the migrations (AUTO_MIGRATE),
 // synchronizes the permission catalog and creates the bootstrap administrator, so the
 // returned router is ready to serve. Close releases the pools.
-func newApp(ctx context.Context, cfg config.Config, logger zerolog.Logger, m *metrics.Metrics) (_ *app, err error) {
+func newApp(ctx context.Context, cfg config.Config, logger zerolog.Logger, m *metrics.Metrics, opts ...appOption) (_ *app, err error) {
 	a := &app{cfg: cfg, logger: logger, metrics: m}
+	for _, o := range opts {
+		o(a)
+	}
 	defer func() {
 		if err != nil {
 			a.Close()
@@ -155,7 +166,7 @@ func (a *app) wire(ctx context.Context) error {
 
 	authSvc := service.NewAuth(service.AuthDeps{
 		Config: service.AuthConfig{
-			AccessTTL: cfg.AccessTokenTTL, RefreshTTL: cfg.RefreshTokenTTL,
+			AccessTTL: cfg.AccessTokenTTL, RefreshTTL: cfg.RefreshTokenTTL, ReplayWindow: a.replayWindow,
 			FailOpen: cfg.RedisFailMode == config.FailOpen, ForcePasswordChange: cfg.ForcePasswordChange,
 		},
 		Users: a.userRepo, Tokens: a.tokens, Codec: codec, Hasher: a.hasher,
@@ -205,9 +216,9 @@ func (a *app) wire(ctx context.Context) error {
 	a.router, err = httpapi.NewRouter(httpapi.Deps{
 		Logger: logger, Metrics: m, NewID: a.ids.NewID,
 		Ready: []httpapi.Check{
-			{Name: "database", Fn: func(ctx context.Context) error { return db.Ping(ctx, a.conn) }},
+			{Name: "postgres", Fn: func(ctx context.Context) error { return db.Ping(ctx, a.conn) }},
 			{Name: "redis", Fn: redisPing},
-			{Name: "disk", Fn: func(context.Context) error { return dataDirReady(cfg.DataDir) }},
+			{Name: "dataDir", Fn: func(context.Context) error { return dataDirReady(cfg.DataDir) }},
 		},
 		API: &httpapi.APIDeps{
 			Auth: meteredAuth{Auth: authSvc, m: m}, Users: a.users, Roles: rolesSvc, Projects: projectsSvc,

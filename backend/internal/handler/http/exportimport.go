@@ -62,7 +62,7 @@ func (h *ParticipantsHandler) ImportParticipants(w http.ResponseWriter, r *http.
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, service.MaxImportBytes+importBodyOverhead)
-	if err := r.ParseMultipartForm(importFormMemory); err != nil {
+	if err := r.ParseMultipartForm(importFormMemory); err != nil { //nolint:gosec // the body is capped by MaxBytesReader above
 		participantsFail(w, r, importFormError(err))
 		return
 	}
