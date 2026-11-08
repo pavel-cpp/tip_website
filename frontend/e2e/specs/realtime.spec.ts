@@ -10,6 +10,11 @@ import { WorkspacePage } from '../support/workspace'
 
 const t = tr('ru')
 
+// These scenarios drive spreadsheet cells; the phone layout has the same checks in workspace-phone.spec.ts.
+test.beforeEach(({ viewport }) => {
+  test.skip((viewport?.width ?? 1024) < 700, 'phones use cards and a bottom sheet')
+})
+
 async function opensSocket(page: Page): Promise<boolean> {
   return page
     .waitForFunction(() => ((window as unknown as { __sockets?: number }).__sockets ?? 0) > 0, undefined, {

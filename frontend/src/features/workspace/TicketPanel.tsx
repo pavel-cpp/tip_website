@@ -35,6 +35,8 @@ interface TicketPanelProps {
   onRetry?: () => void
   /** Where the project settings live; when set, the "no image" state links there (admins). */
   settingsTo?: string
+  /** Inside the phone sheet: just the ticket, no zoom controls. */
+  compact?: boolean
 }
 
 /**
@@ -51,6 +53,7 @@ export function TicketPanel({
   emptyReason = 'select',
   onRetry,
   settingsTo,
+  compact = false,
 }: TicketPanelProps) {
   const { t, formatNumber } = useI18n()
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
@@ -126,9 +129,9 @@ export function TicketPanel({
   const empty = !participant
   const emptyKey = emptyReason === 'error' ? 'loadError' : emptyReason === 'no-rows' ? 'emptyProject' : null
   return (
-    <div className="tk">
+    <div className="tk" data-compact={compact || undefined}>
       {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add default borders to a toolbar group */}
-      <div className="tk-zoom" role="group" aria-label={t('workspace.zoom.label')}>
+      <div className="tk-zoom" role="group" aria-label={t('workspace.zoom.label')} hidden={compact}>
         <Button
           variant="ghost"
           size="sm"

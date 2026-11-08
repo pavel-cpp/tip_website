@@ -19,16 +19,26 @@ export interface EditState {
   original: string
 }
 
+/** Fields a save sends; the sheet may change both at once. */
+export interface RowPatch {
+  name?: string
+  phone?: string
+}
+
 export interface ConflictState {
   field: 'name' | 'phone'
   mine: string
   current: Participant
+  /** The whole patch to resend on "keep mine" (set when several fields were saved together). */
+  patch?: RowPatch
 }
 
 /** A cell whose save failed: the typed value stays on screen until the user retries or edits it. */
 export interface FailedState {
   col: number
   value: string
+  /** Set when the sheet saved several fields at once; retry resends all of them. */
+  patch?: RowPatch
 }
 
 export interface RowHandlers {
