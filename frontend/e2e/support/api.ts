@@ -76,6 +76,7 @@ export class Api {
   private constructor(
     private token: string,
     readonly user: ApiUser,
+    private readonly creds: Creds,
   ) {}
 
   static async login(creds: Creds): Promise<Api> {
@@ -86,14 +87,24 @@ export class Api {
     })
     const body = (await res.json()) as { accessToken?: string; user?: ApiUser }
     if (!res.ok || !body.accessToken || !body.user) throw new Error(`login failed for ${creds.login}: ${res.status}`)
-    return new Api(body.accessToken, body.user)
+    return new Api(body.accessToken, body.user, creds)
+  }
+
+  /** Permission changes make older access tokens stale (TOKEN_STALE); a fresh login fixes that. */
+  private async relogin(): Promise<void> {
+    this.token = (await Api.login(this.creds)).token
   }
 
   static admin(): Promise<Api> {
     return Api.login(adminCreds())
   }
 
-  async call<T>(method: string, path: string, body?: unknown, form?: FormData): Promise<T> {
+  /** The token of the session; used by tests that need to speak to the API from the browser side. */
+  get accessToken(): string {
+    return this.token
+  }
+
+  async call<T>(method: string, path: string, body?: unknown, form?: FormData, retried = false): Promise<T> {
     const headers: Record<string, string> = { authorization: `Bearer ${this.token}` }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const res = await fetch(`${baseUrl()}/api/v1${path}`, {
@@ -106,6 +117,10 @@ export class Api {
     const data = text ? (JSON.parse(text) as unknown) : undefined
     if (!res.ok) {
       const env = (data as { error?: { code?: string; message?: string } } | undefined)?.error
+      if (res.status === 401 && env?.code === 'TOKEN_STALE' && !retried) {
+        await this.relogin()
+        return this.call(method, path, body, form, true)
+      }
       throw new ApiError(res.status, env?.code ?? 'UNKNOWN', env?.message ?? text)
     }
     return data as T
@@ -129,7 +144,11 @@ export class Api {
     const password = `pw-${uniq('x')}-long`
     const session = await Api.login({ login: u.login, password: u.tempPassword })
     await session.call('POST', '/me/password', { current: u.tempPassword, new: password })
-    if (opts.locale || opts.theme) await session.call('PATCH', '/me', { locale: opts.locale, theme: opts.theme })
+    if (opts.locale || opts.theme) {
+      // Changing the password ends the old sessions, so sign in again before touching the profile.
+      const fresh = await Api.login({ login: u.login, password })
+      await fresh.call('PATCH', '/me', { locale: opts.locale, theme: opts.theme })
+    }
     return { login: u.login, password, id: u.id, displayName: u.displayName }
   }
 
