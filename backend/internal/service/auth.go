@@ -16,6 +16,20 @@ import (
 // the transport can still let the allowed endpoints through. Role names cannot use it.
 const RolePasswordChange = "_password_change"
 
+// Outcomes of a refresh attempt reported through AuthDeps.OnRefresh.
+const (
+	// RefreshOK is a normal rotation.
+	RefreshOK = "ok"
+	// RefreshIdempotentReplay is a repeated use of a just rotated token answered inside the replay window.
+	RefreshIdempotentReplay = "idempotent_replay"
+	// RefreshReuseDetected is a use of an already rotated token after the replay window; the chain is closed.
+	RefreshReuseDetected = "reuse_detected"
+	// RefreshInvalid is a rejected token (bad signature, expired, revoked chain, unknown user).
+	RefreshInvalid = "invalid"
+	// RefreshError is any other failure, for example an unavailable token store.
+	RefreshError = "error"
+)
+
 // DefaultReplayWindow is how long a second use of a rotated refresh token is answered
 // idempotently instead of being treated as theft.
 const DefaultReplayWindow = 10 * time.Second
@@ -50,6 +64,9 @@ type AuthDeps struct {
 	// OnTokenStoreError is called with the underlying error whenever the token store fails, in
 	// any mode. The service does not log; the composition root wires logging and metrics here.
 	OnTokenStoreError func(op string, err error)
+	// OnRefresh receives the outcome of every refresh attempt, one of the Refresh* constants.
+	// The service does not count; the composition root wires metrics here.
+	OnRefresh func(result string)
 	// Sleep pauses between replay lookups; nil means time.Sleep.
 	Sleep func(time.Duration)
 }
@@ -207,33 +224,62 @@ func (a *Auth) issuePair(rec domain.UserRecord, family string, epoch int64, iat 
 
 // Refresh exchanges a refresh token for a new pair (docs/02-architecture.md, section 4.1).
 func (a *Auth) Refresh(ctx context.Context, refreshToken string) (Session, error) {
+	s, reuse, replayed, err := a.refresh(ctx, refreshToken)
+	if a.OnRefresh != nil {
+		switch {
+		case err == nil && replayed:
+			a.OnRefresh(RefreshIdempotentReplay)
+		case err == nil:
+			a.OnRefresh(RefreshOK)
+		case reuse:
+			a.OnRefresh(RefreshReuseDetected)
+		case domain.CodeOf(err) == domain.CodeRefreshInvalid:
+			a.OnRefresh(RefreshInvalid)
+		default:
+			a.OnRefresh(RefreshError)
+		}
+	}
+	return s, err
+}
+
+// refresh does the exchange; reuse reports that a rotated token was presented after the replay
+// window (the chain is closed), replayed that the answer repeated an earlier rotation.
+func (a *Auth) refresh(ctx context.Context, refreshToken string) (s Session, reuse, replayed bool, err error) {
 	now := a.Clock.Now()
 	claims, err := a.Codec.VerifyRefresh(refreshToken, now)
 	if err != nil {
-		return Session{}, err
+		return Session{}, false, false, err
 	}
 	st, err := a.Tokens.Revocation(ctx, domain.RevocationQuery{
 		RefreshJTI: claims.TokenID, UserID: claims.Subject, Family: claims.Family,
 	})
 	if err != nil {
-		return Session{}, a.storeErr("refresh", err)
+		return Session{}, false, false, a.storeErr("refresh", err)
 	}
 	if st.FamilyClosed || st.RevokedByCutoff(claims.IssuedAt) {
-		return Session{}, domain.ErrRefreshInvalid
+		return Session{}, false, false, domain.ErrRefreshInvalid
 	}
 
 	burnedAt := st.RefreshBurnedAt
 	if burnedAt.IsZero() {
 		burned, at, err := a.Tokens.BurnRefresh(ctx, claims.TokenID, now, claims.ExpiresAt.Sub(now))
 		if err != nil {
-			return Session{}, a.storeErr("refresh", err)
+			return Session{}, false, false, a.storeErr("refresh", err)
 		}
 		if burned {
-			return a.rotate(ctx, claims, now)
+			s, err := a.rotate(ctx, claims, now)
+			return s, false, false, err
 		}
 		burnedAt = at // lost a race with a concurrent exchange of the same token
 	}
-	return a.replay(ctx, claims, burnedAt, now)
+	if now.Sub(burnedAt) > a.Config.ReplayWindow {
+		if err := a.Tokens.CloseFamily(ctx, claims.Family, a.Config.RefreshTTL); err != nil {
+			return Session{}, false, false, a.storeErr("refresh", err)
+		}
+		return Session{}, true, false, domain.ErrRefreshInvalid
+	}
+	s, err = a.replay(ctx, claims, now)
+	return s, false, err == nil, err
 }
 
 // rotate issues the new pair after the old refresh token has been burnt.
@@ -253,15 +299,9 @@ func (a *Auth) rotate(ctx context.Context, claims domain.RefreshClaims, now time
 	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 
-// replay answers a second presentation of an already rotated refresh token: inside the replay
-// window with the same new refresh token, later by closing the whole chain.
-func (a *Auth) replay(ctx context.Context, claims domain.RefreshClaims, burnedAt, now time.Time) (Session, error) {
-	if now.Sub(burnedAt) > a.Config.ReplayWindow {
-		if err := a.Tokens.CloseFamily(ctx, claims.Family, a.Config.RefreshTTL); err != nil {
-			return Session{}, a.storeErr("refresh", err)
-		}
-		return Session{}, domain.ErrRefreshInvalid
-	}
+// replay answers a second presentation of an already rotated refresh token inside the replay
+// window with the same new refresh token; later presentations close the chain in refresh.
+func (a *Auth) replay(ctx context.Context, claims domain.RefreshClaims, now time.Time) (Session, error) {
 	// The winner may still be issuing its pair; give it a moment to publish the replay entry.
 	const attempts = 20
 	var next string
