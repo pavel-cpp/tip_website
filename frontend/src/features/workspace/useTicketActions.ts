@@ -5,6 +5,7 @@ import { useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
 import type { Participant } from './api'
 import { setPrintJob } from './printJob'
+import { safeFilePart } from './tableLogic'
 import { copyTicket, saveTickets, type TicketSource } from './ticketActions'
 
 export interface Progress {
@@ -24,8 +25,7 @@ interface Args {
   selectedRows: readonly Participant[]
 }
 
-const zipName = (title: string) =>
-  `${title.replace(/[^\p{L}\p{N}_-]+/gu, '_').replace(/^_+|_+$/g, '') || 'tickets'}.zip`
+const zipName = (title: string) => `${safeFilePart(title) || 'tickets'}.zip`
 
 /** Copy / save / print behaviour behind the workspace toolbar. All of it is gated by participant.print upstream. */
 export function useTicketActions({ projectId, projectTitle, source, current, selectedRows }: Args) {
@@ -56,6 +56,8 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
         toast.show({ message: t('workspace.toast.copied') })
         return
       }
+      // Tell the user why the usual "copied" confirmation did not appear, then offer the manual path.
+      toast.show({ message: t('workspace.toast.copyFailed'), tone: 'error' })
       try {
         setFallback(await res.blob)
       } catch (e) {
@@ -72,9 +74,15 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
     busy.current = true
     if (targets.length > 1) setProgress({ kind: 'save', done: 0, total: targets.length })
     try {
-      await saveTickets(source, targets, zipName(projectTitle), (done, total) => {
-        if (alive.current) setProgress({ kind: 'save', done, total })
-      })
+      await saveTickets(
+        source,
+        targets,
+        zipName(projectTitle),
+        (done, total) => {
+          if (alive.current) setProgress({ kind: 'save', done, total })
+        },
+        projectTitle,
+      )
       toast.show({ message: t('workspace.toast.saved', { count: targets.length }) })
     } catch (e) {
       toast.show({ message: errorText(e), tone: 'error' })

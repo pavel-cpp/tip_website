@@ -150,3 +150,51 @@ export function clampCount(raw: string): number | null {
   const n = Number(raw)
   return n >= 1 && n <= MAX_ADD_ROWS ? n : null
 }
+
+/**
+ * Soft phone check: only digits, spaces and + ( ) - . are plausible, with 7 to 15 digits in total.
+ * An empty phone is not flagged (the row is simply not filled in yet). Saving is never blocked by this.
+ */
+export function isSuspiciousPhone(phone: string): boolean {
+  const p = phone.trim()
+  if (p === '') return false
+  if (!/^[+\d\s().-]+$/.test(p)) return true
+  const n = digits(p).length
+  return n < 7 || n > 15
+}
+
+export const countSuspiciousPhones = (rows: readonly Pick<Participant, 'phone'>[]): number =>
+  rows.reduce((n, r) => n + (isSuspiciousPhone(r.phone) ? 1 : 0), 0)
+
+export const isBlankRow = (r: Pick<Participant, 'name' | 'phone'>): boolean =>
+  r.name.trim() === '' && r.phone.trim() === ''
+
+/**
+ * Splits pasted items between existing blank rows (filled first, starting at `startId` when it is
+ * blank, otherwise in table order) and rows that still have to be created.
+ */
+export function planPaste(
+  rows: readonly Participant[],
+  items: readonly ParticipantInput[],
+  startId?: string | null,
+): { fills: Array<{ row: Participant; item: ParticipantInput }>; rest: ParticipantInput[] } {
+  const blanks = rows.filter(isBlankRow)
+  const at = startId ? blanks.findIndex((r) => r.id === startId) : -1
+  const ordered = at > 0 ? [...blanks.slice(at), ...blanks.slice(0, at)] : blanks
+  const fills: Array<{ row: Participant; item: ParticipantInput }> = []
+  for (const [i, row] of ordered.entries()) {
+    const item = items[i]
+    if (!item) break
+    fills.push({ row, item })
+  }
+  return { fills, rest: items.slice(fills.length) }
+}
+
+/** File-system safe fragment: letters, digits, `_` and `-` only, capped in length. */
+export function safeFilePart(s: string, max = 40): string {
+  return s
+    .replace(/[^\p{L}\p{N}_-]+/gu, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, max)
+    .replace(/_+$/g, '')
+}

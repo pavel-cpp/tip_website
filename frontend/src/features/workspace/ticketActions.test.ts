@@ -123,15 +123,15 @@ describe('saveTickets', () => {
     })
   })
 
-  it('saves one row as image_<number>.png', async () => {
-    await saveTickets(source, [person(12)], 'tickets.zip')
-    expect(downloads.map((d) => d.name)).toEqual(['image_12.png'])
+  it('saves one row as <project>_<number>_<name>.png', async () => {
+    await saveTickets(source, [person(12)], 'tickets.zip', undefined, 'Tashkent: Mall')
+    expect(downloads.map((d) => d.name)).toEqual(['Tashkent_Mall_12_Name_12.png'])
     expect(downloads[0]?.blob.type).toBe('image/png')
   })
 
   it('packs several rows into one ZIP with progress', async () => {
     const progress = vi.fn()
-    await saveTickets(source, [person(1), person(2), person(3)], 'tickets.zip', progress)
+    await saveTickets(source, [person(1), person(2), person(3)], 'tickets.zip', progress, 'Mall')
     expect(downloads).toHaveLength(1)
     expect(downloads[0]?.name).toBe('tickets.zip')
     expect(progress.mock.calls).toEqual([
@@ -140,8 +140,8 @@ describe('saveTickets', () => {
       [3, 3],
     ])
     const files = unzipSync(new Uint8Array(await (downloads[0] as { blob: Blob }).blob.arrayBuffer()))
-    expect(Object.keys(files).sort()).toEqual(['image_1.png', 'image_2.png', 'image_3.png'])
-    expect(new TextDecoder().decode(files['image_2.png'])).toBe('PNGDATA')
+    expect(Object.keys(files).sort()).toEqual(['Mall_1_Name_1.png', 'Mall_2_Name_2.png', 'Mall_3_Name_3.png'])
+    expect(new TextDecoder().decode(files['Mall_2_Name_2.png'])).toBe('PNGDATA')
   })
 
   it('does nothing for an empty selection', async () => {
