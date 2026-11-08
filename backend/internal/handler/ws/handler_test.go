@@ -402,6 +402,9 @@ func TestLockProtocol(t *testing.T) {
 	}
 
 	a.send(map[string]any{"t": "ping"})
+	if f := a.recvType("pong"); f["t"] != "pong" {
+		t.Fatalf("pong = %v", f)
+	}
 	a.send(map[string]any{"t": "lock.release", "rowId": "r1"})
 	for _, c := range []*client{a, b} {
 		if u := c.recvType("unlock"); u["rowId"] != "r1" || u["by"] != "alice" {
@@ -433,6 +436,9 @@ func TestViewerCannotLock(t *testing.T) {
 	// The connection stays usable.
 	v.send(map[string]any{"t": "cursor", "rowId": "r1", "field": "name"})
 	v.send(map[string]any{"t": "ping"})
+	if f := v.recv(); f["t"] != "pong" {
+		t.Fatalf("frame = %v", f)
+	}
 	v.expectQuiet()
 }
 
@@ -482,6 +488,9 @@ func TestInvalidFramesDoNotCloseConnection(t *testing.T) {
 		}
 	}
 	a.send(map[string]any{"t": "ping"})
+	if f := a.recv(); f["t"] != "pong" {
+		t.Fatalf("frame = %v", f)
+	}
 	a.expectQuiet()
 }
 
@@ -699,6 +708,9 @@ func TestPingKeepsConnectionAlive(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		time.Sleep(100 * time.Millisecond)
 		a.send(map[string]any{"t": "ping"})
+		if f := a.recv(); f["t"] != "pong" {
+			t.Fatalf("ping %d answered with %v", i, f)
+		}
 	}
 	a.expectQuiet()
 }

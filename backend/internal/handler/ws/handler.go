@@ -406,6 +406,7 @@ func (c *connection) handleFrame(sess domain.RoomSession, actor domain.Actor, f 
 		return c.reauthenticate(actor, f.Token)
 	case framePing:
 		svc.Heartbeat(sess)
+		c.enqueue(outMsg{data: pongFrame})
 	case frameCursor:
 		cur := domain.Cursor{}
 		if f.RowID != nil && *f.RowID != "" {

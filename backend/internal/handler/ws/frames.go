@@ -17,6 +17,7 @@ const (
 	frameLockAcquire = "lock.acquire"
 	frameLockRelease = "lock.release"
 
+	framePong        = "pong"
 	frameHello       = "hello"
 	frameReauth      = "reauth"
 	framePresence    = "presence"
@@ -288,3 +289,6 @@ func validID(s string, limit int) bool {
 	}
 	return true
 }
+
+// pongFrame answers a ping so the client can tell a live connection from a half-open one.
+var pongFrame = []byte(`{"t":"` + framePong + `"}`)
