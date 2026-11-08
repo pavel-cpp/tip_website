@@ -52,10 +52,14 @@ export function Popover({
 
   if (!mounted) return null
   return createPortal(
-    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: callers pass a role that supports aria-label (menu)
-    <div ref={ref} className="popover" data-state={state} role={role} aria-label={label} style={style}>
-      {children}
-    </div>,
+    // The portal lives outside the page landmarks; a labelled region keeps the open menu inside one
+    // (axe "region" rule). The popover itself is fixed-positioned, so the wrapper has no box.
+    <section aria-label={label}>
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: callers pass a role that supports aria-label (menu) */}
+      <div ref={ref} className="popover" data-state={state} role={role} aria-label={label} style={style}>
+        {children}
+      </div>
+    </section>,
     document.body,
   )
 }

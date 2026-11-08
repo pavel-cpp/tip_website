@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test'
 import { type Api, adminCreds, type Creds } from './api'
-import { LoginPage, settle } from './pages'
+import { LoginPage, settle, tr } from './pages'
 import { seedPrefs } from './test'
 import { WorkspacePage } from './workspace'
 
@@ -83,6 +83,91 @@ export async function enter(page: Page, creds: Creds, locale: Locale, theme: The
 }
 
 export { adminCreds }
+
+/**
+ * Extra states the axe run covers on top of {@link SCREENS}: dialogs, menus, the print page, and on phones
+ * the bottom sheet and the selection mode. Kept apart so the visual baselines are not affected.
+ */
+export const A11Y_STATES: Screen[] = [
+  {
+    id: 'projects-create-dialog',
+    open: async (page, env) => {
+      await go('/', '.projects-head')(page, env)
+      await page
+        .getByRole('button', { name: tr(env.locale)('projects.create.card') })
+        .first()
+        .click()
+      await page.getByRole('dialog').waitFor()
+      await settle(page)
+    },
+  },
+  {
+    id: 'user-menu',
+    open: async (page, env) => {
+      await go('/', '.projects-head')(page, env)
+      await page.getByRole('button', { name: tr(env.locale)('nav.userMenu') }).click()
+      await page.getByRole('menuitem').first().waitFor()
+      await settle(page)
+    },
+  },
+  {
+    id: 'admin-user-dialog',
+    admin: true,
+    open: async (page, env) => {
+      await go('/admin/users', '.admin-page')(page, env)
+      await page.getByRole('button', { name: tr(env.locale)('admin.users.create') }).click()
+      await page.getByRole('dialog').waitFor()
+      await settle(page)
+    },
+  },
+  {
+    id: 'workspace-selected',
+    open: async (page, env) => {
+      await page.goto(`/projects/${env.projectId}`)
+      const ws = new WorkspacePage(page, env.locale)
+      await ws.showTable()
+      await ws.rows.first().waitFor()
+      if (await ws.isCards()) {
+        await page.getByRole('button', { name: tr(env.locale)('workspace.select.enter') }).click()
+        await ws.bulkBar.waitFor()
+      } else {
+        await ws.selectRow(ws.row(0))
+      }
+      await settle(page)
+    },
+  },
+  {
+    id: 'workspace-sheet',
+    open: async (page, env) => {
+      await page.goto(`/projects/${env.projectId}`)
+      const ws = new WorkspacePage(page, env.locale)
+      await ws.showTable()
+      await ws.rows.first().waitFor()
+      if (await ws.isCards()) {
+        await ws.rows.first().locator('.pc-main').click()
+        await ws.sheet.waitFor()
+      } else {
+        await ws.cell(ws.row(0), 'name').click()
+      }
+      await settle(page)
+    },
+  },
+  {
+    id: 'print',
+    open: async (page, env) => {
+      await page.context().addInitScript(() => {
+        window.print = () => {}
+      })
+      await page.goto(`/projects/${env.projectId}`)
+      const ws = new WorkspacePage(page, env.locale)
+      await ws.showTable()
+      await ws.rows.first().waitFor()
+      await ws.selectAllAndPrint()
+      await page.locator('.print-ticket').first().waitFor()
+      await settle(page)
+    },
+  },
+]
 
 /**
  * Collapses the lists that other tests fill in parallel (project cards, user rows, role cards) to a fixed

@@ -923,10 +923,14 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
             </div>
           </div>
 
-          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
-          <div ref={scroller} className="pt-scroll" tabIndex={0}>
+          <div
+            ref={scroller}
+            className="pt-scroll"
+            tabIndex={0}
+            role={emptyOrLoading ? undefined : 'rowgroup'}
+          >
             {emptyOrLoading ?? (
-              <div className="pt-sizer" role="rowgroup" style={{ height: rowVirtualizer.getTotalSize() }}>
+              <div className="pt-sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
                 {items.map((item) => {
                   const row = visible[item.index]
                   if (!row) return null

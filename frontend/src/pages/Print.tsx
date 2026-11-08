@@ -57,6 +57,12 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
   const [urls, setUrls] = useState<string[]>([])
   const [progress, setProgress] = useState(0)
   const startedAt = useRef(0)
+  const heading = t('workspace.print.button')
+  const appName = t('app.name')
+  useEffect(() => {
+    // The page has no app shell, and the browser prints the title in the sheet header.
+    document.title = `${heading} · ${appName}`
+  }, [heading, appName])
   const [failed, setFailed] = useState<string | null>(null)
   const rows = useMemo(() => {
     const byId = new Map((list.data?.items ?? []).map((r) => [r.id, r]))
@@ -137,8 +143,9 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
   }, [done, doPrint])
 
   return (
-    <div className="print-root">
+    <main className="print-root">
       {!styled && <style>{css}</style>}
+      <h1 className="sr-only">{t('workspace.print.button')}</h1>
       <div className="print-ui">
         <div className="print-bar">
           <button type="button" className="print-btn" onClick={back}>
@@ -179,7 +186,10 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
         )}
         <p className="print-tip">{t('workspace.print.tip')}</p>
       </div>
-      <div className="print-pages">
+      {/* Focusable so a keyboard user can scroll the sheets when they are wider than the screen. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: a scrollable labelled region, not a section */}
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard access to the scrolling sheets */}
+      <div className="print-pages" role="region" aria-label={t('workspace.print.sheets')} tabIndex={0}>
         {pages.map((page, p) => (
           <section key={p} className="print-page" aria-label={t('workspace.print.page', { n: p + 1 })}>
             {page.map((i) => (
@@ -188,6 +198,6 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
           </section>
         ))}
       </div>
-    </div>
+    </main>
   )
 }

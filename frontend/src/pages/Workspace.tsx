@@ -490,7 +490,11 @@ function WorkspaceView({ project }: { project: Project }) {
     actions.targetCount > 0
       ? t('workspace.print.withCount', { count: actions.targetCount })
       : t('workspace.print')
-  const noPrintReason = !current ? t('workspace.noRowsReason') : undefined
+  const noPrintReason = !project.image
+    ? t('workspace.noImageReason')
+    : !current
+      ? t('workspace.noRowsReason')
+      : undefined
   // On phones every secondary action sits in one menu so the primary "Print (N)" keeps its full label.
   const phoneItems: MenuItem[] = []
   if (canPrint) {
@@ -701,7 +705,7 @@ function WorkspaceView({ project }: { project: Project }) {
           <PhoneToolbar
             canPrint={canPrint}
             printLabel={printLabel}
-            printDisabled={!current ? noPrintReason : undefined}
+            printDisabled={noPrintReason}
             items={phoneItems}
             onPrint={onPrint}
           />

@@ -233,8 +233,8 @@
 .input .color-swatch {
   flex: none;
   align-self: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);

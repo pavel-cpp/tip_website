@@ -77,7 +77,7 @@ export const projectsRu = {
   'settings.positionHint': 'Перетащите поле на превью, чтобы изменить позицию (можно и стрелками).',
   'settings.increase': 'Увеличить',
   'settings.decrease': 'Уменьшить',
-  'settings.drag': 'Перетащить: {label}',
+  'settings.drag': '{label}, перетащить',
   'settings.saved': 'Настройки сохранены',
   'settings.conflict.title': 'Проект изменили в другом месте',
   'settings.conflict.body':

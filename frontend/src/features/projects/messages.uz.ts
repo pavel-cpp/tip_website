@@ -77,7 +77,7 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
     'Oʻrnini oʻzgartirish uchun maydonni koʻrinishda sudrang (strelkalar bilan ham mumkin).',
   'settings.increase': 'Oshirish',
   'settings.decrease': 'Kamaytirish',
-  'settings.drag': 'Sudrash: {label}',
+  'settings.drag': '{label}, sudrash',
   'settings.saved': 'Sozlamalar saqlandi',
   'settings.conflict.title': 'Loyiha boshqa joyda oʻzgartirilgan',
   'settings.conflict.body':
