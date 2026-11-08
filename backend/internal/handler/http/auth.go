@@ -65,6 +65,9 @@ type AuthAPIDeps struct {
 	Auth  AuthService
 	Users UsersService
 	Roles RolesService
+	// InsecureCookies drops the Secure flag of the refresh cookie. It exists for plain-HTTP
+	// development over a LAN address, where browsers refuse to store Secure cookies.
+	InsecureCookies bool
 }
 
 // AuthAPI implements the auth, profile, user-administration and role-administration operations
@@ -81,17 +84,17 @@ const (
 	refreshCookiePath = apiPrefix + "/auth"
 )
 
-func authSetRefreshCookie(w http.ResponseWriter, token string, expires time.Time) {
+func authSetRefreshCookie(w http.ResponseWriter, token string, expires time.Time, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name: refreshCookieName, Value: token, Path: refreshCookiePath, Expires: expires,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode,
 	})
 }
 
-func authClearRefreshCookie(w http.ResponseWriter) {
+func authClearRefreshCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name: refreshCookieName, Value: "", Path: refreshCookiePath, MaxAge: -1, Expires: time.Unix(0, 0),
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode,
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode,
 	})
 }
 
@@ -140,7 +143,7 @@ func (a *AuthAPI) Login(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt)
+	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt, !a.d.InsecureCookies)
 	authNoStore(w)
 	writeJSON(w, http.StatusOK, gen.LoginResponse{AccessToken: s.Pair.AccessToken, ExpiresIn: s.ExpiresIn, User: authUserDTO(s.User)})
 }
@@ -155,12 +158,12 @@ func (a *AuthAPI) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	s, err := a.d.Auth.Refresh(r.Context(), c.Value)
 	if err != nil {
 		if domain.CodeOf(err) == domain.CodeRefreshInvalid {
-			authClearRefreshCookie(w)
+			authClearRefreshCookie(w, !a.d.InsecureCookies)
 		}
 		fail(w, r, err)
 		return
 	}
-	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt)
+	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt, !a.d.InsecureCookies)
 	authNoStore(w)
 	writeJSON(w, http.StatusOK, gen.TokenResponse{AccessToken: s.Pair.AccessToken, ExpiresIn: s.ExpiresIn})
 }
@@ -175,7 +178,7 @@ func (a *AuthAPI) Logout(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	authClearRefreshCookie(w)
+	authClearRefreshCookie(w, !a.d.InsecureCookies)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -195,7 +198,7 @@ func (a *AuthAPI) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt)
+	authSetRefreshCookie(w, s.Pair.RefreshToken, s.Pair.RefreshExpiresAt, !a.d.InsecureCookies)
 	authNoStore(w)
 	writeJSON(w, http.StatusOK, gen.TokenResponse{AccessToken: s.Pair.AccessToken, ExpiresIn: s.ExpiresIn})
 }

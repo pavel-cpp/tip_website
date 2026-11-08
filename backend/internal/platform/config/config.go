@@ -64,6 +64,9 @@ type Config struct {
 	SwaggerEnabled      bool
 	// GrafanaURL is the public Grafana address shown as a link in the admin menu; empty hides it.
 	GrafanaURL string
+	// CookieSecure sets the Secure flag on the refresh cookie (default true). Turn it off only for
+	// plain-HTTP development over a LAN address.
+	CookieSecure bool
 
 	BootstrapAdminLogin    string
 	BootstrapAdminPassword Secret
@@ -118,6 +121,7 @@ func Load(getenv func(string) string) (Config, error) {
 		ForcePasswordChange: l.boolean("FORCE_PASSWORD_CHANGE", false),
 		SwaggerEnabled:      l.boolean("SWAGGER_ENABLED", true),
 		GrafanaURL:          l.optionalURL("GRAFANA_URL"),
+		CookieSecure:        l.boolean("COOKIE_SECURE", true),
 
 		BootstrapAdminLogin:    l.str("BOOTSTRAP_ADMIN_LOGIN", ""),
 		BootstrapAdminPassword: Secret(l.str("BOOTSTRAP_ADMIN_PASSWORD", "")),

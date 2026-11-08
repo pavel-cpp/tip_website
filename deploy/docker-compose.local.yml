@@ -24,7 +24,10 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
       REDIS_FAIL_MODE: open
       AUTO_MIGRATE: "true"
+      # Same-origin requests (any host name or LAN IP the browser used) are accepted without listing them.
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      # Plain HTTP over a LAN address: browsers refuse to store Secure cookies there.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-0123456789abcdef}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-fedcba9876543210}
       PASSWORD_PEPPER: ${PASSWORD_PEPPER:-dev-password-pepper-change-me-0123456789abcdef}
@@ -37,7 +40,9 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       LOKI_URL: "off"
     ports:
-      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+      # Listens on all interfaces so phones and other machines on the LAN can open it. This stack has
+      # default development passwords: set HTTP_BIND=127.0.0.1 to keep it on this machine only.
+      - "${HTTP_BIND:-0.0.0.0}:${HTTP_PORT:-8080}:8080"
       # Metrics and probes; reachable from the host only.
       - "127.0.0.1:${INTERNAL_PORT:-9090}:9090"
     volumes:

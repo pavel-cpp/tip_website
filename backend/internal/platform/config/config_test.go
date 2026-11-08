@@ -128,3 +128,16 @@ func TestGrafanaURLOptional(t *testing.T) {
 		t.Fatalf("configured: %q, %v", cfg.GrafanaURL, err)
 	}
 }
+
+func TestCookieSecureDefaultsToTrue(t *testing.T) {
+	cfg, err := load(baseEnv())
+	if err != nil || !cfg.CookieSecure {
+		t.Fatalf("default: %v, %v", cfg.CookieSecure, err)
+	}
+	env := baseEnv()
+	env["COOKIE_SECURE"] = "false"
+	cfg, err = load(env)
+	if err != nil || cfg.CookieSecure {
+		t.Fatalf("disabled: %v, %v", cfg.CookieSecure, err)
+	}
+}

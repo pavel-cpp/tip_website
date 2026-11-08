@@ -228,7 +228,8 @@ func (a *app) wire(ctx context.Context) error {
 			{Name: "dataDir", Fn: func(context.Context) error { return dataDirReady(cfg.DataDir) }},
 		},
 		API: &httpapi.APIDeps{
-			Auth: meteredAuth{Auth: authSvc, m: m}, Users: meteredUsers{Users: a.users, m: m}, Roles: rolesSvc,
+			InsecureCookies: !cfg.CookieSecure,
+			Auth:            meteredAuth{Auth: authSvc, m: m}, Users: meteredUsers{Users: a.users, m: m}, Roles: rolesSvc,
 			Projects:     meteredProjects{ProjectService: projectsSvc, m: m},
 			Participants: meteredParticipants{Participants: participantsSvc, m: m}, Audit: auditSvc, System: systemSvc,
 			MaxImageBytes: int64(cfg.MaxImageMB) << 20,

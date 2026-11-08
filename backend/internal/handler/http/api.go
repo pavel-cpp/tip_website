@@ -10,13 +10,15 @@ import (
 
 // APIDeps are the services behind the generated routes.
 type APIDeps struct {
-	Auth         AuthService
-	Users        UsersService
-	Roles        RolesService
-	Projects     ProjectsService
-	Participants ParticipantsService
-	Audit        *service.Audit
-	System       *service.SystemService
+	// InsecureCookies is passed to the auth handlers (see AuthAPIDeps).
+	InsecureCookies bool
+	Auth            AuthService
+	Users           UsersService
+	Roles           RolesService
+	Projects        ProjectsService
+	Participants    ParticipantsService
+	Audit           *service.Audit
+	System          *service.SystemService
 	// MaxImageBytes bounds an uploaded project image (MAX_IMAGE_MB).
 	MaxImageBytes int64
 	// Now is the clock of the client error limiter; nil means time.Now.
@@ -55,7 +57,7 @@ func newAPIHandlers(d APIDeps, probes probeAPI) gen.ServerInterface {
 		now = time.Now
 	}
 	return apiHandlers{
-		AuthAPI:             NewAuthAPI(AuthAPIDeps{Auth: d.Auth, Users: d.Users, Roles: d.Roles}),
+		AuthAPI:             NewAuthAPI(AuthAPIDeps{Auth: d.Auth, Users: d.Users, Roles: d.Roles, InsecureCookies: d.InsecureCookies}),
 		ProjectsHandler:     NewProjectsHandler(d.Projects, d.MaxImageBytes),
 		ParticipantsHandler: NewParticipantsHandler(d.Participants),
 		AuditHandler:        NewAuditHandler(d.Audit),

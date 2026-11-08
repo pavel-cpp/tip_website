@@ -732,3 +732,26 @@ func TestAdminRoles(t *testing.T) {
 		}
 	}
 }
+
+func TestRefreshCookieSecureFlagIsConfigurable(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		insecure bool
+		want     bool
+	}{{"secure by default", false, true}, {"insecure for LAN development", true, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			authSetRefreshCookie(rec, "tok", time.Now().Add(time.Hour), !tc.insecure)
+			authClearRefreshCookie(rec, !tc.insecure)
+			cookies := rec.Result().Cookies()
+			if len(cookies) != 2 {
+				t.Fatalf("cookies = %+v", cookies)
+			}
+			for _, c := range cookies {
+				if c.Secure != tc.want || !c.HttpOnly {
+					t.Errorf("cookie %q Secure=%v HttpOnly=%v, want Secure=%v", c.Name, c.Secure, c.HttpOnly, tc.want)
+				}
+			}
+		})
+	}
+}
