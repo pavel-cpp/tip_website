@@ -1,0 +1,84 @@
+/* Print page: always light regardless of the app theme. Sheet geometry comes from lib/ticket printCss(). */
+.print-root {
+  min-height: 100dvh;
+  background: #fff;
+  color: #15171c;
+}
+.print-ui {
+  display: grid;
+  gap: 10px;
+  padding: 16px max(16px, var(--safe-left));
+  border-bottom: 1px solid #dcdfe6;
+  background: #f4f5f8;
+}
+.print-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.print-status {
+  flex: 1;
+  font-size: 14px;
+}
+.print-error {
+  color: #b23c06;
+}
+.print-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid #7f8596;
+  border-radius: 12px;
+  background: #fff;
+  color: #15171c;
+  font: inherit;
+  font-weight: 600;
+}
+.print-btn-primary {
+  border-color: #1f5fe0;
+  background: #1f5fe0;
+  color: #fff;
+}
+.print-btn:disabled {
+  opacity: 0.5;
+}
+.print-progress span {
+  position: absolute;
+  inset: 0;
+  background: #1f5fe0;
+  transform-origin: left;
+  transition: transform 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+.print-progress {
+  background: #dcdfe6;
+}
+.print-tip {
+  font-size: 13px;
+  color: #545a69;
+}
+.print-pages {
+  overflow-x: auto;
+}
+@media screen {
+  .print-pages {
+    display: grid;
+    gap: 16px;
+    justify-content: start;
+    padding: 16px;
+    background: #eceef3;
+  }
+  .print-page {
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(20, 24, 40, 0.2);
+  }
+}
+@media print {
+  .print-ui {
+    display: none;
+  }
+  .print-root {
+    min-height: 0;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+}

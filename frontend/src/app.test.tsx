@@ -37,12 +37,10 @@ describe('app shell and routing', () => {
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
-  for (const path of ['/projects/42']) {
-    it(`serves ${path}`, async () => {
-      open(path)
-      expect(await screen.findByText('Раздел в разработке')).toBeInTheDocument()
-    })
-  }
+  it('serves the workspace route (an unknown project shows the error state)', async () => {
+    open('/projects/42')
+    expect(await screen.findByText('Не удалось открыть проект')).toBeInTheDocument()
+  })
 
   for (const [path, heading] of [
     ['/admin/users', 'Пользователи'],
