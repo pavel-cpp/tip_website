@@ -3,6 +3,7 @@ import {
   backoffDelay,
   CURSOR_THROTTLE_MS,
   PING_MS,
+  PONG_TIMEOUT_MS,
   projectSocketUrl,
   RealtimeClient,
   type RealtimeEvent,
@@ -398,6 +399,59 @@ describe('background tabs', () => {
     vi.advanceTimersByTime(2000)
     window.dispatchEvent(new Event('pageshow'))
     expect(FakeSocket.instances).toHaveLength(3)
+  })
+})
+
+describe('half-open connections', () => {
+  it('goes offline at once on the browser offline event and reconnects on online', async () => {
+    const r = rig()
+    const s = connect(r)
+    expect(r.client.getSnapshot().state).toBe('online')
+    window.dispatchEvent(new Event('offline'))
+    expect(r.client.getSnapshot().state).toBe('offline')
+    expect(s.closedWith).toBe(1000)
+    expect(r.client.isOnline).toBe(false)
+    await vi.advanceTimersByTimeAsync(2000)
+    window.dispatchEvent(new Event('online'))
+    const s2 = FakeSocket.last
+    expect(s2).not.toBe(s)
+    s2.open()
+    s2.receive(hello())
+    expect(r.client.getSnapshot().state).toBe('online')
+  })
+
+  it('treats a silent socket as dead when the server stopped answering pings', async () => {
+    const r = rig()
+    const s = connect(r)
+    // First round: the server proves it answers pings.
+    await vi.advanceTimersByTimeAsync(PING_MS)
+    s.receive({ t: 'pong' })
+    // Second round: nothing comes back.
+    await vi.advanceTimersByTimeAsync(PING_MS)
+    expect(r.client.getSnapshot().state).toBe('online')
+    await vi.advanceTimersByTimeAsync(PONG_TIMEOUT_MS)
+    expect(r.client.getSnapshot().state).not.toBe('online')
+    expect(s.closedWith).toBe(1000)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(FakeSocket.instances.length).toBeGreaterThan(1)
+  })
+
+  it('any frame within the window keeps the connection', async () => {
+    const r = rig()
+    const s = connect(r)
+    await vi.advanceTimersByTimeAsync(PING_MS)
+    s.receive({ t: 'pong' })
+    await vi.advanceTimersByTimeAsync(PING_MS)
+    s.receive({ t: 'presence', peers: [] })
+    await vi.advanceTimersByTimeAsync(PONG_TIMEOUT_MS * 2)
+    expect(r.client.getSnapshot().state).toBe('online')
+  })
+
+  it('never drops a server that does not know pong', async () => {
+    const r = rig()
+    connect(r)
+    await vi.advanceTimersByTimeAsync(PING_MS * 4)
+    expect(r.client.getSnapshot().state).toBe('online')
   })
 })
 
