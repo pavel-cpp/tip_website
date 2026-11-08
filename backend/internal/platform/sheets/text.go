@@ -3,6 +3,7 @@ package sheets
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"unicode/utf8"
 
@@ -27,7 +28,7 @@ var (
 func decodeText(r io.Reader) (io.Reader, error) {
 	br := bufio.NewReaderSize(r, sampleSize)
 	head, err := br.Peek(sampleSize)
-	if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 		return nil, err
 	}
 	switch {

@@ -56,20 +56,13 @@ func normalizeHeader(s string) string {
 	var b strings.Builder
 	space := false
 	for _, r := range s {
-		switch {
-		case r == 'ё':
+		if r == 'ё' {
 			r = 'е'
-		case r == '№' || r == '#':
-			if space && b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteRune(r)
-			space = false
-			continue
-		case r == 'ʻ' || r == '\'' || r == '`' || r == '’' || r == '‘':
+		}
+		if strings.ContainsRune("ʻ'`’‘", r) {
 			continue // o'zbek, o‘zbek: apostrophes carry no meaning here
 		}
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+		if r == '№' || r == '#' || unicode.IsLetter(r) || unicode.IsDigit(r) {
 			if space && b.Len() > 0 {
 				b.WriteByte(' ')
 			}
@@ -85,17 +78,6 @@ func normalizeHeader(s string) string {
 // columnMap holds the zero-based index of each logical column in a row, or -1 when absent.
 type columnMap struct {
 	number, name, phone int
-}
-
-func (m columnMap) at(c column) int {
-	switch c {
-	case colNumber:
-		return m.number
-	case colName:
-		return m.name
-	default:
-		return m.phone
-	}
 }
 
 // detectHeader inspects a first row. When at least one cell is a known name or phone header it

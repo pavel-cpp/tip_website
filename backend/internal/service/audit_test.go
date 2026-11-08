@@ -20,7 +20,6 @@ type fakeAuditStore struct {
 	ageCalls, maxCall []int
 	cutoff            time.Time
 	keep              int
-	failAfter         int
 }
 
 func (f *fakeAuditStore) Insert(_ context.Context, e domain.AuditEntry) error {
