@@ -169,3 +169,39 @@ func TestGC(t *testing.T) {
 		t.Fatalf("refreshed file was collected (%d)", n)
 	}
 }
+
+func TestThumbSidecarFollowsOriginal(t *testing.T) {
+	s, dir := newStore(t, 0, 0)
+	ctx := context.Background()
+	sha := hash([]byte("original"))
+	key := domain.ThumbKey(sha)
+	if err := s.Put(ctx, sha, []byte("original")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put(ctx, key, []byte("preview")); err != nil {
+		t.Fatalf("put preview: %v", err)
+	}
+	past := time.Now().Add(-48 * time.Hour)
+	for _, k := range []string{sha, key} {
+		if err := os.Chtimes(filepath.Join(dir, "uploads", "projects", sha[:2], k), past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Referenced original: the preview survives with it.
+	if n, err := s.GC(ctx, map[string]struct{}{sha: {}}); err != nil || n != 0 {
+		t.Fatalf("referenced pair collected: n=%d err=%v", n, err)
+	}
+	// Unreferenced: both files go.
+	if n, err := s.GC(ctx, nil); err != nil || n != 2 {
+		t.Fatalf("removed %d, err %v", n, err)
+	}
+	if err := s.Put(ctx, key, []byte("preview")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Delete(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Open(ctx, key); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("deleted preview still opens: %v", err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -54,18 +55,23 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: tipd <serve|migrate|admin>")
+		return errors.New("usage: tipd <serve|migrate|healthcheck|admin|version>")
 	}
 	switch args[0] {
 	case "serve":
 		return serve()
 	case "migrate":
 		return migrate()
+	case "healthcheck":
+		os.Exit(runHealthcheck())
+		return nil
 	case "admin":
-		fmt.Println("not implemented yet")
+		return adminCommand(args[1:], os.Getenv, os.Stdout)
+	case "version", "-version", "--version":
+		fmt.Printf("tipd %s (%s)\n", version, commit)
 		return nil
 	default:
-		return fmt.Errorf("unknown command %q (want serve, migrate or admin)", args[0])
+		return fmt.Errorf("unknown command %q (want serve, migrate, healthcheck, admin or version)", args[0])
 	}
 }
 
@@ -110,41 +116,34 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	conn, err := db.Open(ctx, cfg.DatabaseURL.Reveal())
+	a, err := newApp(ctx, cfg, logger, m)
 	if err != nil {
-		logger.Error().Err(err).Msg("database unavailable")
+		logger.Error().Err(err).Msg("startup failed")
 		return err
 	}
-	defer conn.Close()
-	m.RegisterDB(conn)
+	defer a.Close()
+	a.Start(ctx)
 
-	if cfg.AutoMigrate {
-		mctx, cancel := context.WithTimeout(ctx, migrateTimeout)
-		err := runMigrations(mctx, conn, logger)
-		cancel()
-		if err != nil {
-			logger.Error().Err(err).Msg("migrations failed")
-			return err
-		}
-	}
-
-	router := httpapi.NewRouter(httpapi.Deps{
-		Logger:  logger,
-		Metrics: m,
-		NewID:   ids.UUIDv7{}.NewID,
-		Ready: []httpapi.Check{
-			{Name: "database", Fn: func(ctx context.Context) error { return db.Ping(ctx, conn) }},
-		},
-	})
-	public := httpapi.NewServer(cfg.HTTPAddr, router, logging.NewStdLogger(logger, "http"))
+	public := httpapi.NewServer(cfg.HTTPAddr, a.router, logging.NewStdLogger(logger, "http"))
 	internal := m.NewInternalServer(cfg.InternalAddr)
 	internal.ErrorLog = logging.NewStdLogger(logger, "internal")
+
+	// Listeners are opened here so that shutdown can stop accepting before it drains.
+	listeners := map[string]net.Listener{}
+	for name, srv := range map[string]*http.Server{"public": public, "internal": internal} {
+		ln, err := net.Listen("tcp", srv.Addr)
+		if err != nil {
+			logger.Error().Err(err).Str("server", name).Msg("listen failed")
+			return fmt.Errorf("%s listener: %w", name, err)
+		}
+		listeners[name] = ln
+	}
 
 	serveErr := make(chan error, 2)
 	for name, srv := range map[string]*http.Server{"public": public, "internal": internal} {
 		go func() {
-			logger.Info().Str("server", name).Str("addr", srv.Addr).Msg("listening")
-			if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			logger.Info().Str("server", name).Str("addr", srv.Addr).Str("version", version).Msg("listening")
+			if err := srv.Serve(listeners[name]); !errors.Is(err, http.ErrServerClosed) {
 				serveErr <- fmt.Errorf("%s server: %w", name, err)
 			}
 		}()
@@ -158,14 +157,23 @@ func serve() error {
 		logger.Error().Err(runErr).Msg("server failed")
 	}
 
+	// Order: stop accepting, end the WebSocket sessions (hijacked connections are invisible to
+	// http.Server.Shutdown), drain the HTTP server, stop background jobs, close the pools.
 	sctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
+	for _, ln := range listeners {
+		_ = ln.Close()
+	}
+	if err := a.ws.Shutdown(sctx); err != nil {
+		logger.Error().Err(err).Msg("websocket shutdown")
+	}
 	if err := public.Shutdown(sctx); err != nil {
 		logger.Error().Err(err).Msg("public server shutdown")
 	}
 	if err := internal.Shutdown(sctx); err != nil {
 		logger.Error().Err(err).Msg("internal server shutdown")
 	}
+	a.Stop()
 	logger.Info().Msg("stopped")
 	return runErr
 }

@@ -24,6 +24,15 @@ type Metrics struct {
 	Registry   *prometheus.Registry
 	LogDropped prometheus.Counter
 
+	// RedisUp is 1 while the token store answers its periodic ping, 0 otherwise.
+	RedisUp prometheus.Gauge
+	// BlacklistChecks counts access-token revocation lookups by result: ok, revoked or error.
+	BlacklistChecks *prometheus.CounterVec
+	// TokenRefresh counts refresh attempts by result.
+	TokenRefresh *prometheus.CounterVec
+	// Logins counts login attempts by result.
+	Logins *prometheus.CounterVec
+
 	requests *prometheus.CounterVec
 	duration *prometheus.HistogramVec
 	inFlight prometheus.Gauge
@@ -37,6 +46,22 @@ func New(version, commit string) *Metrics {
 			Name: "tip_log_dropped_total",
 			Help: "Log events dropped by the non-blocking logger buffer.",
 		}),
+		RedisUp: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "tip_redis_up",
+			Help: "1 when the last Redis ping succeeded, 0 when it failed.",
+		}),
+		BlacklistChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "tip_blacklist_checks_total",
+			Help: "Access token revocation lookups by result (ok, revoked, error).",
+		}, []string{"result"}),
+		TokenRefresh: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "tip_token_refresh_total",
+			Help: "Refresh token exchanges by result.",
+		}, []string{"result"}),
+		Logins: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "tip_logins_total",
+			Help: "Login attempts by result.",
+		}, []string{"result"}),
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "tip_http_requests_total",
 			Help: "HTTP requests by route pattern, method and status.",
@@ -60,7 +85,7 @@ func New(version, commit string) *Metrics {
 	m.Registry.MustRegister(
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-		build, m.LogDropped, m.requests, m.duration, m.inFlight,
+		build, m.LogDropped, m.RedisUp, m.BlacklistChecks, m.TokenRefresh, m.Logins, m.requests, m.duration, m.inFlight,
 	)
 	return m
 }

@@ -84,12 +84,35 @@ func recoverMiddleware(next http.Handler) http.Handler {
 // isProbe reports whether the path is a liveness/readiness probe, which is too noisy for INFO.
 func isProbe(path string) bool { return path == "/healthz" || path == "/readyz" }
 
+// accessActor carries the authenticated user from the authentication middleware, which runs
+// deeper in the chain, back to the access log.
+type accessActor struct{ userID, role string }
+
+type accessActorKey struct{}
+
+// noteAccessActor records who made the request for the access log line. It follows the
+// authentication middleware.
+func noteAccessActor(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a, ok := ActorFrom(r.Context()); ok {
+			if h, ok := r.Context().Value(accessActorKey{}).(*accessActor); ok {
+				h.userID = a.UserID
+				if len(a.Roles) > 0 {
+					h.role = strings.Join(a.Roles, ",")
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // accessLogMiddleware writes one line per request using the route pattern, never the raw path.
 func accessLogMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		start := time.Now()
-		next.ServeHTTP(ww, r)
+		who := &accessActor{}
+		next.ServeHTTP(ww, r.WithContext(context.WithValue(r.Context(), accessActorKey{}, who)))
 
 		route := "unmatched"
 		if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
@@ -109,8 +132,11 @@ func accessLogMiddleware(next http.Handler) http.Handler {
 			Int(logging.FieldStatus, status).
 			Int64(logging.FieldDurMS, time.Since(start).Milliseconds()).
 			Int(logging.FieldBytes, ww.BytesWritten()).
-			Str(logging.FieldIP, clientIP(r)).
-			Msg("http")
+			Str(logging.FieldIP, clientIP(r))
+		if who.userID != "" {
+			ev = ev.Str(logging.FieldUserID, who.userID).Str(logging.FieldRole, who.role)
+		}
+		ev.Msg("http")
 	})
 }
 

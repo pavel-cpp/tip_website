@@ -41,7 +41,7 @@ type ProjectsService interface {
 	Reopen(ctx context.Context, a domain.Actor, id string) (service.ProjectView, error)
 	Delete(ctx context.Context, a domain.Actor, id string) error
 	PutImage(ctx context.Context, a domain.Actor, id, filename string, data []byte) (service.ProjectView, error)
-	Image(ctx context.Context, a domain.Actor, id, ifNoneMatch string) (service.ImageFile, error)
+	Image(ctx context.Context, a domain.Actor, id, ifNoneMatch string, thumb bool) (service.ImageFile, error)
 }
 
 // multipartOverhead is the allowance for multipart boundaries and headers on top of the file.
@@ -249,7 +249,12 @@ func (h *ProjectsHandler) GetProjectImage(w http.ResponseWriter, r *http.Request
 	if params.IfNoneMatch != nil {
 		inm = *params.IfNoneMatch
 	}
-	f, err := h.svc.Image(r.Context(), a, id.String(), inm)
+	if params.Size != nil && !params.Size.Valid() {
+		projectsFail(w, r, domain.NewValidation(domain.FieldError{Field: "size", Reason: "must be thumb"}))
+		return
+	}
+	thumb := params.Size != nil
+	f, err := h.svc.Image(r.Context(), a, id.String(), inm, thumb)
 	if err != nil {
 		projectsFail(w, r, err)
 		return
@@ -323,6 +328,10 @@ func projectsImageURL(id, sha string) string {
 	return "/api/v1/projects/" + id + "/image?v=" + projectsShortHash(sha)
 }
 
+func projectsThumbURL(id, sha string) string {
+	return "/api/v1/projects/" + id + "/image?size=thumb&v=" + projectsShortHash(sha)
+}
+
 func projectsContributors(cs []domain.Contributor) []gen.UserRef {
 	out := make([]gen.UserRef, len(cs))
 	for i, c := range cs {
@@ -353,7 +362,7 @@ func projectsDTO(v service.ProjectView) gen.Project {
 	}
 	if v.Image != nil {
 		out.Image = &gen.ProjectImage{
-			Url: projectsImageURL(v.ID, v.Image.SHA256), Name: v.Image.Name,
+			Url: projectsImageURL(v.ID, v.Image.SHA256), ThumbUrl: projectsThumbURL(v.ID, v.Image.SHA256), Name: v.Image.Name,
 			W: v.Image.Width, H: v.Image.Height, Bytes: v.Image.Bytes,
 		}
 	}
@@ -369,7 +378,7 @@ func projectsCardDTO(v service.ProjectView) gen.ProjectCard {
 		Contributors:     projectsContributors(v.Contributors),
 	}
 	if v.Image != nil {
-		out.Image = &gen.CardImage{Url: projectsImageURL(v.ID, v.Image.SHA256)}
+		out.Image = &gen.CardImage{Url: projectsImageURL(v.ID, v.Image.SHA256), ThumbUrl: projectsThumbURL(v.ID, v.Image.SHA256)}
 	}
 	return out
 }

@@ -8,13 +8,13 @@ import (
 )
 
 func TestRunDispatch(t *testing.T) {
-	for _, args := range [][]string{nil, {"bogus"}} {
+	for _, args := range [][]string{nil, {"bogus"}, {"admin"}, {"admin", "create"}, {"admin", "nuke", "x"}} {
 		if err := run(args); err == nil {
 			t.Errorf("run(%v) must fail", args)
 		}
 	}
-	if err := run([]string{"admin"}); err != nil {
-		t.Errorf("admin stub: %v", err)
+	if err := run([]string{"version"}); err != nil {
+		t.Errorf("version: %v", err)
 	}
 }
 

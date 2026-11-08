@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
@@ -51,7 +52,10 @@ func New(dataDir string, minFreeMB, maxTotalMB int) (*Store, error) {
 	return s, nil
 }
 
-func validSHA(sha string) bool {
+// validSHA accepts a content hash, optionally followed by domain.BlobThumbSuffix (the
+// preview stored next to the original).
+func validSHA(key string) bool {
+	sha := strings.TrimSuffix(key, domain.BlobThumbSuffix)
 	if len(sha) != 64 {
 		return false
 	}
@@ -68,7 +72,8 @@ func (s *Store) path(sha string) string {
 	return filepath.Join(s.projects, sha[:2], sha)
 }
 
-// Put stores data under its hash sha. The caller guarantees sha is the SHA-256 of data. An
+// Put stores data under its key sha, which is a content hash or, for a preview, that hash plus
+// domain.BlobThumbSuffix. The caller guarantees sha is the SHA-256 of data. An
 // existing file is kept and its mtime refreshed so the GC grace period restarts. It returns
 // domain.ErrDiskLow when the write would break the free-space or total-size limit.
 func (s *Store) Put(ctx context.Context, sha string, data []byte) error {
@@ -201,7 +206,8 @@ func (s *Store) GC(ctx context.Context, referenced map[string]struct{}) (int, er
 		if !d.Type().IsRegular() || !validSHA(d.Name()) {
 			return nil
 		}
-		if _, ok := referenced[d.Name()]; ok {
+		// A preview is referenced exactly when its original is.
+		if _, ok := referenced[strings.TrimSuffix(d.Name(), domain.BlobThumbSuffix)]; ok {
 			return nil
 		}
 		info, err := d.Info()

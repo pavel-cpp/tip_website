@@ -27,15 +27,6 @@ type SystemHandler struct {
 // NewSystemHandler builds the handler around the system service.
 func NewSystemHandler(svc systemStatusProvider) *SystemHandler { return &SystemHandler{svc: svc} }
 
-// systemStatusResponse extends the contract type with the uploads size. The extra object is
-// additive, so existing clients keep working.
-type systemStatusResponse struct {
-	gen.SystemStatus
-	Uploads struct {
-		SizeBytes int64 `json:"sizeBytes"`
-	} `json:"uploads"`
-}
-
 // GetSystem handles GET /admin/system.
 func (h *SystemHandler) GetSystem(w http.ResponseWriter, r *http.Request) {
 	actor, ok := actorOrFail(w, r)
@@ -50,8 +41,8 @@ func (h *SystemHandler) GetSystem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, systemStatusToResponse(st))
 }
 
-func systemStatusToResponse(st service.SystemStatus) systemStatusResponse {
-	var out systemStatusResponse
+func systemStatusToResponse(st service.SystemStatus) gen.SystemStatus {
+	var out gen.SystemStatus
 	out.Version = st.Version
 	out.Uptime = int(st.Uptime.Seconds())
 	out.Db.SizeBytes = st.DBSizeBytes

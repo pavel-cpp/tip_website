@@ -23,7 +23,8 @@ const (
 	// MaxAvatarBytes is the largest accepted avatar JPEG (matches the schema CHECK).
 	MaxAvatarBytes = 256 << 10
 
-	jpegQuality = 90
+	jpegQuality  = 90
+	thumbQuality = 80
 )
 
 // Mime types produced and accepted.
@@ -133,6 +134,29 @@ func (p *Processor) Normalize(data []byte) (out []byte, mime string, width, heig
 		return nil, "", 0, 0, err
 	}
 	return r.Data, r.Mime, r.Width, r.Height, nil
+}
+
+// Thumbnail decodes an image and returns a JPEG preview whose long side is at most
+// domain.ThumbSide pixels; smaller images keep their size. Transparent areas are flattened
+// onto white because JPEG has no alpha channel.
+func (p *Processor) Thumbnail(data []byte) ([]byte, error) {
+	img, _, err := p.decode(data)
+	if err != nil {
+		return nil, err
+	}
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	if max(w, h) > domain.ThumbSide {
+		w, h = fitSide(w, h, domain.ThumbSide)
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(dst, dst.Bounds(), image.White, image.Point{}, draw.Src)
+	draw.CatmullRom.Scale(dst, dst.Bounds(), img, b, draw.Over, nil)
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: thumbQuality}); err != nil {
+		return nil, domain.ErrImageInvalid
+	}
+	return buf.Bytes(), nil
 }
 
 // Avatar center-crops the image to a square, resizes it to 256x256 and encodes it as JPEG of at
