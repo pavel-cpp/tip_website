@@ -675,3 +675,151 @@
   font-size: var(--fs-xs);
   text-transform: uppercase;
 }
+
+/* ---------- U1 additions ---------- */
+.ws-head .breadcrumb {
+  gap: var(--space-2);
+  align-items: center;
+}
+.ws-people {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-left: auto;
+}
+.ws-people-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ws-people-group .rt-online {
+  margin: 0;
+}
+.ws-people-label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ws-offline {
+  border-color: var(--danger);
+  background: var(--bg-elev);
+}
+.ws-tool-text {
+  font-weight: var(--fw-semibold);
+}
+@media (max-width: 699px) {
+  .ws-people-label {
+    display: none;
+  }
+  .ws-toolbar .ws-tool-text {
+    display: none;
+  }
+  .ws-toolbar .btn-primary .ws-tool-text {
+    display: inline;
+  }
+}
+
+/* Soft phone check and per-cell save state. */
+.pt-warn {
+  flex: none;
+  display: inline-flex;
+  margin-left: 6px;
+  color: var(--danger);
+}
+.pt-cell[data-suspicious] .pt-text {
+  text-decoration: underline wavy var(--danger);
+  text-underline-offset: 3px;
+}
+.pt-cell[data-failed] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+  border-radius: 6px;
+}
+.pt-retry {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pt-unsent {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  translate: 0 -50%;
+  padding: 1px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+
+/* Polish: one focus indicator, a search that wraps instead of shrinking, a plain zoom value. */
+.pt-grid:focus-visible:has([data-active]) {
+  box-shadow: none;
+}
+.pt-search {
+  flex: 1 1 240px;
+  min-width: 240px;
+}
+.pt-tools .btn {
+  flex: none;
+}
+.tk-zoom-value {
+  border: 0;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .tk-zoom-value:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+}
+.tk-zoom-hint {
+  margin: 0;
+  padding: var(--space-1) var(--space-3) 0;
+  font-size: var(--fs-xs);
+  text-align: right;
+}
+.tk-viewport[data-pan] {
+  cursor: grab;
+}
+.tk-viewport[data-pan]:active {
+  cursor: grabbing;
+}
+.tk-note {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 100%;
+  padding: var(--space-4);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.tk-note p {
+  margin: 0;
+}
+.tk-viewport {
+  flex-direction: column;
+}
+.tk-empty-link {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+/* Toasts from earlier actions stay out of the way of the import dialog. */
+body[data-import-open] .toast-region {
+  opacity: 0;
+  visibility: hidden;
+}

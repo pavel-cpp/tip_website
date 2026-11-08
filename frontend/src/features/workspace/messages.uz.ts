@@ -125,4 +125,34 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.print.tip':
     'Chop etish oynasida “Masshtab 100 %” va “Maydonsiz”ni tanlang. Biletlar 7×4 sm, varaqda 21 tadan.',
   'workspace.print.page': '{n}-varaq',
+  'workspace.print.withCount': 'Chop etish ({count})',
+  'workspace.toast.copyFailed':
+    'Vaqtinchalik xotiraga nusxalab boʻlmadi. Biletni qoʻlda nusxalang yoki saqlang.',
+  'workspace.toast.saveFailed': '№ {number} qator saqlanmadi: {reason}',
+  'workspace.offline.banner': 'Aloqa yoʻq — aloqa tiklanishi bilan oʻzgarishlar avtomatik saqlanadi',
+  'workspace.offline.reconnecting': 'Aloqa uzildi, qayta ulanmoqda — oʻzgarishlar avtomatik saqlanadi',
+  'workspace.row.unsent': 'Yuborilmagan',
+  'workspace.row.unsentTitle': 'Oʻzgarish hali serverga yuborilmagan, aloqa tiklanganda saqlanadi',
+  'workspace.row.failed': 'Saqlanmadi',
+  'workspace.row.retry': 'Takrorlash',
+  'workspace.row.retryLabel': '№ {number} qatorni saqlashni takrorlash',
+  'workspace.phone.suspicious':
+    'Telefon raqami notoʻgʻri koʻrinadi: faqat raqamlar, boʻshliq va + ( ) - mumkin',
+  'workspace.printWarn.title': 'Telefon raqamlarini tekshiring',
+  'workspace.printWarn.body':
+    'Tanlangan {total} ta biletdan {count} tasida telefon raqami notoʻgʻri koʻrinadi. Baribir chop etiladi.',
+  'workspace.printWarn.continue': 'Baribir chop etish',
+  'workspace.printWarn.cancel': 'Qaytib tuzatish',
+  'workspace.people.online': 'Hozir onlayn',
+  'workspace.people.contributors': 'Loyiha ishtirokchilari',
+  'workspace.import.confirmEmpty': 'Import qilish',
+  'workspace.ticket.noImageAdmin': 'Bilet rasmini loyiha sozlamalarida yuklang',
+  'workspace.ticket.openSettings': 'Loyiha sozlamalarini ochish',
+  'workspace.ticket.emptyProject': 'Loyihada hali ishtirokchilar yoʻq',
+  'workspace.ticket.emptyProjectHint':
+    'Jadvalga qatorlar qoʻshing yoki Excel’dan joylang — bilet shu yerda paydo boʻladi',
+  'workspace.ticket.loadError': 'Ishtirokchilarni yuklab boʻlmadi',
+  'workspace.ticket.loadErrorHint':
+    'Roʻyxatsiz biletni koʻrsatib boʻlmaydi. Aloqani tekshirib, qayta urining.',
+  'workspace.zoom.hint': 'Bilet paneldan katta: uni aylantiring yoki sichqoncha bilan suring',
 }

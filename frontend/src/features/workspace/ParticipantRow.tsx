@@ -4,10 +4,11 @@
 import { type CSSProperties, memo, useRef } from 'react'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Button } from '../../components/Button'
+import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
 import type { RowCursor, RowLockOwner } from './presence'
-import { COLUMNS, type Column } from './tableLogic'
+import { COLUMNS, type Column, isSuspiciousPhone } from './tableLogic'
 
 export const ROW_HEIGHT = 44
 
@@ -24,7 +25,14 @@ export interface ConflictState {
   current: Participant
 }
 
+/** A cell whose save failed: the typed value stays on screen until the user retries or edits it. */
+export interface FailedState {
+  col: number
+  value: string
+}
+
 export interface RowHandlers {
+  onRetry: (id: string) => void
   onEditChange: (value: string) => void
   onEditPaste: (text: string) => boolean
   onResolveTheirs: (id: string) => void
@@ -50,6 +58,9 @@ export interface ParticipantRowProps {
   shake: number
   tipOpen: boolean
   conflict: ConflictState | null
+  failed?: FailedState | null
+  /** An edit of this row is still waiting to be sent while the connection is down. */
+  unsent?: boolean
   rowCount: number
   handlers: RowHandlers
 }
@@ -78,6 +89,8 @@ function ParticipantRowImpl({
   shake,
   tipOpen,
   conflict,
+  failed = null,
+  unsent = false,
   rowCount,
   handlers,
 }: ParticipantRowProps) {
@@ -108,6 +121,7 @@ function ParticipantRowImpl({
       data-leaving={leaving || undefined}
       data-fresh={fresh || undefined}
       data-conflict={conflict ? 'true' : undefined}
+      data-unsent={unsent || undefined}
       data-tip={tipOpen || undefined}
       data-last={index === rowCount - 1 || undefined}
       style={style}
@@ -124,7 +138,9 @@ function ParticipantRowImpl({
         )}
         {COLUMNS.map((c, col) => {
           const isEditing = editing?.id === row.id && editing.col === col
-          const value = c === 'number' ? String(row.number) : row[c]
+          const isFailed = failed?.col === col
+          const value = isFailed && failed ? failed.value : c === 'number' ? String(row.number) : row[c]
+          const suspicious = c === 'phone' && !isFailed && isSuspiciousPhone(row.phone)
           return (
             <div
               key={c}
@@ -137,6 +153,8 @@ function ParticipantRowImpl({
               data-col-name={c}
               data-active={activeCol === col || undefined}
               data-editing={isEditing || undefined}
+              data-failed={isFailed || undefined}
+              data-suspicious={suspicious || undefined}
               aria-readonly={c === 'number' || owner ? true : undefined}
             >
               {isEditing && editing ? (
@@ -163,13 +181,40 @@ function ParticipantRowImpl({
                   }}
                 />
               ) : (
-                <span className="pt-text" data-mono={c !== 'name' || undefined}>
-                  {value}
-                </span>
+                <>
+                  <span className="pt-text" data-mono={c !== 'name' || undefined}>
+                    {value}
+                  </span>
+                  {suspicious && (
+                    <span className="pt-warn" title={t('workspace.phone.suspicious')}>
+                      <Icon name="alert" size={16} />
+                      <span className="sr-only">{t('workspace.phone.suspicious')}</span>
+                    </span>
+                  )}
+                  {isFailed && (
+                    <button
+                      type="button"
+                      className="pt-retry"
+                      aria-label={t('workspace.row.retryLabel', { number: row.number })}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlers.onRetry(row.id)
+                      }}
+                    >
+                      <Icon name="alert" size={14} />
+                      {t('workspace.row.failed')} · {t('workspace.row.retry')}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )
         })}
+        {unsent && !failed && (
+          <span className="pt-unsent" title={t('workspace.row.unsentTitle')}>
+            {t('workspace.row.unsent')}
+          </span>
+        )}
         {owner && (
           <span className="pt-lock-tip" role="status">
             <UserAvatar user={owner} size={18} />
