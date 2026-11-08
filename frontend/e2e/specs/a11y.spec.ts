@@ -31,12 +31,10 @@ async function audit(page: import('@playwright/test').Page, label: string): Prom
   }))
   if (summary.length > 0) {
     console.log(`AXE ${label}: ${JSON.stringify(summary)}`)
-    await test
-      .info()
-      .attach(`axe-${label}.json`, {
-        body: JSON.stringify(summary, null, 2),
-        contentType: 'application/json',
-      })
+    await test.info().attach(`axe-${label}.json`, {
+      body: JSON.stringify(summary, null, 2),
+      contentType: 'application/json',
+    })
   }
   if (strict) expect(summary).toEqual([])
 }

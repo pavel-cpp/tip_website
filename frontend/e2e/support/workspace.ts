@@ -85,7 +85,10 @@ export class WorkspacePage {
     await this.grid.evaluate((el, data) => {
       const dt = new DataTransfer()
       dt.setData('text/plain', data)
-      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+      // Firefox ignores clipboardData in the ClipboardEvent constructor, so attach it to a plain event.
+      const event = new Event('paste', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'clipboardData', { value: dt })
+      el.dispatchEvent(event)
     }, text)
   }
 

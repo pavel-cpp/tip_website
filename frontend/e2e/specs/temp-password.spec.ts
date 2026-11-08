@@ -1,6 +1,6 @@
 import { adminCreds, uniq } from '../support/api'
 import { LoginPage, Topbar, tr } from '../support/pages'
-import { expect, test } from '../support/test'
+import { expect, FAILED_LOGIN_PROJECTS, test } from '../support/test'
 
 const t = tr('ru')
 
@@ -56,6 +56,7 @@ test('the recommendation can be postponed', async ({ admin, signedIn }) => {
 })
 
 test('a wrong current password is reported in the form', async ({ admin, signedIn }) => {
+  test.skip(!FAILED_LOGIN_PROJECTS.includes(test.info().project.name), 'limits failed logins per IP')
   const user = await admin.createUser()
   const page = await signedIn({ login: user.login, password: user.tempPassword })
   const prompt = page.getByRole('dialog', { name: t('auth.prompt.title') })

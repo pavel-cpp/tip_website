@@ -1,6 +1,6 @@
 import { adminCreds, uniq } from '../support/api'
 import { LoginPage, Topbar, tr } from '../support/pages'
-import { expect, seedPrefs, test } from '../support/test'
+import { expect, FAILED_LOGIN_PROJECTS, seedPrefs, test } from '../support/test'
 
 test.describe('login and session', () => {
   for (const locale of ['ru', 'uz'] as const) {
@@ -23,6 +23,7 @@ test.describe('login and session', () => {
     })
 
     test(`wrong password shows the localized error (${locale})`, async ({ freshContext }) => {
+      test.skip(!FAILED_LOGIN_PROJECTS.includes(test.info().project.name), 'limits failed logins per IP')
       const t = tr(locale)
       const ctx = await freshContext()
       await seedPrefs(ctx, locale, 'dark')

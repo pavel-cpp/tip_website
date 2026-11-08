@@ -1,6 +1,6 @@
 import { uniq } from '../support/api'
 import { tr } from '../support/pages'
-import { expect, test } from '../support/test'
+import { expect, FAILED_LOGIN_PROJECTS, test } from '../support/test'
 
 const t = tr('ru')
 
@@ -46,6 +46,7 @@ test('a deactivated user is signed out and cannot sign in again', async ({
   signedIn,
   freshContext,
 }) => {
+  test.skip(!FAILED_LOGIN_PROJECTS.includes(test.info().project.name), 'limits failed logins per IP')
   const worker = await admin.createReadyUser()
   const page = await signedIn(worker)
   await expect(page.getByRole('heading', { level: 1, name: t('projects.title') })).toBeVisible()

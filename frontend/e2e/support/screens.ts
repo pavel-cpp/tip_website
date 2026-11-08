@@ -11,7 +11,7 @@ export interface Screen {
   id: string
   /** Opens the screen and returns once it is fully rendered. */
   open: (page: Page, env: Env) => Promise<void>
-  /** Selectors of regions whose content depends on other tests running in parallel. */
+  /** Regions masked in screenshots because their numbers change from run to run. */
   volatile?: string[]
   /** Needs the administrator account. */
   admin?: boolean
@@ -44,7 +44,7 @@ const go = (path: string | ((e: Env) => string), ready: string) => async (page: 
 }
 
 export const SCREENS: Screen[] = [
-  { id: 'projects', open: go('/', '.projects-head'), volatile: ['.project-grid', '.state-box'] },
+  { id: 'projects', open: go('/', '.projects-head') },
   {
     id: 'settings',
     open: async (page, env) => {
@@ -66,13 +66,11 @@ export const SCREENS: Screen[] = [
   {
     id: 'admin-users',
     open: go('/admin/users', '.admin-page'),
-    volatile: ['.table-wrap', '.state-box'],
     admin: true,
   },
   {
     id: 'admin-roles',
     open: go('/admin/roles', '.admin-page'),
-    volatile: ['.role-list', '.state-box'],
     admin: true,
   },
   { id: 'admin-system', open: go('/admin/system', '.admin-page'), volatile: ['.admin-page'], admin: true },

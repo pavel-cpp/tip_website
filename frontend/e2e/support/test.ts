@@ -104,3 +104,9 @@ export const test = base.extend<Fixtures>({
     })
   },
 })
+
+/**
+ * The server throttles failed logins to 20 per IP per 15 minutes, and every browser project shares one
+ * IP. Tests that provoke failed logins therefore run on two projects only.
+ */
+export const FAILED_LOGIN_PROJECTS = ['chromium-desktop', 'webkit-desktop']

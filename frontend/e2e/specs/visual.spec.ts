@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { Api } from '../support/api'
 import { LoginPage } from '../support/pages'
 import { enter, type Locale, SCREENS, snapshotProject, type Theme } from '../support/screens'
@@ -6,6 +7,8 @@ import { expect, seedPrefs, test } from '../support/test'
 // Screenshot regression. Only Chromium and the iPhone profile are compared (a few MB in total);
 // the other browsers are covered by the behavioural specs. Regions whose content depends on other
 // tests running in parallel (project list, user table, role list, system numbers) are masked.
+// Collapses the lists that other tests fill in parallel (see volatile.css).
+const stylePath = fileURLToPath(new URL('../support/volatile.css', import.meta.url))
 const COMPARED = ['chromium-desktop', 'iphone-15']
 const LOCALES: Locale[] = ['ru', 'uz']
 const THEMES: Theme[] = ['dark', 'light']
@@ -23,7 +26,7 @@ test.describe('login screen', () => {
         const page = await ctx.newPage()
         await new LoginPage(page).open()
         await page.evaluate(() => document.fonts.ready)
-        await expect(page).toHaveScreenshot(`login-${locale}-${theme}.png`, { scale: 'css' })
+        await expect(page).toHaveScreenshot(`login-${locale}-${theme}.png`, { scale: 'css', stylePath })
       })
     }
   }
@@ -43,7 +46,11 @@ for (const screen of SCREENS) {
           await enter(page, user, locale, theme)
           await screen.open(page, { api: admin, projectId, locale })
           const mask = (screen.volatile ?? []).map((sel) => page.locator(sel))
-          await expect(page).toHaveScreenshot(`${screen.id}-${locale}-${theme}.png`, { scale: 'css', mask })
+          await expect(page).toHaveScreenshot(`${screen.id}-${locale}-${theme}.png`, {
+            scale: 'css',
+            mask,
+            stylePath,
+          })
         })
       }
     }
