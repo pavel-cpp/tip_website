@@ -4,7 +4,10 @@ import { expect, test } from '../support/test'
 
 const t = tr('ru')
 
-test('admin creates a role with cascading permissions and assigns it to a user', async ({ admin, signedIn }) => {
+test('admin creates a role with cascading permissions and assigns it to a user', async ({
+  admin,
+  signedIn,
+}) => {
   const page = await signedIn(adminCreds())
   const roleName = uniq('Printer ')
   const user = await admin.createUser({ displayName: uniq('Assignee ') })
@@ -37,7 +40,9 @@ test('admin creates a role with cascading permissions and assigns it to a user',
   await expect(page.getByRole('row', { name: new RegExp(user.login) }).getByText(roleName)).toBeVisible()
   const roles = await admin.roles()
   const created = roles.find((r) => r.name === roleName)
-  expect(created?.permissions).toEqual(expect.arrayContaining(['participant.print', 'participant.view', 'project.view']))
+  expect(created?.permissions).toEqual(
+    expect.arrayContaining(['participant.print', 'participant.view', 'project.view']),
+  )
 })
 
 test('a worker sees no admin entries and is refused on admin routes', async ({ admin, signedIn }) => {

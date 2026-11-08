@@ -20,14 +20,17 @@ export class WorkspacePage {
 
   /** On phones the panels are tabs; make sure the table is the visible one. */
   async showTable(): Promise<void> {
+    // The toolbar is rendered together with the tabs, so once it is there the layout mode is known.
+    await this.page.getByRole('toolbar', { name: this.t('workspace.toolbar') }).waitFor()
     const tab = this.page.getByRole('tab', { name: this.t('workspace.panel.db') })
-    if (await tab.isVisible().catch(() => false)) await tab.click()
+    if (await tab.isVisible()) await tab.click()
     await this.grid.waitFor()
   }
 
   async showPicture(): Promise<void> {
+    await this.page.getByRole('toolbar', { name: this.t('workspace.toolbar') }).waitFor()
     const tab = this.page.getByRole('tab', { name: this.t('workspace.panel.picture') })
-    if (await tab.isVisible().catch(() => false)) await tab.click()
+    if (await tab.isVisible()) await tab.click()
   }
 
   get grid(): Locator {

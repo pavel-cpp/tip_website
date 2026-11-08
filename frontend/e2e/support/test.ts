@@ -13,8 +13,27 @@ interface Fixtures {
   freshContext: () => Promise<BrowserContext>
 }
 
+/**
+ * WebKit refuses to store a Secure cookie received over plain HTTP, even from localhost, which would make
+ * every reload look signed out. Production runs behind HTTPS, so the test stack drops the Secure flag
+ * for WebKit only; nothing else about the cookie changes.
+ */
+export async function relaxSecureCookie(ctx: BrowserContext): Promise<void> {
+  await ctx.route('**/api/v1/auth/**', async (route) => {
+    const response = await route.fetch()
+    const headers = { ...response.headers() }
+    const cookie = headers['set-cookie']
+    if (cookie) headers['set-cookie'] = cookie.replace(/;\s*Secure/gi, '')
+    await route.fulfill({ response, headers })
+  })
+}
+
 /** Seeds the device preferences so the very first paint is deterministic. */
-export async function seedPrefs(ctx: BrowserContext, locale: 'ru' | 'uz', theme: 'dark' | 'light'): Promise<void> {
+export async function seedPrefs(
+  ctx: BrowserContext,
+  locale: 'ru' | 'uz',
+  theme: 'dark' | 'light',
+): Promise<void> {
   await ctx.addInitScript(
     ([l, th]) => {
       try {
@@ -29,14 +48,31 @@ export async function seedPrefs(ctx: BrowserContext, locale: 'ru' | 'uz', theme:
 }
 
 export const test = base.extend<Fixtures>({
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires object destructuring in fixtures
   baseURL: async ({}, use) => {
     await use(baseUrl())
   },
+  // biome-ignore lint/correctness/noEmptyPattern: Playwright requires object destructuring in fixtures
   admin: async ({}, use) => {
     await use(await Api.admin())
   },
+  context: async ({ context, browserName }, use) => {
+    if (browserName === 'webkit') await relaxSecureCookie(context)
+    await use(context)
+  },
   freshContext: async (
-    { browser, viewport, userAgent, deviceScaleFactor, isMobile, hasTouch, locale, timezoneId, reducedMotion },
+    {
+      browser,
+      browserName,
+      viewport,
+      userAgent,
+      deviceScaleFactor,
+      isMobile,
+      hasTouch,
+      locale,
+      timezoneId,
+      reducedMotion,
+    },
     use,
   ) => {
     const contexts: BrowserContext[] = []
@@ -52,6 +88,7 @@ export const test = base.extend<Fixtures>({
         timezoneId,
         reducedMotion,
       })
+      if (browserName === 'webkit') await relaxSecureCookie(ctx)
       contexts.push(ctx)
       return ctx
     })

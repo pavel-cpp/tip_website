@@ -41,7 +41,9 @@ test('print page splits 22 tickets into two A4 sheets of 21 and 1', async ({ adm
 
   // The print button is the explicit path (iOS) and opens the dialog.
   await page.getByRole('button', { name: ws.t('workspace.print.button') }).click()
-  await expect.poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints)).toBeGreaterThan(0)
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints))
+    .toBeGreaterThan(0)
 })
 
 // BUG Q1-1: the print layout is injected as an inline <style> element (Print.tsx, printCss()), but the

@@ -23,7 +23,11 @@ export const ADMIN_PASSWORD = 'e2e-admin-password-1'
 const isWin = process.platform === 'win32'
 const npm = isWin ? 'npm.cmd' : 'npm'
 
-function sh(cmd: string, args: string[], opts: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string } = {}): string {
+function sh(
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv; input?: string } = {},
+): string {
   return execFileSync(cmd, args, {
     cwd: opts.cwd,
     env: opts.env ?? process.env,
@@ -109,12 +113,34 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     if (server) killTree(server)
     if (redisUsed) {
       try {
-        compose('exec', '-T', 'redis', 'redis-cli', '-a', redisPassword, '--no-auth-warning', '-n', String(redisDb), 'FLUSHDB')
+        compose(
+          'exec',
+          '-T',
+          'redis',
+          'redis-cli',
+          '-a',
+          redisPassword,
+          '--no-auth-warning',
+          '-n',
+          String(redisDb),
+          'FLUSHDB',
+        )
       } catch {}
     }
     if (dbCreated) {
       try {
-        compose('exec', '-T', 'postgres', 'psql', '-U', pgUser, '-d', 'postgres', '-c', `DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`)
+        compose(
+          'exec',
+          '-T',
+          'postgres',
+          'psql',
+          '-U',
+          pgUser,
+          '-d',
+          'postgres',
+          '-c',
+          `DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`,
+        )
       } catch {}
     }
     cleanEmbedDir()
@@ -141,13 +167,25 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     // The binary embeds the SPA at compile time, so the copy is not needed any more.
     cleanEmbedDir()
 
-    compose('exec', '-T', 'postgres', 'psql', '-U', pgUser, '-d', 'postgres', '-c', `CREATE DATABASE ${dbName}`)
+    compose(
+      'exec',
+      '-T',
+      'postgres',
+      'psql',
+      '-U',
+      pgUser,
+      '-d',
+      'postgres',
+      '-c',
+      `CREATE DATABASE ${dbName}`,
+    )
     dbCreated = true
     redisUsed = true
 
     const port = await freePort()
     const internalPort = await freePort()
-    const baseUrl = `http://127.0.0.1:${port}`
+    // "localhost" rather than 127.0.0.1: WebKit only accepts the Secure refresh cookie on a localhost origin.
+    const baseUrl = `http://localhost:${port}`
     const dataDir = path.join(work, 'data')
     mkdirSync(dataDir, { recursive: true })
     server = spawn(bin, ['serve'], {

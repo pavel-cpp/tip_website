@@ -76,6 +76,13 @@ tasks:
     cmds:
       - npm run typecheck
 
+  e2e:
+    desc: Browser end-to-end and visual tests (Playwright). Starts Postgres/Redis, builds the SPA and tipd; pass extra flags after --, e.g. `task e2e -- --headed --project=chromium-desktop`
+    dir: frontend
+    cmds:
+      - npx playwright install chromium firefox webkit
+      - npx playwright test {{.CLI_ARGS}}
+
   gen:
     desc: Generate API code from backend/api/openapi.yaml (Go DTOs + chi ServerInterface, then TypeScript types)
     cmds:

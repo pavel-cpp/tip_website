@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { adminCreds, uniq } from '../support/api'
-import { WorkspacePage } from '../support/workspace'
 import { expect, test } from '../support/test'
+import { WorkspacePage } from '../support/workspace'
 
 const people = [
   { name: 'Alisher Karimov', phone: '+998901112233' },
@@ -52,7 +52,9 @@ test('paste spreadsheet rows', async ({ admin, signedIn }) => {
   await expect(ws.rowByText('Pasted One')).toHaveCount(1)
   await expect(ws.rowByText('Pasted Two')).toHaveCount(1)
   await expect
-    .poll(async () => (await admin.participants(project.id)).filter((p) => p.name.startsWith('Pasted')).length)
+    .poll(
+      async () => (await admin.participants(project.id)).filter((p) => p.name.startsWith('Pasted')).length,
+    )
     .toBe(2)
 })
 
@@ -100,8 +102,12 @@ test('import: dry run previews the file, confirming adds the rows', async ({ adm
   await ws.button('workspace.import').click()
   const dialog = page.getByRole('dialog', { name: ws.t('workspace.import.title') })
   const csv = 'name,phone\nImported A,+998907770001\nImported B,+998907770002\n'
-  await dialog.getByTestId('import-file').setInputFiles({ name: 'people.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
-  await expect(dialog.getByText(ws.t('workspace.import.summary', { total: 2, valid: 2, errors: 0 }))).toBeVisible()
+  await dialog
+    .getByTestId('import-file')
+    .setInputFiles({ name: 'people.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) })
+  await expect(
+    dialog.getByText(ws.t('workspace.import.summary', { total: 2, valid: 2, errors: 0 })),
+  ).toBeVisible()
   // Nothing has been written yet.
   expect(await admin.participants(project.id)).toHaveLength(1)
   await dialog.getByRole('button', { name: ws.t('workspace.import.confirm', { count: 2 }) }).click()

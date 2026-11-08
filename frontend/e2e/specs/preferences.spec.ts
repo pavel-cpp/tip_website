@@ -7,7 +7,10 @@ test('the dark theme and Russian are the defaults', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru')
 })
 
-test('profile controls store language and theme on the server and survive a reload', async ({ admin, signedIn }) => {
+test('profile controls store language and theme on the server and survive a reload', async ({
+  admin,
+  signedIn,
+}) => {
   const user = await admin.createReadyUser()
   const page = await signedIn(user)
   await page.goto('/profile')
@@ -50,7 +53,9 @@ test('top bar language switch persists across reload for a signed-in user', asyn
   await expect.poll(() => htmlLang(page)).toBe('uz')
 })
 
-test('top bar theme and language switch apply immediately and persist for an anonymous visitor', async ({ page }) => {
+test('top bar theme and language switch apply immediately and persist for an anonymous visitor', async ({
+  page,
+}) => {
   await page.goto('/login')
   const bar = new Topbar(page)
   await bar.chooseTheme('light')

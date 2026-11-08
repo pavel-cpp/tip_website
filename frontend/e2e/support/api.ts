@@ -86,7 +86,8 @@ export class Api {
       body: JSON.stringify(creds),
     })
     const body = (await res.json()) as { accessToken?: string; user?: ApiUser }
-    if (!res.ok || !body.accessToken || !body.user) throw new Error(`login failed for ${creds.login}: ${res.status}`)
+    if (!res.ok || !body.accessToken || !body.user)
+      throw new Error(`login failed for ${creds.login}: ${res.status}`)
     return new Api(body.accessToken, body.user, creds)
   }
 
@@ -139,7 +140,15 @@ export class Api {
   }
 
   /** Creates a user and replaces the temporary password so the first UI login shows no prompt. */
-  async createReadyUser(opts: { login?: string; displayName?: string; roleIds?: string[]; locale?: 'ru' | 'uz'; theme?: 'dark' | 'light' } = {}): Promise<Creds & { id: string; displayName: string }> {
+  async createReadyUser(
+    opts: {
+      login?: string
+      displayName?: string
+      roleIds?: string[]
+      locale?: 'ru' | 'uz'
+      theme?: 'dark' | 'light'
+    } = {},
+  ): Promise<Creds & { id: string; displayName: string }> {
     const u = await this.createUser(opts)
     const password = `pw-${uniq('x')}-long`
     const session = await Api.login({ login: u.login, password: u.tempPassword })
@@ -163,7 +172,12 @@ export class Api {
   }
 
   async createRole(permissions: string[], name = uniq('role')): Promise<ApiRole> {
-    return this.call('POST', '/admin/roles', { name, description: 'e2e', permissions })
+    const res = await this.call<ApiRole | { role: ApiRole }>('POST', '/admin/roles', {
+      name,
+      description: 'e2e',
+      permissions,
+    })
+    return 'role' in res ? res.role : res
   }
 
   async setUserRoles(userId: string, roleIds: string[]): Promise<void> {
@@ -182,23 +196,37 @@ export class Api {
 
   async uploadImage(projectId: string, width = 700, height = 400): Promise<ApiProject> {
     const form = new FormData()
-    form.append('file', new Blob([new Uint8Array(makePng(width, height))], { type: 'image/png' }), 'ticket.png')
-    return (await this.call<{ project: ApiProject }>('PUT', `/projects/${projectId}/image`, undefined, form)).project
+    form.append(
+      'file',
+      new Blob([new Uint8Array(makePng(width, height))], { type: 'image/png' }),
+      'ticket.png',
+    )
+    return (await this.call<{ project: ApiProject }>('PUT', `/projects/${projectId}/image`, undefined, form))
+      .project
   }
 
   async finishProject(projectId: string): Promise<void> {
     await this.call('POST', `/projects/${projectId}/finish`)
   }
 
-  async addParticipants(projectId: string, items: { name: string; phone: string }[]): Promise<ApiParticipant[]> {
-    return (await this.call<{ items: ApiParticipant[] }>('POST', `/projects/${projectId}/participants`, { items })).items
+  async addParticipants(
+    projectId: string,
+    items: { name: string; phone: string }[],
+  ): Promise<ApiParticipant[]> {
+    return (
+      await this.call<{ items: ApiParticipant[] }>('POST', `/projects/${projectId}/participants`, { items })
+    ).items
   }
 
   async participants(projectId: string): Promise<ApiParticipant[]> {
     return (await this.call<{ items: ApiParticipant[] }>('GET', `/projects/${projectId}/participants`)).items
   }
 
-  async updateParticipant(id: string, version: number, patch: { name?: string; phone?: string }): Promise<void> {
+  async updateParticipant(
+    id: string,
+    version: number,
+    patch: { name?: string; phone?: string },
+  ): Promise<void> {
     await this.call('PATCH', `/participants/${id}`, { version, ...patch })
   }
 }

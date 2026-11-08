@@ -4,7 +4,10 @@ import { expect, test } from '../support/test'
 
 const t = tr('ru')
 
-test('admin creates a user, the temporary password prompts a change on first login', async ({ signedIn, freshContext }) => {
+test('admin creates a user, the temporary password prompts a change on first login', async ({
+  signedIn,
+  freshContext,
+}) => {
   const admin = await signedIn(adminCreds())
   const login = uniq('tmp')
   await admin.goto('/admin/users')

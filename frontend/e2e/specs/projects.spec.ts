@@ -1,6 +1,6 @@
 import { adminCreds, uniq } from '../support/api'
-import { makePng } from '../support/png'
 import { tr } from '../support/pages'
+import { makePng } from '../support/png'
 import { expect, test } from '../support/test'
 
 const t = tr('ru')
@@ -56,10 +56,9 @@ test('create a project, upload an image, drag a placeholder and save', async ({ 
   await expect(page.getByText(t('settings.saved'))).toBeVisible()
   await expect(save).toBeDisabled()
 
-  const saved = await admin.call<{ project: { title: string; placeholders: { name: { x: number; y: number } } } }>(
-    'GET',
-    `/projects/${projectId}`,
-  )
+  const saved = await admin.call<{
+    project: { title: string; placeholders: { name: { x: number; y: number } } }
+  }>('GET', `/projects/${projectId}`)
   expect(saved.project.title).toBe(`${title} v2`)
   expect(saved.project.placeholders.name.x).toBe(movedX)
   expect(saved.project.placeholders.name.y).toBe(movedY)
@@ -80,7 +79,10 @@ test('unsaved changes ask for confirmation before leaving', async ({ admin, sign
   await leave.getByRole('button', { name: t('settings.leave.stay') }).click()
   await expect(leave).toBeHidden()
   await page.getByRole('button', { name: t('action.close') }).click()
-  await page.getByRole('dialog', { name: t('settings.leave.title') }).getByRole('button', { name: t('settings.leave.leave') }).click()
+  await page
+    .getByRole('dialog', { name: t('settings.leave.title') })
+    .getByRole('button', { name: t('settings.leave.leave') })
+    .click()
   await expect(page).toHaveURL(/\/$/)
 })
 
@@ -97,7 +99,6 @@ test('finish, reopen and delete a project from the list', async ({ admin, signed
   await menuFor().click()
   await page.getByRole('menuitem', { name: t('projects.menu.reopen') }).click()
   await expect(page.getByRole('heading', { name: t('projects.active') })).toBeVisible()
-
 })
 
 // BUG Q1-2: DELETE /api/v1/projects/{id} answers 500 INTERNAL for every project (empty or with
