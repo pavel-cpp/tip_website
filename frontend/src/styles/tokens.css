@@ -10,7 +10,7 @@
  *   accent-text on bg / bg-elev ....................... >= 4.5
  *   accent-contrast on accent (primary button label) .. >= 4.5
  *   danger, ok on bg-elev (text and icons) ............ >= 4.5
- *   border-strong on bg-elev / bg-input (controls) .... >= 3     (light)
+ *   border-strong on bg / bg-elev / bg-input .......... >= 3     (dark and light; controls and cards)
  *   accent on bg-elev (focus ring, icons) ............. >= 3
  *   user-1..6 on bg-elev (outlines, cursors) .......... >= 3
  */
@@ -25,8 +25,9 @@
   --bg-input: #0e0f12;
   --bg-hover: #23252c;
   --bg-overlay: rgba(5, 6, 8, 0.65);
-  --border: #2b2d35;
-  --border-strong: #3a3d47;
+  --border: #2f323b;
+  /* Control and card outlines: 3.4:1 on bg-elev, 3.8:1 on bg-input (WCAG 1.4.11). */
+  --border-strong: #6a6f7f;
 
   --text: #e8e9ec;
   --text-muted: #8d919c;

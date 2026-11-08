@@ -60,6 +60,9 @@ func (r *AuditRepo) List(ctx context.Context, f domain.AuditFilter) ([]domain.Au
 	if f.ActorID != "" {
 		add("actor_id = ?::uuid", f.ActorID)
 	}
+	if f.Action != "" {
+		add("action = ?", f.Action)
+	}
 	query := `SELECT id, at, coalesce(actor_id::text, ''), actor_login, action,
 			coalesce(project_id::text, ''), coalesce(entity_id::text, ''), meta, coalesce(host(ip), '')
 		FROM audit_log`

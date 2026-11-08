@@ -69,6 +69,9 @@ func (h *AuditHandler) ListAudit(w http.ResponseWriter, r *http.Request, params 
 	if params.Actor != nil {
 		q.ActorID = params.Actor.String()
 	}
+	if params.Action != nil {
+		q.Action = *params.Action
+	}
 	page, err := h.svc.List(r.Context(), a, q)
 	if err != nil {
 		fail(w, r, err)

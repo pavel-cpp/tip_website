@@ -793,6 +793,14 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: action
+          in: query
+          description: Restrict to one dotted action name, for example `user.create`.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: "^[a-z0-9_.]+$"
       responses:
         "200":
           description: A page of audit entries.
@@ -2239,7 +2247,7 @@ components:
           format: uuid
         meta:
           type: object
-          description: Ids and numbers only, never names or phones.
+          description: Ids and numbers only, plus the target `login` of account actions; never display names or phones.
           additionalProperties: true
         ip:
           type: [string, "null"]

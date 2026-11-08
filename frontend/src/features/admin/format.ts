@@ -1,16 +1,3 @@
-const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
-
-/** Splits a byte count into a value (1 decimal at most) and a unit code for the dictionary. */
-export function splitBytes(bytes: number): { value: number; unit: (typeof UNITS)[number] } {
-  let value = Math.max(0, bytes)
-  let i = 0
-  while (value >= 1024 && i < UNITS.length - 1) {
-    value /= 1024
-    i++
-  }
-  return { value: Math.round(value * 10) / 10, unit: UNITS[i] as (typeof UNITS)[number] }
-}
-
 /** Splits seconds of uptime into whole days, hours and minutes. */
 export function splitUptime(seconds: number): { d: number; h: number; m: number } {
   const total = Math.max(0, Math.floor(seconds))

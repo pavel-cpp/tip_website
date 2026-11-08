@@ -55,13 +55,11 @@ describe.each(Object.entries(themes))('%s theme contrast (WCAG AA)', (_name, tok
   )
 })
 
-it('light theme borders of controls reach 3:1', () => {
-  expect(
-    ratio(themes.light['border-strong'] as string, themes.light['bg-elev'] as string),
-  ).toBeGreaterThanOrEqual(3)
-  expect(
-    ratio(themes.light['border-strong'] as string, themes.light['bg-input'] as string),
-  ).toBeGreaterThanOrEqual(3)
+describe.each(Object.entries(themes))('%s theme outlines (WCAG 1.4.11)', (_name, tokens) => {
+  // Field, secondary button and card borders must be visible against what they sit on.
+  it.each(['bg', 'bg-elev', 'bg-input'])('border-strong on %s >= 3', (bg) => {
+    expect(ratio(tokens['border-strong'] as string, tokens[bg] as string)).toBeGreaterThanOrEqual(3)
+  })
 })
 
 it('both themes define the same colour tokens', () => {
