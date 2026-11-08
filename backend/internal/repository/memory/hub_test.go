@@ -577,8 +577,10 @@ func TestRateLimiter(t *testing.T) {
 		t.Fatal("21st message in the same instant must be denied")
 	}
 	h.clock.Advance(100 * time.Millisecond) // 2 tokens
-	if !a.Allow() || !a.Allow() {
-		t.Fatal("tokens must refill with time")
+	for i := 0; i < 2; i++ {
+		if !a.Allow() {
+			t.Fatal("tokens must refill with time")
+		}
 	}
 	if a.Allow() {
 		t.Fatal("only two tokens were refilled")
