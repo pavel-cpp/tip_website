@@ -4,6 +4,7 @@ version: "3"
 
 vars:
   DEV_COMPOSE: deploy/docker-compose.dev.yml
+  LOCAL_COMPOSE: deploy/docker-compose.local.yml
 
 tasks:
   dev:up:
@@ -15,6 +16,21 @@ tasks:
     desc: Stop the development services (data volumes are kept)
     cmds:
       - docker compose -f {{.DEV_COMPOSE}} down
+
+  local:up:
+    desc: Build and start the whole app in Docker (tipd + Postgres + Redis) on http://localhost:8080
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} up -d --build --wait
+
+  local:down:
+    desc: Stop the local Docker stack; pass -- -v to also delete its data
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} down {{.CLI_ARGS}}
+
+  local:logs:
+    desc: Follow the tipd logs of the local Docker stack
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} logs -f tipd
 
   backend:build:
     desc: Build the tipd binary into backend/bin

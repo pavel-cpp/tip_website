@@ -64,3 +64,5 @@ ENV DATA_DIR=/data HTTP_ADDR=:8080 INTERNAL_ADDR=:9090
 USER 65532:65532
 EXPOSE 8080 9090
 ENTRYPOINT ["/tipd"]
+# The binary needs a subcommand; `docker run ... migrate` or `admin ...` override this default.
+CMD ["serve"]

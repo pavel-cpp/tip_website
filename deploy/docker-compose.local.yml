@@ -1,0 +1,101 @@
+# Whole application in Docker on a developer machine: tipd (with the embedded SPA), Postgres and Redis.
+# No Caddy, no observability stack and no memory limits; for the production stack see docker-compose.prod.yml.
+#
+#   docker compose -f deploy/docker-compose.local.yml up -d --build
+#   open http://localhost:8080   (login: admin / admin-dev-password)
+#
+# Every value has a development default, so no env file is required. Override any of them by exporting
+# the variable or passing --env-file. Data survives restarts in named volumes; remove it with
+#   docker compose -f deploy/docker-compose.local.yml down -v
+name: tip-local
+
+services:
+  tipd:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: tip/tipd:local
+    restart: unless-stopped
+    environment:
+      HTTP_ADDR: ":8080"
+      INTERNAL_ADDR: ":9090"
+      DATA_DIR: /data
+      DATABASE_URL: postgres://${POSTGRES_USER:-tip}:${POSTGRES_PASSWORD:-tip_dev_password}@postgres:5432/${POSTGRES_DB:-tip}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379/0
+      REDIS_FAIL_MODE: open
+      AUTO_MIGRATE: "true"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me-0123456789abcdef}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me-fedcba9876543210}
+      PASSWORD_PEPPER: ${PASSWORD_PEPPER:-dev-password-pepper-change-me-0123456789abcdef}
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 720h
+      FORCE_PASSWORD_CHANGE: "false"
+      BOOTSTRAP_ADMIN_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-admin}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin-dev-password}
+      SWAGGER_ENABLED: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      LOKI_URL: "off"
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
+      # Metrics and probes; reachable from the host only.
+      - "127.0.0.1:${INTERNAL_PORT:-9090}:9090"
+    volumes:
+      - uploads:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Distroless has no shell or wget, so the probe is a subcommand of the binary itself.
+    healthcheck:
+      test: ["CMD", "/tipd", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tip}
+      POSTGRES_USER: ${POSTGRES_USER:-tip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tip_dev_password}
+    command: ["postgres", "-c", "max_connections=20", "-c", "shared_buffers=32MB"]
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Tokens must survive restarts and must never be evicted (docs/02-architecture.md, section 4.1).
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:-redis_dev_password}
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redisdata:/data
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
