@@ -84,6 +84,7 @@ func TestLoadErrors(t *testing.T) {
 		{"half bootstrap", func(e map[string]string) { e["BOOTSTRAP_ADMIN_LOGIN"] = "root" }, "must be set together"},
 		{"bad db scheme", func(e map[string]string) { e["DATABASE_URL"] = "mysql://x" }, "DATABASE_URL must be"},
 		{"bad redis scheme", func(e map[string]string) { e["REDIS_URL"] = "http://x" }, "REDIS_URL must be"},
+		{"bad grafana url", func(e map[string]string) { e["GRAFANA_URL"] = "grafana.local" }, "GRAFANA_URL must be an absolute"},
 		{"retention too long", func(e map[string]string) { e["OBS_RETENTION_DAYS"] = "9" }, "OBS_RETENTION_DAYS"},
 	}
 	for _, tt := range tests {
@@ -112,5 +113,18 @@ func TestSecretsAreRedacted(t *testing.T) {
 	}
 	if c.JWTAccessSecret.Reveal() != secA {
 		t.Error("Reveal must return the raw value")
+	}
+}
+
+func TestGrafanaURLOptional(t *testing.T) {
+	cfg, err := load(baseEnv())
+	if err != nil || cfg.GrafanaURL != "" {
+		t.Fatalf("default: %q, %v", cfg.GrafanaURL, err)
+	}
+	env := baseEnv()
+	env["GRAFANA_URL"] = "https://grafana.example.com/"
+	cfg, err = load(env)
+	if err != nil || cfg.GrafanaURL != "https://grafana.example.com/" {
+		t.Fatalf("configured: %q, %v", cfg.GrafanaURL, err)
 	}
 }

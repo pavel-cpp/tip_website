@@ -1002,6 +1002,16 @@ export interface components {
                 auditDays: number;
             };
             checks: components["schemas"]["SystemCheck"][];
+            /** @description Operator tools reachable from the admin menu; a key is absent when the tool is disabled or not configured. */
+            links?: {
+                /** @description Path of the API documentation, for example /api/docs. */
+                swagger?: string;
+                /**
+                 * Format: uri
+                 * @description Public Grafana address (GRAFANA_URL).
+                 */
+                grafana?: string;
+            };
         };
         /** @enum {string} */
         ProjectStatus: "active" | "finished";

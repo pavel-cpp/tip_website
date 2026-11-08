@@ -51,9 +51,30 @@ func systemStatusToResponse(st service.SystemStatus) gen.SystemStatus {
 	out.Disk.Free, out.Disk.Total = st.DiskFree, st.DiskTotal
 	out.Retention.ObsDays, out.Retention.AuditDays = st.ObsDays, st.AuditDays
 	out.Uploads.SizeBytes = st.UploadsBytes
+	if st.SwaggerPath != "" {
+		out.Links = linksOf(out.Links)
+		out.Links.Swagger = &st.SwaggerPath
+	}
+	if st.GrafanaURL != "" {
+		out.Links = linksOf(out.Links)
+		out.Links.Grafana = &st.GrafanaURL
+	}
 	out.Checks = make([]gen.SystemCheck, len(st.Checks))
 	for i, c := range st.Checks {
 		out.Checks[i] = gen.SystemCheck{Name: c.Name, Status: gen.SystemCheckStatus(c.Status), Detail: c.Detail}
 	}
 	return out
+}
+
+// systemLinks is the anonymous links object of the generated SystemStatus.
+type systemLinks = struct {
+	Grafana *string `json:"grafana,omitempty"`
+	Swagger *string `json:"swagger,omitempty"`
+}
+
+func linksOf(l *systemLinks) *systemLinks {
+	if l == nil {
+		return &systemLinks{}
+	}
+	return l
 }

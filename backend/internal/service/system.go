@@ -23,6 +23,9 @@ type SystemConfig struct {
 	DataDir            string
 	ObsRetentionDays   int
 	AuditRetentionDays int
+	// SwaggerEnabled and GrafanaURL decide which tool links the status carries.
+	SwaggerEnabled bool
+	GrafanaURL     string
 }
 
 // PoolStats are database connection pool counters.
@@ -42,6 +45,9 @@ type SystemStatus struct {
 	ObsDays      int
 	AuditDays    int
 	Checks       []NamedCheckResult
+	// SwaggerPath is the API docs path, empty when Swagger is disabled; GrafanaURL is empty when unset.
+	SwaggerPath string
+	GrafanaURL  string
 }
 
 // SystemService assembles the system status from probes and health checks.
@@ -72,10 +78,14 @@ func (s *SystemService) Status(ctx context.Context, actor domain.Actor) (SystemS
 		return SystemStatus{}, err
 	}
 	st := SystemStatus{
-		Version:   s.cfg.Version,
-		Uptime:    max(s.clock.Now().Sub(s.started), 0).Truncate(secondsPerDuration),
-		ObsDays:   s.cfg.ObsRetentionDays,
-		AuditDays: s.cfg.AuditRetentionDays,
+		Version:    s.cfg.Version,
+		Uptime:     max(s.clock.Now().Sub(s.started), 0).Truncate(secondsPerDuration),
+		ObsDays:    s.cfg.ObsRetentionDays,
+		AuditDays:  s.cfg.AuditRetentionDays,
+		GrafanaURL: s.cfg.GrafanaURL,
+	}
+	if s.cfg.SwaggerEnabled {
+		st.SwaggerPath = "/api/docs"
 	}
 	st.Pool.Open, st.Pool.InUse, st.Pool.Idle, st.Pool.MaxOpen = s.db.Pool()
 

@@ -103,7 +103,7 @@
 | Метод и путь | Тело → ответ |
 |---|---|
 | `GET /admin/audit?limit=50&before=<id>&projectId=&actor=` | (`audit.view`) → `{items:[…], next}` (в т.ч. `role.create/update/delete`, `user.roles.set` с добавленными/снятыми правами) |
-| `GET /admin/system` | (`system.view`) → `{version, uptime, db:{sizeBytes, pool}, disk:{free, total}, retention:{obsDays, auditDays}, uploads:{sizeBytes}, checks:[{name, status, detail}]}` — «Состояние»: Postgres, Redis, диск, Loki, время последнего локального и внешнего бэкапа; проблемы показываются красной плашкой в админ-панели |
+| `GET /admin/system` | (`system.view`) → `{version, uptime, db:{sizeBytes, pool}, disk:{free, total}, retention:{obsDays, auditDays}, uploads:{sizeBytes}, links?:{swagger?, grafana?}, checks:[{name, status, detail}]}` — «Состояние»: Postgres, Redis, диск, Loki, время последнего локального и внешнего бэкапа; проблемы показываются красной плашкой в админ-панели |
 
 ## 4. Проекты
 

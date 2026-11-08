@@ -62,6 +62,8 @@ type Config struct {
 	RedisFailMode       FailMode
 	ForcePasswordChange bool
 	SwaggerEnabled      bool
+	// GrafanaURL is the public Grafana address shown as a link in the admin menu; empty hides it.
+	GrafanaURL string
 
 	BootstrapAdminLogin    string
 	BootstrapAdminPassword Secret
@@ -115,6 +117,7 @@ func Load(getenv func(string) string) (Config, error) {
 		RedisFailMode:       FailMode(l.str("REDIS_FAIL_MODE", string(FailOpen))),
 		ForcePasswordChange: l.boolean("FORCE_PASSWORD_CHANGE", false),
 		SwaggerEnabled:      l.boolean("SWAGGER_ENABLED", true),
+		GrafanaURL:          l.optionalURL("GRAFANA_URL"),
 
 		BootstrapAdminLogin:    l.str("BOOTSTRAP_ADMIN_LOGIN", ""),
 		BootstrapAdminPassword: Secret(l.str("BOOTSTRAP_ADMIN_PASSWORD", "")),
@@ -258,4 +261,18 @@ func (l *loader) positiveInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// optionalURL reads an absolute http(s) URL; an empty value means "not configured".
+func (l *loader) optionalURL(key string) string {
+	v := strings.TrimSpace(l.get(key))
+	if v == "" {
+		return ""
+	}
+	u, err := url.Parse(v)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		l.fail("%s must be an absolute http(s) URL", key)
+		return ""
+	}
+	return v
 }
