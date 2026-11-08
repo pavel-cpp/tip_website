@@ -1,0 +1,158 @@
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '../../components/Button'
+import { useI18n } from '../../i18n'
+import {
+  imageSize,
+  loadFonts,
+  renderTicket,
+  type TicketImage,
+  type TicketPlaceholders,
+} from '../../lib/ticket'
+import type { Participant } from './api'
+import { WsIcon } from './icons'
+import { ticketValues } from './ticketActions'
+
+export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
+const DEFAULT_ZOOM = 1
+
+export function nextZoom(current: number, dir: 1 | -1): number {
+  if (dir > 0) return ZOOM_STEPS.find((z) => z > current) ?? current
+  return [...ZOOM_STEPS].reverse().find((z) => z < current) ?? current
+}
+
+interface TicketPanelProps {
+  image: TicketImage | null
+  /** The project has an image but it is still downloading or decoding. */
+  imageLoading: boolean
+  hasProjectImage: boolean
+  placeholders: TicketPlaceholders | null
+  participant: Participant | null
+  /** Rendered into a second sibling element slot, e.g. a hint about the 7:4 aspect ratio. */
+  footer?: ReactNode
+}
+
+/**
+ * Draws the current participant on two stacked canvases. A new ticket is rendered into the hidden one
+ * and only swapped in (opacity cross-fade) when it is complete, so the old image never flickers away.
+ */
+export function TicketPanel({
+  image,
+  imageLoading,
+  hasProjectImage,
+  placeholders,
+  participant,
+  footer,
+}: TicketPanelProps) {
+  const { t, formatNumber } = useI18n()
+  const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
+  const [front, setFront] = useState<0 | 1>(0)
+  const [drawn, setDrawn] = useState(false)
+  const frontRef = useRef<0 | 1>(0)
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+
+  const values = useMemo(() => (participant ? ticketValues(participant) : null), [participant])
+  const { number, name, phone } = values ?? { number: '', name: '', phone: '' }
+  const size = image ? imageSize(image) : null
+
+  useEffect(() => {
+    if (!image || !placeholders || !values) {
+      setDrawn(false)
+      return
+    }
+    let live = true
+    void loadFonts(placeholders).then(() => {
+      if (!live) return
+      requestAnimationFrame(() => {
+        const back = canvases[frontRef.current === 0 ? 1 : 0]?.current
+        if (!live || !back) return
+        renderTicket(back, image, placeholders, { number, name, phone })
+        frontRef.current = frontRef.current === 0 ? 1 : 0
+        setFront(frontRef.current)
+        setDrawn(true)
+      })
+    })
+    return () => {
+      live = false
+    }
+    // `values` is derived from the primitives below; canvases are stable refs.
+  }, [image, placeholders, number, name, phone, values === null])
+
+  if (!hasProjectImage) {
+    return (
+      <div className="tk-empty" role="status">
+        <WsIcon name="image" size={36} />
+        <p>{t('workspace.ticket.noImage')}</p>
+        <p className="muted">{t('workspace.ticket.noImageHint')}</p>
+      </div>
+    )
+  }
+
+  const empty = !participant
+  return (
+    <div className="tk">
+      {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add default borders to a toolbar group */}
+      <div className="tk-zoom" role="group" aria-label={t('workspace.zoom.label')}>
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          aria-label={t('workspace.zoom.out')}
+          disabled={zoom <= ZOOM_STEPS[0]}
+          onClick={() => setZoom((z) => nextZoom(z, -1))}
+        >
+          <WsIcon name="zoomOut" size={18} />
+        </Button>
+        <button
+          type="button"
+          className="tk-zoom-value"
+          title={t('workspace.zoom.reset')}
+          aria-label={t('workspace.zoom.reset')}
+          onClick={() => setZoom(DEFAULT_ZOOM)}
+        >
+          {formatNumber(Math.round(zoom * 100))}%
+        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          iconOnly
+          aria-label={t('workspace.zoom.in')}
+          disabled={zoom >= (ZOOM_STEPS[ZOOM_STEPS.length - 1] ?? 3)}
+          onClick={() => setZoom((z) => nextZoom(z, 1))}
+        >
+          <WsIcon name="zoomIn" size={18} />
+        </Button>
+      </div>
+
+      <div className="tk-viewport">
+        <div
+          className="tk-stage"
+          data-ready={drawn || undefined}
+          style={{ '--zoom': zoom, '--aspect': size ? size.w / size.h : 7 / 4 } as CSSProperties}
+        >
+          {[0, 1].map((i) => (
+            <canvas
+              key={i}
+              ref={canvases[i]}
+              className="tk-canvas"
+              data-front={front === i || undefined}
+              role={front === i ? 'img' : undefined}
+              aria-hidden={front === i ? undefined : true}
+              aria-label={
+                participant
+                  ? t('workspace.ticket.alt', { number: participant.number, name: participant.name })
+                  : undefined
+              }
+            />
+          ))}
+          {(imageLoading || (!drawn && !empty)) && <div className="tk-loading skeleton" aria-hidden="true" />}
+        </div>
+        {empty && (
+          <p className="tk-note muted" role="status">
+            {t('workspace.ticket.noRows')}
+          </p>
+        )}
+      </div>
+      {footer}
+    </div>
+  )
+}

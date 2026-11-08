@@ -1,0 +1,677 @@
+/* Workspace. Motion uses transform/opacity only (grid-template-columns on the panel grid is the one deliberate exception, see docs/06-frontend.md 10.3). */
+.ws {
+  --ws-pad: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  height: calc(100dvh - var(--topbar-h) - 2 * var(--ws-pad));
+  min-height: 480px;
+}
+.ws-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.ws-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: var(--fs-sm);
+}
+.ws-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ws-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 6px var(--space-1);
+  background: var(--border);
+}
+.ws-hint {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ws-hint kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-elev);
+  font: inherit;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.ws-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+}
+.ws-progress-bar,
+.print-progress {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.ws-progress-bar span {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.ws-skeleton {
+  display: grid;
+  gap: var(--space-3);
+}
+.ws-none {
+  grid-column: 1 / -1;
+  padding: var(--space-8);
+  text-align: center;
+}
+.state-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* Panel grid: a hidden panel collapses to 0fr while fading out. */
+.ws-grid {
+  --cols: 1.15fr 1fr;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--cols);
+  gap: var(--space-4);
+  transition:
+    grid-template-columns var(--dur-slow) var(--ease-standard),
+    gap var(--dur-slow) var(--ease-standard);
+}
+.ws-grid[data-picture="off"] {
+  --cols: 0fr 1fr;
+  gap: 0;
+}
+.ws-grid[data-db="off"] {
+  --cols: 1fr 0fr;
+  gap: 0;
+}
+.ws-grid[data-picture="off"][data-db="off"] {
+  --cols: 1fr;
+}
+.ws-slot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  transition:
+    opacity var(--dur-base) var(--ease-standard),
+    visibility 0s linear 0s;
+}
+.ws-slot[inert] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    visibility 0s linear var(--dur-slow);
+}
+.ws-panel {
+  flex: 1;
+  min-width: 0;
+}
+.ws-panel .panel-body {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.ws-panel-actions {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+@media (max-width: 1099px) {
+  .ws-grid {
+    --cols: 1fr;
+    --rows: 1fr 1fr;
+    grid-template-columns: var(--cols);
+    grid-template-rows: var(--rows);
+    transition:
+      grid-template-rows var(--dur-slow) var(--ease-standard),
+      gap var(--dur-slow) var(--ease-standard);
+  }
+  .ws-grid[data-picture="off"] {
+    --cols: 1fr;
+    --rows: 0fr 1fr;
+  }
+  .ws-grid[data-db="off"] {
+    --cols: 1fr;
+    --rows: 1fr 0fr;
+  }
+  .ws-grid[data-picture="off"][data-db="off"] {
+    --rows: 1fr;
+  }
+}
+
+@media (max-width: 699px) {
+  .ws {
+    --ws-pad: var(--space-4);
+    height: calc(100dvh - var(--topbar-h) - 2 * var(--ws-pad));
+  }
+  .ws-grid {
+    --rows: 1fr;
+    grid-template-rows: 1fr;
+    gap: 0;
+    transition: none;
+  }
+  .ws-grid[data-picture="off"],
+  .ws-grid[data-db="off"] {
+    --rows: 1fr;
+  }
+  .ws-slot[inert] {
+    display: none;
+  }
+  /* Phone: the toolbar becomes a bottom bar above the safe area. */
+  .ws-toolbar {
+    order: 99;
+    justify-content: space-between;
+    padding-bottom: var(--safe-bottom);
+  }
+  .ws-hint {
+    display: none;
+  }
+  .ws-panel-actions {
+    display: none;
+  }
+}
+
+/* ---------- participants table ---------- */
+.pt {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.pt-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+.pt-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+.pt-search {
+  flex: 1;
+  min-width: 180px;
+}
+.pt-grid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  border-top: 1px solid var(--border);
+}
+.pt-grid:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pt-head,
+.pt-row-inner {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: center;
+}
+.pt-head {
+  flex: none;
+  height: 40px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.pt-hcell {
+  padding: 0 12px;
+}
+.pt-hcell-num {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pt-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.pt-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 96px;
+}
+.pt-sizer {
+  position: relative;
+  width: 100%;
+}
+.pt-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  /* Neighbours slide into place when a row is inserted or removed. */
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.pt-row-inner {
+  position: relative;
+  height: 100%;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-md);
+}
+.pt-row[data-selected] .pt-row-inner {
+  background: var(--accent-soft);
+}
+@media (hover: hover) {
+  .pt-row:not([data-selected]):hover .pt-row-inner {
+    background: var(--bg-hover);
+  }
+}
+.pt-row[data-current] .pt-row-inner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.pt-row[data-conflict] .pt-row-inner {
+  box-shadow: inset 0 0 0 2px var(--danger);
+  border-radius: 10px;
+}
+.pt-cell {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  padding: 0 12px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.pt-cell[data-active] {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: 6px;
+}
+.pt-grid:not(:focus-within) .pt-cell[data-active] {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.pt-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pt-text[data-mono] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pt-cell[data-col-name="number"] {
+  color: var(--text-muted);
+}
+.pt-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  outline: none;
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  /* 16px keeps iOS from zooming the page when the field is focused. */
+  font-size: 16px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pt-foot {
+  flex: none;
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.pt-empty {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+}
+.pt-skeleton {
+  display: grid;
+  gap: 18px;
+  padding: var(--space-4);
+}
+
+/* Insert: author-colour wash that fades out, plus a short slide-in. */
+.pt-fresh {
+  position: absolute;
+  inset: 0;
+  background: var(--fresh);
+  opacity: 0;
+  pointer-events: none;
+  animation: pt-fresh 1.2s var(--ease-standard);
+}
+@keyframes pt-fresh {
+  from {
+    opacity: 0.38;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.pt-row[data-fresh] .pt-row-inner {
+  animation: pt-in var(--dur-base) var(--ease-standard) both;
+}
+@keyframes pt-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+/* Delete: fade and slide away; the rows below then glide up through the row transition. */
+.pt-row[data-leaving] .pt-row-inner {
+  animation: pt-out var(--dur-base) var(--ease-out) both;
+  pointer-events: none;
+}
+@keyframes pt-out {
+  to {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+}
+
+/* Locked by a colleague: 2 px outline in their colour with a soft glow, fading in 140 ms. */
+.pt-lock-ring {
+  position: absolute;
+  inset: 1px;
+  border: 2px solid var(--lock, transparent);
+  border-radius: 10px;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lock, transparent) 55%, transparent);
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.pt-row[data-locked] .pt-lock-ring {
+  opacity: 1;
+  transform: none;
+}
+.pt-lock-ring[data-shake] {
+  animation: shake var(--dur-base) var(--ease-standard);
+}
+.pt-row[data-locked] .pt-cell {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.pt-lock-tip {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px 0 4px;
+  border: 1px solid var(--lock, var(--border-strong));
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(2px);
+  pointer-events: none;
+  transition:
+    opacity 120ms var(--ease-standard),
+    transform 120ms var(--ease-standard);
+}
+.pt-row[data-tip] .pt-lock-tip,
+.pt-row[data-locked]:has(.pt-cell[data-active]) .pt-lock-tip {
+  opacity: 1;
+  transform: none;
+}
+@media (hover: hover) {
+  .pt-row[data-locked]:hover .pt-lock-tip {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Colleagues who merely look at a row: thin coloured markers beside the number. */
+.pt-cursors {
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 2px;
+}
+.pt-cursor {
+  width: 3px;
+  border-radius: 2px;
+  transition: transform 120ms var(--ease-standard);
+}
+
+.pt-conflict {
+  position: absolute;
+  left: 12px;
+  top: calc(100% + 4px);
+  width: min(380px, calc(100% - 24px));
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--fs-sm);
+  white-space: normal;
+  animation: fade-up var(--dur-base) var(--ease-standard) both;
+}
+.pt-conflict-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ---------- ticket panel ---------- */
+.tk {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.tk-zoom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) 0;
+}
+.tk-zoom-value {
+  min-width: 52px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tk-viewport {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-3);
+  container-type: size;
+}
+.tk-stage {
+  position: relative;
+  flex: none;
+  margin: auto;
+  width: calc(var(--zoom, 1) * min(100cqw, 100cqh * var(--aspect, 1.75)));
+  aspect-ratio: var(--aspect, 1.75);
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-input);
+}
+.tk-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0;
+  /* The outgoing canvas stays opaque until the incoming one has finished fading in. */
+  transition: opacity 0s linear var(--dur-fast);
+}
+.tk-canvas[data-front] {
+  z-index: 2;
+  opacity: 1;
+  transition: opacity var(--dur-fast) linear;
+}
+.tk-stage:not([data-ready]) .tk-canvas {
+  opacity: 0;
+}
+.tk-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 0;
+}
+.tk-note,
+.tk-hint {
+  text-align: center;
+  font-size: var(--fs-sm);
+}
+.tk-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 var(--space-3) var(--space-3);
+}
+.tk-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* ---------- dialogs ---------- */
+.copy-fallback-img {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  /* Long-press on iOS needs the image to be a real, selectable element. */
+  -webkit-touch-callout: default;
+  user-select: auto;
+}
+.drop {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  text-align: center;
+  font-weight: var(--fw-regular);
+  transition:
+    transform var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-standard);
+}
+.drop[data-over] {
+  border-color: var(--accent);
+  transform: scale(1.02);
+}
+.import-hint,
+.import-warn {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+}
+.import-warn {
+  color: var(--danger);
+}
+.import-mode {
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+  padding: 0;
+  font-weight: var(--fw-regular);
+}
+.import-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 32px;
+}
+.import-radio small {
+  display: block;
+  font-size: var(--fs-xs);
+}
+.import-preview {
+  display: grid;
+  gap: var(--space-2);
+  font-weight: var(--fw-regular);
+}
+.import-errors {
+  max-height: 220px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.import-errors table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+.import-errors th,
+.import-errors td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.import-errors th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-elev);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+}

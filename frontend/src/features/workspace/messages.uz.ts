@@ -1,0 +1,128 @@
+import type { Message } from '../../i18n/types'
+import type { workspaceRu } from './messages.ru'
+
+// Uzbek, Latin script (oʻ and gʻ use U+02BB, the glottal stop uses U+02BC). Needs a native-speaker review.
+export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
+  'workspace.crumbs': 'Navigatsiya',
+  'workspace.error.title': 'Loyihani ochib boʻlmadi',
+  'workspace.finished': 'Loyiha yakunlangan — faqat koʻrish mumkin. Chop etish, nusxalash va saqlash mavjud.',
+  'workspace.toolbar': 'Bilet bilan amallar',
+  'workspace.tabs': 'Ish oʻrni boʻlimlari',
+  'workspace.panel.picture': 'Rasm',
+  'workspace.panel.db': 'Maʼlumotlar bazasi',
+  'workspace.panel.maximize': 'Panelni kengaytirish',
+  'workspace.panel.restore': 'Oddiy oʻlchamga qaytarish',
+  'workspace.panel.close': 'Panelni yopish',
+  'workspace.showPanel': 'Koʻrsatish: {name}',
+  'workspace.allClosed':
+    'Barcha panellar yopilgan. Kerakli panelni asboblar panelidagi tugma bilan qaytaring.',
+
+  'workspace.print': 'Chop etish',
+  'workspace.copy': 'Biletdan nusxa olish',
+  'workspace.save': 'Biletni saqlash',
+  'workspace.import': 'Import',
+  'workspace.export': 'Eksport',
+  'workspace.export.xlsx': 'Excel jadvali (XLSX)',
+  'workspace.export.csv': 'CSV fayli',
+  'workspace.settings': 'Loyiha sozlamalari',
+  'workspace.copyHint': 'Nusxalash —',
+  'workspace.noRowsReason': 'Avval ishtirokchini tanlang',
+
+  'workspace.col.number': '№',
+  'workspace.col.name': 'Ism',
+  'workspace.col.phone': 'Telefon raqami',
+  'workspace.table.label': 'Ishtirokchilar',
+  'workspace.search.label': 'Ishtirokchilar boʻyicha qidiruv',
+  'workspace.search.placeholder': 'Ism yoki telefon raqami boʻyicha qidirish',
+  'workspace.search.none': 'Hech narsa topilmadi',
+  'workspace.empty.title': 'Hozircha ishtirokchilar yoʻq',
+  'workspace.empty.hint': 'Boʻsh qatorlar qoʻshing yoki Excel jadvalini joylashtiring (Ctrl+V / Cmd+V)',
+  'workspace.addRows': 'Qatorlar qoʻshish',
+  'workspace.selectVisible': 'Koʻrinadigan barchasini tanlash',
+  'workspace.deleteSelected': {
+    one: '{count} ta qatorni oʻchirish',
+    other: '{count} ta qatorni oʻchirish',
+  },
+  'workspace.rowCount': 'Qatorlar: {count} / {total}',
+  'workspace.selectedCount': {
+    one: '{count} ta tanlandi',
+    other: '{count} ta tanlandi',
+  },
+  'workspace.editing': 'Tahrirlayapti: {name}',
+  'workspace.someone': 'Hamkasb',
+  'workspace.conflict.text':
+    '“{field}” maydonini boshqa foydalanuvchi allaqachon oʻzgartirgan. Uning qiymati: {theirs}. Sizniki: {mine}.',
+  'workspace.conflict.empty': '(boʻsh)',
+  'workspace.conflict.theirs': 'Uniki qolsin',
+  'workspace.conflict.mine': 'Meniki qolsin',
+
+  'workspace.add.title': 'Qatorlar qoʻshish',
+  'workspace.add.count': 'Nechta boʻsh qator qoʻshilsin',
+  'workspace.add.hint': '1 dan {max} gacha',
+  'workspace.add.invalid': '1 dan {max} gacha son kiriting',
+  'workspace.add.submit': 'Qoʻshish',
+
+  'workspace.ticket.noImage': 'Loyihada hali rasm yoʻq',
+  'workspace.ticket.noImageHint': 'Administrator uni loyiha sozlamalarida yuklashi mumkin',
+  'workspace.ticket.noRows': 'Biletni koʻrish uchun ishtirokchini tanlang',
+  'workspace.ticket.alt': 'Bilet № {number}, {name}',
+  'workspace.ticket.ratio':
+    'Rasm oʻlchami {size}. Chop etish uchun 7:4 nisbat yaxshi, aks holda bilet choʻziladi',
+  'workspace.zoom.label': 'Masshtab',
+  'workspace.zoom.in': 'Kattalashtirish',
+  'workspace.zoom.out': 'Kichiklashtirish',
+  'workspace.zoom.reset': 'Masshtabni tiklash',
+
+  'workspace.toast.notReady': 'Rasm hali yuklanmoqda',
+  'workspace.toast.copied': 'Bilet nusxalandi',
+  'workspace.toast.saved': {
+    one: '{count} ta bilet saqlandi',
+    other: '{count} ta bilet saqlandi',
+  },
+  'workspace.toast.added': {
+    one: '{count} ta qator qoʻshildi',
+    other: '{count} ta qator qoʻshildi',
+  },
+  'workspace.toast.imported': {
+    one: '{count} ta qator import qilindi',
+    other: '{count} ta qator import qilindi',
+  },
+  'workspace.progress.save': 'Fayllar tayyorlanmoqda',
+  'workspace.progress.count': 'Tayyor: {done} / {total}',
+
+  'workspace.copyFallback.title': 'Biletdan qoʻlda nusxa oling',
+  'workspace.copyFallback.body':
+    'Brauzer nusxalashga ruxsat bermadi. Rasmni bosib turing va “Nusxalash”ni tanlang.',
+  'workspace.copyFallback.alt': 'Bilet',
+
+  'workspace.import.title': 'Ishtirokchilarni import qilish',
+  'workspace.import.drop': 'XLSX yoki CSV faylni shu yerga tashlang',
+  'workspace.import.choose': 'Fayl tanlash',
+  'workspace.import.change': 'Boshqa fayl',
+  'workspace.import.hint': 'Ustunlar: ism va telefon raqami (birinchi qator — sarlavha).',
+  'workspace.import.mode': 'Rejim',
+  'workspace.import.mode.append': 'Mavjudlariga qoʻshish',
+  'workspace.import.mode.append.hint': 'Yangi qatorlar jadval oxirida paydo boʻladi',
+  'workspace.import.mode.replace': 'Butun jadvalni almashtirish',
+  'workspace.import.mode.replace.hint': 'Hozirgi barcha ishtirokchilar oʻchiriladi',
+  'workspace.import.replaceWarn': 'Diqqat: hozirgi qatorlar qaytarib boʻlmaydigan tarzda oʻchiriladi.',
+  'workspace.import.checking': 'Fayl tekshirilmoqda…',
+  'workspace.import.summary': 'Topilgan qatorlar: {total}. Xatosiz: {valid}. Xatoli: {errors}.',
+  'workspace.import.col.row': 'Qator',
+  'workspace.import.col.field': 'Maydon',
+  'workspace.import.col.problem': 'Muammo',
+  'workspace.import.more': 'Yana xatolar: {count}',
+  'workspace.import.confirm': {
+    one: '{count} ta qatorni import qilish',
+    other: '{count} ta qatorni import qilish',
+  },
+
+  'workspace.print.back': 'Orqaga',
+  'workspace.print.button': 'Chop etish',
+  'workspace.print.progress': 'Biletlar chop etishga tayyorlanmoqda',
+  'workspace.print.rendering': 'Biletlar tayyorlanmoqda: {done} / {total}',
+  'workspace.print.ready': 'Biletlar: {count}, A4 varaqlar: {pages}',
+  'workspace.print.tip':
+    'Chop etish oynasida “Masshtab 100 %” va “Maydonsiz”ni tanlang. Biletlar 7×4 sm, varaqda 21 tadan.',
+  'workspace.print.page': '{n}-varaq',
+}
