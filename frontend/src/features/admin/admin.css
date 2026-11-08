@@ -527,6 +527,16 @@ td.cell-actions {
   display: block;
   font-size: var(--fs-sm);
 }
+.tools-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.tools-note a {
+  color: var(--accent-text);
+}
 .checks {
   list-style: none;
   margin: 0;

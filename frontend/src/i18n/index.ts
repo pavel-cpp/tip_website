@@ -164,8 +164,5 @@ function subscribe(cb: () => void): () => void {
 export function useI18n() {
   const current = useSyncExternalStore(subscribe, getLocale, getLocale)
   // The bound functions read module state, which already matches `current` when this runs.
-  return useMemo(
-    () => ({ locale: current, t, setLocale, formatNumber, formatDate, formatBytes }),
-    [current],
-  )
+  return useMemo(() => ({ locale: current, t, setLocale, formatNumber, formatDate, formatBytes }), [current])
 }

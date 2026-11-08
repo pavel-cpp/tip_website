@@ -81,6 +81,17 @@ function StatusView({ data }: { data: SystemStatus }) {
         </div>
       )}
 
+      <p className="muted tools-note" data-testid="grafana-note">
+        <Icon name="monitor" size={16} />
+        {data.links?.grafana ? (
+          <a href={data.links.grafana} target="_blank" rel="noopener noreferrer">
+            {t('admin.system.grafanaOpen')}
+          </a>
+        ) : (
+          t('admin.system.grafanaMissing')
+        )}
+      </p>
+
       <Panel title={t('admin.system.checks')} icon="info">
         <ul className="checks">
           {data.checks.map((c, i) => (

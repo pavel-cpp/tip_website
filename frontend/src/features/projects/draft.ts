@@ -70,4 +70,3 @@ export function isOffRatio(w: number, h: number, target = 7 / 4, tolerance = 0.0
   if (w <= 0 || h <= 0) return false
   return Math.abs(w / h / target - 1) > tolerance
 }
-
