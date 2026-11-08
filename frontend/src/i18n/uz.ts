@@ -1,4 +1,5 @@
 import { projectsUz } from '../features/projects/messages.uz'
+import { realtimeUz } from '../features/realtime/messages.uz'
 import { workspaceUz } from '../features/workspace/messages.uz'
 import type { MessageKey } from './ru'
 import type { Message } from './types'
@@ -147,4 +148,5 @@ export const uz: Record<MessageKey, Message> = {
 
   ...projectsUz,
   ...workspaceUz,
+  ...realtimeUz,
 }

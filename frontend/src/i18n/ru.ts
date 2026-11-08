@@ -1,4 +1,5 @@
 import { projectsRu } from '../features/projects/messages.ru'
+import { realtimeRu } from '../features/realtime/messages.ru'
 import { workspaceRu } from '../features/workspace/messages.ru'
 import { ruAccess } from './ru.access'
 import type { Message } from './types'
@@ -161,6 +162,7 @@ export const ru = {
 
   ...projectsRu,
   ...workspaceRu,
+  ...realtimeRu,
 } as const satisfies Record<string, Message>
 
 export type MessageKey = keyof typeof ru
