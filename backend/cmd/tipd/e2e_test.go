@@ -592,6 +592,37 @@ func TestEndToEnd(t *testing.T) {
 		}
 	})
 
+	t.Run("admin commands", func(t *testing.T) {
+		ctx := context.Background()
+		var out bytes.Buffer
+		if err := a.adminCreate(ctx, "Ops1", "", &out); err != nil {
+			t.Fatal(err)
+		}
+		_, temp, ok := strings.Cut(out.String(), "temporary password: ")
+		if !ok {
+			t.Fatalf("no password printed: %q", out.String())
+		}
+		ops, r := c.login("ops1", strings.Fields(temp)[0])
+		r.expect(t, 200)
+		if !ops.user.PasswordTemporary || ops.user.Roles[0].Name != "admin" {
+			t.Fatalf("created admin: %+v", ops.user)
+		}
+		if err := a.adminCreate(ctx, "ops1", "", &out); err == nil {
+			t.Fatal("creating an existing user must fail")
+		}
+		out.Reset()
+		if err := a.adminResetPassword(ctx, "ops1", "chosen-password-9", &out); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out.String(), "chosen-password-9") {
+			t.Fatal("a supplied password must not be echoed")
+		}
+		c.do("GET", "/api/v1/me", ops.access, "", nil).errCode(t, 401)
+		if s := c.mustLogin("ops1", "chosen-password-9"); s.user.PasswordTemporary {
+			t.Fatal("a supplied password is permanent")
+		}
+	})
+
 	t.Run("metrics are recorded", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		a.metrics.NewInternalServer(":0").Handler.ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
