@@ -819,6 +819,15 @@ type SystemStatus struct {
 		// Total Total bytes.
 		Total int64 `json:"total"`
 	} `json:"disk"`
+
+	// Links Operator tools reachable from the admin menu; a key is absent when the tool is disabled or not configured.
+	Links *struct {
+		// Grafana Public Grafana address (GRAFANA_URL).
+		Grafana *string `json:"grafana,omitempty"`
+
+		// Swagger Path of the API documentation, for example /api/docs.
+		Swagger *string `json:"swagger,omitempty"`
+	} `json:"links,omitempty"`
 	Retention struct {
 		AuditDays int `json:"auditDays"`
 		ObsDays   int `json:"obsDays"`

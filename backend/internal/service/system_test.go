@@ -225,3 +225,21 @@ func TestParseBackupTimestampsIgnoresNoise(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestSystemStatusToolLinks(t *testing.T) {
+	build := func(cfg SystemConfig) SystemStatus {
+		s := NewSystemService(cfg, &fakeClock{sysNow}, sysNow, &fakeHost{}, fakeDB{})
+		st, err := s.Status(context.Background(), systemViewer())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	if st := build(SystemConfig{}); st.SwaggerPath != "" || st.GrafanaURL != "" {
+		t.Errorf("links must be empty by default: %+v", st)
+	}
+	st := build(SystemConfig{SwaggerEnabled: true, GrafanaURL: "https://grafana.example.com"})
+	if st.SwaggerPath != "/api/docs" || st.GrafanaURL != "https://grafana.example.com" {
+		t.Errorf("links = %q %q", st.SwaggerPath, st.GrafanaURL)
+	}
+}

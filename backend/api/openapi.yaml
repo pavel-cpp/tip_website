@@ -2328,6 +2328,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SystemCheck"
+        links:
+          type: object
+          description: Operator tools reachable from the admin menu; a key is absent when the tool is disabled or not configured.
+          properties:
+            swagger:
+              type: string
+              description: Path of the API documentation, for example /api/docs.
+            grafana:
+              type: string
+              format: uri
+              description: Public Grafana address (GRAFANA_URL).
 
     ProjectStatus:
       type: string
