@@ -16,6 +16,8 @@ export const uz: Record<MessageKey, Message> = {
   'nav.adminRoles': 'Rollar',
   'nav.adminSystem': 'Tizim',
   'nav.design': 'Dizayn tizimi',
+  'nav.grafana': 'Grafana',
+  'nav.swagger': 'API hujjatlari',
   'nav.userMenu': 'Foydalanuvchi menyusi',
 
   'action.save': 'Saqlash',

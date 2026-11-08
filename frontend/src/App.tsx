@@ -64,7 +64,12 @@ export function App() {
                     <Route path="/admin/system" element={<pages.AdminSystem />} />
                   </Route>
                 </Route>
-                <Route path="/design" element={<pages.Design />} />
+                {/* The component gallery is a developer tool: not routed in production builds. */}
+                {import.meta.env.DEV && (
+                  <Route element={<RequirePerm perm="system.view" />}>
+                    <Route path="/design" element={<pages.Design />} />
+                  </Route>
+                )}
                 <Route path="*" element={<pages.NotFound />} />
               </Route>
             </Routes>
