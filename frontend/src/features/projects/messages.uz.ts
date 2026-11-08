@@ -27,7 +27,8 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   },
   'projects.card.finished': 'Yakunlangan',
   'projects.empty.admin.title': 'Hozircha loyihalar yoʻq',
-  'projects.empty.admin.hint': 'Birinchi loyihani yarating',
+  'projects.empty.admin.hint':
+    'Loyiha yarating, chipta rasmini yuklang, ishtirokchilarni qoʻshing va chop eting',
   'projects.empty.admin.cta': 'Loyiha yaratish',
   'projects.empty.worker.title': 'Hozircha loyihalar yoʻq',
   'projects.empty.worker.hint': 'Loyihaga qoʻshilish uchun administratorga murojaat qiling',
@@ -77,7 +78,7 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
     'Oʻrnini oʻzgartirish uchun maydonni koʻrinishda sudrang (strelkalar bilan ham mumkin).',
   'settings.increase': 'Oshirish',
   'settings.decrease': 'Kamaytirish',
-  'settings.drag': 'Sudrash: {label}',
+  'settings.drag': '{label}, sudrash',
   'settings.saved': 'Sozlamalar saqlandi',
   'settings.conflict.title': 'Loyiha boshqa joyda oʻzgartirilgan',
   'settings.conflict.body':

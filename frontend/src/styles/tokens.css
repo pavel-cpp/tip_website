@@ -3,16 +3,11 @@
  * Colours are declared per theme; everything else is shared. src/styles/tokens.test.ts
  * parses this file and enforces the contrast pairs below, so edit both together.
  *
- * Contrast pairs checked (WCAG 2.x ratio, enforced in tokens.test.ts):
- *   text on bg / bg-elev / bg-input / bg-hover ........ >= 4.5   (dark and light)
- *   text-muted on bg / bg-elev / bg-input ............. >= 4.5
- *   text-faint on bg-elev / bg-input (placeholders) ... >= 4.5
- *   accent-text on bg / bg-elev ....................... >= 4.5
- *   accent-contrast on accent (primary button label) .. >= 4.5
- *   danger, ok on bg-elev (text and icons) ............ >= 4.5
- *   border-strong on bg / bg-elev / bg-input .......... >= 3     (dark and light; controls and cards)
- *   accent on bg-elev (focus ring, icons) ............. >= 3
- *   user-1..6 on bg-elev (outlines, cursors) .......... >= 3
+ * Contrast matrix enforced in tokens.test.ts for both themes (WCAG 2.x ratio):
+ *   every text token (text, text-muted, text-faint, accent-text, danger, ok) on every surface
+ *   (bg, bg-elev, bg-input, bg-hover, accent-soft blended over bg-elev) ... >= 4.5
+ *   accent-contrast on accent and accent-hover (button labels) ............ >= 4.5
+ *   every graphic token (accent, border-strong, user-1..6) on every surface >= 3
  */
 
 /* The attribute selectors also match nested elements, so a subtree can show the other theme (/design). */
@@ -26,12 +21,12 @@
   --bg-hover: #23252c;
   --bg-overlay: rgba(5, 6, 8, 0.65);
   --border: #2f323b;
-  /* Control and card outlines: 3.4:1 on bg-elev, 3.8:1 on bg-input (WCAG 1.4.11). */
-  --border-strong: #6a6f7f;
+  /* Control and card outlines: at least 3:1 on every surface (WCAG 1.4.11). */
+  --border-strong: #757b8c;
 
   --text: #e8e9ec;
-  --text-muted: #8d919c;
-  --text-faint: #80848f;
+  --text-muted: #9a9ea9;
+  --text-faint: #9296a1;
 
   --accent: #3b7bff;
   --accent-hover: #5a90ff;

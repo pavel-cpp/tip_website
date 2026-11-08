@@ -19,6 +19,7 @@ export const uz: Record<MessageKey, Message> = {
   'nav.grafana': 'Grafana',
   'nav.swagger': 'API hujjatlari',
   'nav.userMenu': 'Foydalanuvchi menyusi',
+  'a11y.skipToContent': 'Asosiy mazmunga oʻtish',
 
   'action.save': 'Saqlash',
   'action.cancel': 'Bekor qilish',

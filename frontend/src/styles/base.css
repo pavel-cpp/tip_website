@@ -91,6 +91,29 @@ a {
   display: none !important;
 }
 
+/* Programmatic focus target after navigation; a ring around the whole page would only be noise. */
+main:focus {
+  outline: none;
+}
+
+/* Off-screen until it receives keyboard focus, then the first thing on the page. */
+.skip-link {
+  position: fixed;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: calc(var(--z-sticky) + 10);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--fw-semibold);
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible {
+  transform: none;
+  outline-offset: 3px;
+}
+
 .scroll,
 .panel-body {
   overflow: auto;

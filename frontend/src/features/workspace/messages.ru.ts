@@ -25,6 +25,7 @@ export const workspaceRu = {
   'workspace.settings': 'Настройки проекта',
   'workspace.copyHint': 'Копировать —',
   'workspace.noRowsReason': 'Сначала выберите участника',
+  'workspace.noImageReason': 'Сначала загрузите картинку билета',
 
   'workspace.col.number': '№',
   'workspace.col.name': 'Имя',
@@ -135,6 +136,7 @@ export const workspaceRu = {
   'workspace.print.tip':
     'В диалоге печати выберите «Масштаб 100 %» и «Без полей». Билеты 7×4 см, по 21 на листе.',
   'workspace.print.page': 'Лист {n}',
+  'workspace.print.sheets': 'Листы для печати',
   'workspace.print.withCount': 'Печать ({count})',
   'workspace.toast.copyFailed':
     'Не удалось скопировать в буфер обмена. Скопируйте билет вручную или сохраните его.',
@@ -203,7 +205,7 @@ export const workspaceRu = {
     many: 'Сохранить {count} билетов в ZIP',
     other: 'Сохранить {count} билета в ZIP',
   },
-  'workspace.card.label': '№ {number}, {name}, {phone}',
+  'workspace.card.label': '{number} {name} {phone}',
   'workspace.card.noName': 'имя не указано',
   'workspace.card.noPhone': 'телефон не указан',
   'workspace.card.state.suspicious': 'номер выглядит неверным',

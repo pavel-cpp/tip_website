@@ -28,7 +28,7 @@ export const projectsRu = {
   },
   'projects.card.finished': 'Завершён',
   'projects.empty.admin.title': 'Проектов пока нет',
-  'projects.empty.admin.hint': 'Создайте первый проект',
+  'projects.empty.admin.hint': 'Создайте проект, загрузите картинку билета, добавьте участников и печатайте',
   'projects.empty.admin.cta': 'Создать проект',
   'projects.empty.worker.title': 'Проектов пока нет',
   'projects.empty.worker.hint': 'Обратитесь к администратору, чтобы вас добавили в проект',
@@ -77,7 +77,7 @@ export const projectsRu = {
   'settings.positionHint': 'Перетащите поле на превью, чтобы изменить позицию (можно и стрелками).',
   'settings.increase': 'Увеличить',
   'settings.decrease': 'Уменьшить',
-  'settings.drag': 'Перетащить: {label}',
+  'settings.drag': '{label}, перетащить',
   'settings.saved': 'Настройки сохранены',
   'settings.conflict.title': 'Проект изменили в другом месте',
   'settings.conflict.body':

@@ -18,6 +18,7 @@ export const ru = {
   'nav.grafana': 'Grafana',
   'nav.swagger': 'Документация API',
   'nav.userMenu': 'Меню пользователя',
+  'a11y.skipToContent': 'Перейти к содержимому',
 
   'action.save': 'Сохранить',
   'action.cancel': 'Отмена',

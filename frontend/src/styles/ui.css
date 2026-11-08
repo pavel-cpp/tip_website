@@ -604,6 +604,26 @@
   font-weight: var(--fw-bold);
   color: var(--text);
 }
+/* Plain text links in the page chrome still get a target of at least 32 px (44 px on touch). */
+.brand,
+.breadcrumb a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+@media (pointer: coarse) {
+  .brand,
+  .breadcrumb a {
+    min-height: var(--touch-target);
+  }
+  .brand {
+    min-width: var(--touch-target);
+  }
+  /* The extra height is taken from the margins so the header keeps its compact layout. */
+  .breadcrumb a {
+    margin-block: -12px;
+  }
+}
 .brand::before {
   content: "";
   width: 8px;

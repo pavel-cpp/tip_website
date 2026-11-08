@@ -134,9 +134,18 @@
   transform: none;
 }
 @media (max-width: 479px) {
+  .segmented {
+    /* Three theme options do not fit a 320 px screen in one row (WCAG 1.4.10 reflow). */
+    flex-wrap: wrap;
+  }
   .segmented-item {
     padding: 0 var(--space-2);
     font-size: var(--fs-sm);
+  }
+}
+@media (pointer: coarse) {
+  .segmented-item {
+    min-height: var(--touch-target);
   }
 }
 
@@ -175,9 +184,7 @@
   height: 20px;
   border-radius: 50%;
   background: var(--text-muted);
-  transition:
-    transform var(--dur-fast) var(--ease-standard),
-    background-color var(--dur-fast) var(--ease-standard);
+  transition: transform var(--dur-fast) var(--ease-standard);
 }
 .switch:checked {
   background: var(--accent-soft);

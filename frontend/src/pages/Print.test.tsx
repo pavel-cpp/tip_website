@@ -121,8 +121,8 @@ describe('print page', () => {
     }
     const mock = mount()
 
-    await waitFor(() => expect(screen.getAllByRole('region')).toHaveLength(2))
-    const pages = screen.getAllByRole('region')
+    await waitFor(() => expect(screen.getAllByRole('region', { name: /^Лист / })).toHaveLength(2))
+    const pages = screen.getAllByRole('region', { name: /^Лист / })
     expect(pages[0]?.querySelectorAll('img.print-ticket')).toHaveLength(TICKETS_PER_PAGE)
     expect(pages[1]?.querySelectorAll('img.print-ticket')).toHaveLength(25 - TICKETS_PER_PAGE)
     expect(TICKETS_PER_PAGE).toBe(21)

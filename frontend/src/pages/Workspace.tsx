@@ -490,7 +490,11 @@ function WorkspaceView({ project }: { project: Project }) {
     actions.targetCount > 0
       ? t('workspace.print.withCount', { count: actions.targetCount })
       : t('workspace.print')
-  const noPrintReason = !current ? t('workspace.noRowsReason') : undefined
+  const noPrintReason = !project.image
+    ? t('workspace.noImageReason')
+    : !current
+      ? t('workspace.noRowsReason')
+      : undefined
   // On phones every secondary action sits in one menu so the primary "Print (N)" keeps its full label.
   const phoneItems: MenuItem[] = []
   if (canPrint) {
@@ -682,6 +686,7 @@ function WorkspaceView({ project }: { project: Project }) {
           <BulkBar
             count={selectedRows.length}
             canPrint={canPrint}
+            printBlocked={project.image ? undefined : t('workspace.noImageReason')}
             canDelete={canDelete}
             copyReady={!!source && selectedRows.length === 1}
             saveReady={!!source}
@@ -701,7 +706,7 @@ function WorkspaceView({ project }: { project: Project }) {
           <PhoneToolbar
             canPrint={canPrint}
             printLabel={printLabel}
-            printDisabled={!current ? noPrintReason : undefined}
+            printDisabled={noPrintReason}
             items={phoneItems}
             onPrint={onPrint}
           />
@@ -715,7 +720,7 @@ function WorkspaceView({ project }: { project: Project }) {
                 variant="primary"
                 label={printLabel}
                 text={printLabel}
-                disabled={!current}
+                disabled={!current || !project.image}
                 disabledReason={noPrintReason}
                 onClick={onPrint}
               />

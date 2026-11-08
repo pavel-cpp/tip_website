@@ -99,6 +99,8 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: () => v
       className="toast"
       data-state={toast.closing ? 'closed' : 'open'}
       data-tone={toast.tone ?? 'info'}
+      // Failures interrupt (assertive); confirmations stay polite inside the region.
+      role={toast.tone === 'error' ? 'alert' : undefined}
       data-paused={paused || undefined}
       style={{ '--toast-ms': `${duration}ms` } as CSSProperties}
       onPointerEnter={() => setPaused(true)}

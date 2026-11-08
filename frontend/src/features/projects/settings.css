@@ -233,13 +233,24 @@
 .input .color-swatch {
   flex: none;
   align-self: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: none;
   cursor: pointer;
+}
+@media (pointer: coarse) {
+  /* Bigger swatch inside the 44 px field on touch screens. */
+  .input .color-swatch {
+    width: 36px;
+    height: 36px;
+  }
+  /* The handle's hit area grows to a finger-sized target around the visible 22 px dot. */
+  .ph-chip::after {
+    inset: -11px;
+  }
 }
 .style-toggles {
   display: inline-flex;
@@ -281,7 +292,6 @@
   padding: var(--space-2);
   border: 1px dashed transparent;
   border-radius: var(--radius);
-  transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .image-field.is-over {
   border-color: var(--accent);
@@ -300,6 +310,13 @@
   gap: var(--space-2);
   min-width: 0;
   justify-items: start;
+}
+/* A long translated label wraps instead of pushing the page wider than a 320 px screen. */
+.image-info .btn {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: center;
 }
 .image-meta {
   font-size: var(--fs-sm);

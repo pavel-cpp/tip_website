@@ -28,7 +28,7 @@ test('create a project, upload an image, drag a placeholder and save', async ({ 
   })
   // The first field (Number) is open by default; this test moves the Name field.
   await page.getByRole('tab', { name: t('settings.ph.name') }).click()
-  const chip = page.getByRole('button', { name: t('settings.drag', { label: t('settings.ph.name') }) })
+  const chip = page.getByRole('button', { name: t('settings.drag', { label: `${t('settings.ph.name')} 2` }) })
   await expect(chip).toBeVisible()
   await expect(page.getByRole('img', { name: t('settings.preview.label') })).toBeVisible()
 
