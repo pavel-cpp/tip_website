@@ -57,7 +57,7 @@ func (c fakeCheck) Check(context.Context) CheckResult { return c.res }
 
 var sysNow = time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 
-func viewer() domain.Actor {
+func systemViewer() domain.Actor {
 	return domain.Actor{UserID: "u1", Perms: domain.NewPermissionSet(domain.PermSystemView)}
 }
 
@@ -77,7 +77,7 @@ func TestSystemStatusAssembly(t *testing.T) {
 		fakeCheck{"postgres", CheckResult{CheckOK, "reachable"}},
 		fakeCheck{"redis", CheckResult{CheckWarn, "unreachable"}})
 
-	st, err := s.Status(context.Background(), viewer())
+	st, err := s.Status(context.Background(), systemViewer())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestSystemStatusAssembly(t *testing.T) {
 func TestSystemStatusDegradesOnProbeFailure(t *testing.T) {
 	host := &fakeHost{diskErr: errors.New("boom"), dirErr: errors.New("boom")}
 	s := NewSystemService(SystemConfig{}, &fakeClock{sysNow}, sysNow, host, fakeDB{sizeErr: errors.New("down")})
-	st, err := s.Status(context.Background(), viewer())
+	st, err := s.Status(context.Background(), systemViewer())
 	if err != nil {
 		t.Fatalf("probe failures must not fail the page: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestSystemUploadsSizeIsCached(t *testing.T) {
 	clk := &fakeClock{sysNow}
 	s := NewSystemService(SystemConfig{}, clk, sysNow, host, fakeDB{})
 	for i := 0; i < 3; i++ {
-		if _, err := s.Status(context.Background(), viewer()); err != nil {
+		if _, err := s.Status(context.Background(), systemViewer()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -127,7 +127,7 @@ func TestSystemUploadsSizeIsCached(t *testing.T) {
 	}
 	clk.t = clk.t.Add(2 * time.Minute)
 	host.dirSize = 20
-	st, _ := s.Status(context.Background(), viewer())
+	st, _ := s.Status(context.Background(), systemViewer())
 	if st.UploadsBytes != 20 || host.dirCalls.Load() != 2 {
 		t.Errorf("cache must expire: uploads=%d calls=%d", st.UploadsBytes, host.dirCalls.Load())
 	}
