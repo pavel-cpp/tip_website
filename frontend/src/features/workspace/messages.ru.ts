@@ -73,7 +73,7 @@ export const workspaceRu = {
   'workspace.zoom.label': 'Масштаб',
   'workspace.zoom.in': 'Увеличить',
   'workspace.zoom.out': 'Уменьшить',
-  'workspace.zoom.reset': 'Сбросить масштаб',
+  'workspace.zoom.reset': 'Вписать в панель',
 
   'workspace.toast.notReady': 'Картинка ещё загружается',
   'workspace.toast.copied': 'Билет скопирован',
@@ -135,4 +135,32 @@ export const workspaceRu = {
   'workspace.print.tip':
     'В диалоге печати выберите «Масштаб 100 %» и «Без полей». Билеты 7×4 см, по 21 на листе.',
   'workspace.print.page': 'Лист {n}',
+  'workspace.print.withCount': 'Печать ({count})',
+  'workspace.toast.copyFailed':
+    'Не удалось скопировать в буфер обмена. Скопируйте билет вручную или сохраните его.',
+  'workspace.toast.saveFailed': 'Строка № {number} не сохранена: {reason}',
+  'workspace.offline.banner': 'Нет связи — изменения сохранятся автоматически, как только она появится',
+  'workspace.offline.reconnecting': 'Связь потеряна, переподключаемся — изменения сохранятся автоматически',
+  'workspace.row.unsent': 'Не отправлено',
+  'workspace.row.unsentTitle': 'Правка ещё не отправлена на сервер и сохранится, когда появится связь',
+  'workspace.row.failed': 'Не сохранено',
+  'workspace.row.retry': 'Повторить',
+  'workspace.row.retryLabel': 'Повторить сохранение строки № {number}',
+  'workspace.phone.suspicious': 'Похоже на неверный номер: допустимы цифры, пробелы и + ( ) -',
+  'workspace.printWarn.title': 'Проверьте номера телефонов',
+  'workspace.printWarn.body':
+    'У {count} из {total} выбранных билетов номер телефона выглядит некорректно. Его всё равно напечатают.',
+  'workspace.printWarn.continue': 'Всё равно печатать',
+  'workspace.printWarn.cancel': 'Вернуться и исправить',
+  'workspace.people.online': 'Сейчас в сети',
+  'workspace.people.contributors': 'Участники проекта',
+  'workspace.import.confirmEmpty': 'Импортировать',
+  'workspace.ticket.noImageAdmin': 'Загрузите картинку билета в настройках проекта',
+  'workspace.ticket.openSettings': 'Открыть настройки проекта',
+  'workspace.ticket.emptyProject': 'В проекте пока нет участников',
+  'workspace.ticket.emptyProjectHint':
+    'Добавьте строки в таблице или вставьте их из Excel, и здесь появится билет',
+  'workspace.ticket.loadError': 'Не удалось загрузить участников',
+  'workspace.ticket.loadErrorHint': 'Без списка билет показать нечего. Проверьте связь и повторите.',
+  'workspace.zoom.hint': 'Билет крупнее панели: прокрутите его или перетащите мышью',
 } as const satisfies Record<string, Message>

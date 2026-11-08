@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { AppLink } from '../../components/AppLink'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
 import {
@@ -29,6 +30,11 @@ interface TicketPanelProps {
   participant: Participant | null
   /** Rendered into a second sibling element slot, e.g. a hint about the 7:4 aspect ratio. */
   footer?: ReactNode
+  /** Why there is no participant to show; picks the wording of the empty state. */
+  emptyReason?: 'select' | 'no-rows' | 'error'
+  onRetry?: () => void
+  /** Where the project settings live; when set, the "no image" state links there (admins). */
+  settingsTo?: string
 }
 
 /**
@@ -42,6 +48,9 @@ export function TicketPanel({
   placeholders,
   participant,
   footer,
+  emptyReason = 'select',
+  onRetry,
+  settingsTo,
 }: TicketPanelProps) {
   const { t, formatNumber } = useI18n()
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
@@ -77,17 +86,45 @@ export function TicketPanel({
     // `values` is derived from the primitives below; canvases are stable refs.
   }, [image, placeholders, number, name, phone, values === null])
 
+  const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
+  const onPanStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (zoom <= 1 || e.pointerType === 'touch' || e.button !== 0) return
+    pan.current = {
+      x: e.clientX,
+      y: e.clientY,
+      left: e.currentTarget.scrollLeft,
+      top: e.currentTarget.scrollTop,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onPanMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = pan.current
+    if (!p) return
+    e.currentTarget.scrollLeft = p.left - (e.clientX - p.x)
+    e.currentTarget.scrollTop = p.top - (e.clientY - p.y)
+  }
+  const onPanEnd = () => {
+    pan.current = null
+  }
   if (!hasProjectImage) {
     return (
       <div className="tk-empty" role="status">
         <WsIcon name="image" size={36} />
         <p>{t('workspace.ticket.noImage')}</p>
-        <p className="muted">{t('workspace.ticket.noImageHint')}</p>
+        <p className="muted">
+          {settingsTo ? t('workspace.ticket.noImageAdmin') : t('workspace.ticket.noImageHint')}
+        </p>
+        {settingsTo && (
+          <AppLink to={settingsTo} className="tk-empty-link">
+            {t('workspace.ticket.openSettings')}
+          </AppLink>
+        )}
       </div>
     )
   }
 
   const empty = !participant
+  const emptyKey = emptyReason === 'error' ? 'loadError' : emptyReason === 'no-rows' ? 'emptyProject' : null
   return (
     <div className="tk">
       {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add default borders to a toolbar group */}
@@ -123,7 +160,19 @@ export function TicketPanel({
         </Button>
       </div>
 
-      <div className="tk-viewport">
+      {zoom > 1 && (
+        <p className="tk-zoom-hint muted" role="status">
+          {t('workspace.zoom.hint')}
+        </p>
+      )}
+      <div
+        className="tk-viewport"
+        data-pan={zoom > 1 || undefined}
+        onPointerDown={onPanStart}
+        onPointerMove={onPanMove}
+        onPointerUp={onPanEnd}
+        onPointerCancel={onPanEnd}
+      >
         <div
           className="tk-stage"
           data-ready={drawn || undefined}
@@ -147,9 +196,19 @@ export function TicketPanel({
           {(imageLoading || (!drawn && !empty)) && <div className="tk-loading skeleton" aria-hidden="true" />}
         </div>
         {empty && (
-          <p className="tk-note muted" role="status">
-            {t('workspace.ticket.noRows')}
-          </p>
+          <div className="tk-note" role="status">
+            <p>{emptyKey ? t(`workspace.ticket.${emptyKey}`) : t('workspace.ticket.noRows')}</p>
+            {emptyKey && (
+              <p className="muted">
+                {t(`workspace.ticket.${emptyKey}Hint` as 'workspace.ticket.emptyProjectHint')}
+              </p>
+            )}
+            {emptyReason === 'error' && onRetry && (
+              <Button size="sm" onClick={onRetry}>
+                {t('action.retry')}
+              </Button>
+            )}
+          </div>
         )}
       </div>
       {footer}

@@ -13,6 +13,7 @@ import {
 } from '../../lib/ticket'
 import type { Participant } from './api'
 import { isIOS } from './platform'
+import { safeFilePart } from './tableLogic'
 
 export interface TicketSource {
   image: TicketImage
@@ -25,7 +26,9 @@ export const ticketValues = (p: Pick<Participant, 'number' | 'name' | 'phone'>):
   phone: p.phone,
 })
 
-export const ticketFileName = (p: Pick<Participant, 'number'>) => `image_${p.number}.png`
+/** `<project>_<number>_<name>.png`, each part sanitized; empty parts are left out. */
+export const ticketFileName = (p: Pick<Participant, 'number' | 'name'>, projectTitle = ''): string =>
+  `${[safeFilePart(projectTitle), String(p.number), safeFilePart(p.name)].filter(Boolean).join('_')}.png`
 
 /** Lets the browser paint between heavy steps so progress bars and animations keep running. */
 export const nextTurn = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
@@ -86,21 +89,22 @@ async function deliver(blob: Blob, filename: string): Promise<void> {
 
 export type SaveProgress = (done: number, total: number) => void
 
-/** One participant becomes image_<number>.png; several become one ZIP (iOS blocks serial downloads). */
+/** One participant becomes <project>_<number>_<name>.png; several become one ZIP (iOS blocks serial downloads). */
 export async function saveTickets(
   source: TicketSource,
   rows: readonly Participant[],
   zipName: string,
   onProgress?: SaveProgress,
+  projectTitle = '',
 ): Promise<void> {
   const [only] = rows
   if (!only) return
   if (rows.length === 1) {
     const blob = await renderTicketBlob(source.image, source.placeholders, ticketValues(only))
-    await deliver(blob, ticketFileName(only))
+    await deliver(blob, ticketFileName(only, projectTitle))
     return
   }
-  const zip = await buildZip(source, rows, onProgress)
+  const zip = await buildZip(source, rows, onProgress, projectTitle)
   await deliver(zip, zipName)
 }
 
@@ -108,6 +112,7 @@ export async function buildZip(
   source: TicketSource,
   rows: readonly Participant[],
   onProgress?: SaveProgress,
+  projectTitle = '',
 ): Promise<Blob> {
   const chunks: Uint8Array<ArrayBuffer>[] = []
   const done = new Promise<void>((resolve, reject) => {
@@ -121,7 +126,7 @@ export async function buildZip(
         // PNGs are already compressed, so entries are stored without deflate.
         for (const [i, row] of rows.entries()) {
           const blob = await renderTicketBlob(source.image, source.placeholders, ticketValues(row))
-          const entry = new ZipPassThrough(ticketFileName(row))
+          const entry = new ZipPassThrough(ticketFileName(row, projectTitle))
           zip.add(entry)
           entry.push(new Uint8Array(await blob.arrayBuffer()), true)
           onProgress?.(i + 1, rows.length)

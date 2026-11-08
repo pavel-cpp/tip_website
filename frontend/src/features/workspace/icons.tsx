@@ -15,16 +15,26 @@ const paths = {
       <path d="M5 15V6a2 2 0 012-2h9" />
     </>
   ),
+  // Save ticket: the picture frame with a download arrow, so it cannot be mistaken for import.
   save: (
     <>
-      <path d="M12 4v11M7 10l5 5 5-5" />
-      <path d="M5 20h14" />
+      <path d="M13 20H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v6" />
+      <circle cx="8.500" cy="9.500" r="1.500" />
+      <path d="M3 17l5-5 4 4M18 14v7M15 18l3 3 3-3" />
     </>
   ),
+  // Import: a sheet with an arrow pointing into it.
   upload: (
     <>
-      <path d="M12 16V5M7 10l5-5 5 5" />
-      <path d="M5 20h14" />
+      <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
+      <path d="M14 3v5h5M12 11v6M9 14l3 3 3-3" />
+    </>
+  ),
+  // Export: a spreadsheet grid with an arrow leaving it.
+  exportTable: (
+    <>
+      <path d="M13 21H6a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2v6" />
+      <path d="M4 9h16M4 15h9M10 3v18M16 17h6M19 14l3 3-3 3" />
     </>
   ),
   image: (

@@ -136,6 +136,15 @@ export function ImportDialog({
   const input = useRef<HTMLInputElement>(null)
   const seq = useRef(0)
 
+  // Toasts from earlier actions must not pile up over the dialog (see workspace.css).
+  useEffect(() => {
+    if (!open) return
+    document.body.dataset.importOpen = ''
+    return () => {
+      delete document.body.dataset.importOpen
+    }
+  }, [open])
+
   useEffect(() => {
     if (open) return
     setFile(null)
@@ -201,7 +210,9 @@ export function ImportDialog({
             disabled={!preview || checking || preview.valid === 0}
             onClick={() => void confirm()}
           >
-            {t('workspace.import.confirm', { count: preview?.valid ?? 0 })}
+            {preview
+              ? t('workspace.import.confirm', { count: preview.valid })
+              : t('workspace.import.confirmEmpty')}
           </Button>
         </>
       }

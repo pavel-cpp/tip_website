@@ -18,6 +18,7 @@ import { AvatarStack } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { Menu } from '../components/Menu'
+import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { Skeleton, useSkeleton } from '../components/Skeleton'
 import { Tabs } from '../components/Tabs'
@@ -26,7 +27,7 @@ import { Tooltip } from '../components/Tooltip'
 import { type Project, useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
 import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeProvider'
-import { ConnectionBadge, OnlineAvatars } from '../features/realtime/RealtimeStatus'
+import { OnlineAvatars } from '../features/realtime/RealtimeStatus'
 import {
   downloadExport,
   type ExportFormat,
@@ -40,12 +41,13 @@ import {
 } from '../features/workspace/api'
 import { AddRowsDialog, CopyFallbackDialog, ImportDialog } from '../features/workspace/Dialogs'
 import { WsIcon, type WsIconName } from '../features/workspace/icons'
+import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineBanner'
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
 import { copyShortcutLabel } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { TicketPanel } from '../features/workspace/TicketPanel'
-import { filterRows } from '../features/workspace/tableLogic'
+import { countSuspiciousPhones, filterRows, planPaste, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
 import { useTicketActions } from '../features/workspace/useTicketActions'
 import { useUndoableDelete } from '../features/workspace/useUndoableDelete'
@@ -63,6 +65,7 @@ interface Layout {
 const LAYOUT_KEY = 'tip.workspace.layout'
 const DEFAULT_LAYOUT: Layout = { max: null, closed: { picture: false, db: false } }
 const FRESH_MS = 1400
+const NO_IDS: ReadonlySet<string> = new Set()
 
 const NARROW = '(max-width: 699px)'
 function useNarrow(): boolean {
@@ -133,7 +136,10 @@ function ToolButton({
   disabled,
   disabledReason,
   onClick,
+  text,
 }: {
+  /** Visible text next to the icon; the accessible name stays `label`. */
+  text?: string
   label: string
   hint?: string
   icon: WsIconName | 'settings'
@@ -147,8 +153,9 @@ function ToolButton({
       content={disabled && disabledReason ? disabledReason : hint ? `${label} (${hint})` : label}
       side="bottom"
     >
-      <Button variant={variant} iconOnly aria-label={label} disabled={disabled} onClick={onClick}>
+      <Button variant={variant} iconOnly={!text} aria-label={label} disabled={disabled} onClick={onClick}>
         {icon === 'settings' ? <Icon name="settings" /> : <WsIcon name={icon} />}
+        {text && <span className="ws-tool-text">{text}</span>}
       </Button>
     </Tooltip>
   )
@@ -189,9 +196,15 @@ function WorkspaceView({ project }: { project: Project }) {
   const [currentId, setCurrentId] = useState<string | null>(null)
   const firstVisible = useMemo(() => filterRows(rows, query)[0], [rows, query])
   const current = rows.find((r) => r.id === currentId) ?? firstVisible ?? null
-  const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected])
+  // Only rows the search leaves visible count as selected, so print/save never act on hidden rows.
+  const selectedRows = useMemo(
+    () => filterRows(rows, query).filter((r) => selected.has(r.id)),
+    [rows, query, selected],
+  )
 
   const presence = useRowPresence(project.id)
+  const rtSnapshot = useRealtime()?.snapshot
+  const hasOnline = (rtSnapshot?.peers ?? []).some((p) => p.id !== rtSnapshot?.you)
   const remoteLeaving = useRealtime()?.leaving
   const remoteFresh = useRealtime()?.remoteFresh
   const leavingAll = useMemo(
@@ -253,6 +266,16 @@ function WorkspaceView({ project }: { project: Project }) {
   const freshTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(freshTimer.current), [])
 
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set())
+  const pendingCount = useRef(new Map<string, number>())
+  const track = useCallback((id: string, delta: 1 | -1) => {
+    const n = (pendingCount.current.get(id) ?? 0) + delta
+    if (n > 0) pendingCount.current.set(id, n)
+    else pendingCount.current.delete(id)
+    setPending(new Set(pendingCount.current.keys()))
+  }, [])
+  const down = useConnectionDown()
+
   const attempt = useCallback(
     async (row: Participant, patch: { name?: string; phone?: string }): Promise<CommitResult> => {
       try {
@@ -265,17 +288,21 @@ function WorkspaceView({ project }: { project: Project }) {
           }
           if (e.code === 'ROW_LOCKED') return { status: 'locked', by: e.details?.by as string | undefined }
         }
-        toast.show({ message: errorText(e), tone: 'error' })
+        toast.show({
+          message: t('workspace.toast.saveFailed', { number: row.number, reason: errorText(e) }),
+          tone: 'error',
+        })
         return { status: 'error' }
       }
     },
-    [update, toast],
+    [update, toast, t],
   )
 
   // Edits of one row run one after another so each PATCH carries the version the previous one produced.
   const commit = useCallback(
     (row: Participant, patch: { name?: string; phone?: string }): Promise<CommitResult> => {
       const previous = chains.current.get(row.id) ?? Promise.resolve()
+      track(row.id, 1)
       const run = previous
         .catch(() => undefined)
         .then(() => {
@@ -283,10 +310,11 @@ function WorkspaceView({ project }: { project: Project }) {
           const latest = cached?.items.find((r) => r.id === row.id)
           return attempt(latest && latest.version > row.version ? latest : row, patch)
         })
+        .finally(() => track(row.id, -1))
       chains.current.set(row.id, run)
       return run
     },
-    [attempt, qc, project.id],
+    [attempt, qc, project.id, track],
   )
 
   const adopt = useCallback(
@@ -297,16 +325,26 @@ function WorkspaceView({ project }: { project: Project }) {
     [qc, project.id],
   )
 
+  // Moving the cursor to the first new row must wait until a closing dialog has given focus back.
+  const pendingFocus = useRef(false)
+  const [focusNonce, setFocusNonce] = useState(0)
+
   const addRows = useCallback(
-    async (vars: { count: number } | { items: ParticipantInput[] }) => {
+    async (
+      vars: { count: number } | { items: ParticipantInput[] },
+      filled?: { count: number; firstId: string },
+    ) => {
       try {
         const created = await create.mutateAsync(vars)
         setFresh(new Set(created.map((r) => r.id)))
         clearTimeout(freshTimer.current)
         freshTimer.current = setTimeout(() => setFresh(new Set()), FRESH_MS)
-        const first = created[0]
-        if (first) setReveal(first.id)
-        toast.show({ message: t('workspace.toast.added', { count: created.length }) })
+        const first = filled?.firstId ?? created[0]?.id
+        if (first) {
+          setReveal(first)
+          pendingFocus.current = true
+        }
+        toast.show({ message: t('workspace.toast.added', { count: created.length + (filled?.count ?? 0) }) })
         return true
       } catch (e) {
         toast.show({ message: errorText(e), tone: 'error' })
@@ -314,6 +352,31 @@ function WorkspaceView({ project }: { project: Project }) {
       }
     },
     [create, toast, t],
+  )
+
+  // Pasted rows fill blank rows first (starting at the current one) and only the rest is appended.
+  const pasteRows = useCallback(
+    async (items: ParticipantInput[]) => {
+      const plan = planPaste(rows, items, currentId)
+      if (plan.fills.length === 0) {
+        void addRows({ items })
+        return
+      }
+      const results = await Promise.all(
+        plan.fills.map((f) => commit(f.row, { name: f.item.name, phone: f.item.phone })),
+      )
+      const ok = plan.fills.filter((_, i) => results[i]?.status === 'ok')
+      const firstId = ok[0]?.row.id
+      if (plan.rest.length > 0) {
+        await addRows({ items: plan.rest }, firstId ? { count: ok.length, firstId } : undefined)
+      } else if (firstId) {
+        setReveal(firstId)
+        pendingFocus.current = true
+        setFocusNonce((n) => n + 1)
+        toast.show({ message: t('workspace.toast.added', { count: ok.length }) })
+      }
+    },
+    [rows, currentId, addRows, commit, toast, t],
   )
 
   const onDelete = useCallback(
@@ -333,6 +396,11 @@ function WorkspaceView({ project }: { project: Project }) {
   // ---- dialogs and layout
   const [addOpen, setAddOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  useEffect(() => {
+    if (addOpen || !pendingFocus.current) return
+    pendingFocus.current = false
+    setFocusNonce((n) => n + 1)
+  }, [addOpen, reveal])
   const [layout, setLayout] = useState<Layout>(loadLayout)
   const [tab, setTab] = useState<PanelId>('picture')
   const updateLayout = (fn: (l: Layout) => Layout) =>
@@ -355,14 +423,26 @@ function WorkspaceView({ project }: { project: Project }) {
     try {
       downloadBlob(
         await downloadExport(project.id, format),
-        `${project.title.replace(/[^\p{L}\p{N}_-]+/gu, '_')}.${format}`,
+        `${safeFilePart(project.title, 80) || 'participants'}.${format}`,
       )
     } catch (e) {
       toast.show({ message: errorText(e), tone: 'error' })
     }
   }
 
+  const printTargets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
+  const [printWarn, setPrintWarn] = useState<{ bad: number; total: number } | null>(null)
+  const onPrint = () => {
+    const bad = countSuspiciousPhones(printTargets)
+    if (bad > 0) setPrintWarn({ bad, total: printTargets.length })
+    else actions.print()
+  }
+
   const shortcut = copyShortcutLabel()
+  const printLabel =
+    actions.targetCount > 0
+      ? t('workspace.print.withCount', { count: actions.targetCount })
+      : t('workspace.print')
   const noPrintReason = !current ? t('workspace.noRowsReason') : undefined
   const ratioOff = project.image ? Math.abs(project.image.w / project.image.h - TICKET_ASPECT) > 0.05 : false
   const picSize = imageEl ? imageSize(imageEl) : null
@@ -401,8 +481,10 @@ function WorkspaceView({ project }: { project: Project }) {
           onAdopt={adopt}
           onDelete={onDelete}
           onAddRows={() => setAddOpen(true)}
-          onPasteRows={(items) => void addRows({ items })}
+          onPasteRows={(items) => void pasteRows(items)}
           revealId={reveal}
+          focusNonce={focusNonce}
+          unsentIds={down ? pending : NO_IDS}
           query={query}
           onQueryChange={setQuery}
         />
@@ -425,6 +507,9 @@ function WorkspaceView({ project }: { project: Project }) {
         hasProjectImage={!!project.image}
         placeholders={project.image ? (project.placeholders as TicketPlaceholders) : null}
         participant={current}
+        emptyReason={list.isError ? 'error' : rows.length === 0 && !list.isPending ? 'no-rows' : 'select'}
+        onRetry={() => void list.refetch()}
+        settingsTo={canSettings ? `/projects/${project.id}/settings` : undefined}
         footer={
           ratioOff && canSettings ? (
             <p className="tk-hint muted">
@@ -452,12 +537,22 @@ function WorkspaceView({ project }: { project: Project }) {
           </span>
           <h1 className="breadcrumb-current">{project.title}</h1>
         </nav>
-        <ConnectionBadge />
-        <OnlineAvatars />
-        {project.contributors.length > 0 && (
-          <AvatarStack users={project.contributors.map((c) => ({ ...c, avatar: null }))} />
-        )}
+        <div className="ws-people">
+          {hasOnline && (
+            <div className="ws-people-group">
+              <span className="ws-people-label">{t('workspace.people.online')}</span>
+              <OnlineAvatars />
+            </div>
+          )}
+          {project.contributors.length > 0 && (
+            <div className="ws-people-group">
+              <span className="ws-people-label">{t('workspace.people.contributors')}</span>
+              <AvatarStack users={project.contributors.map((c) => ({ ...c, avatar: null }))} />
+            </div>
+          )}
+        </div>
       </div>
+      <OfflineBanner down={down} />
 
       {finished && (
         <p className="ws-banner" role="status">
@@ -472,10 +567,11 @@ function WorkspaceView({ project }: { project: Project }) {
             <ToolButton
               icon="print"
               variant="primary"
-              label={t('workspace.print')}
+              label={printLabel}
+              text={printLabel}
               disabled={!current}
               disabledReason={noPrintReason}
-              onClick={actions.print}
+              onClick={onPrint}
             />
             <ToolButton
               icon="copy"
@@ -496,7 +592,12 @@ function WorkspaceView({ project }: { project: Project }) {
         )}
         {(canImport || canExport) && <span className="ws-sep" aria-hidden="true" />}
         {canImport && (
-          <ToolButton icon="upload" label={t('workspace.import')} onClick={() => setImportOpen(true)} />
+          <ToolButton
+            icon="upload"
+            label={t('workspace.import')}
+            text={t('workspace.import')}
+            onClick={() => setImportOpen(true)}
+          />
         )}
         {canExport && (
           <Menu
@@ -507,8 +608,9 @@ function WorkspaceView({ project }: { project: Project }) {
             ]}
             trigger={(props) => (
               <Tooltip content={t('workspace.export')} side="bottom">
-                <Button {...props} iconOnly aria-label={t('workspace.export')}>
-                  <WsIcon name="file" />
+                <Button {...props} aria-label={t('workspace.export')}>
+                  <WsIcon name="exportTable" />
+                  <span className="ws-tool-text">{t('workspace.export')}</span>
                 </Button>
               </Tooltip>
             )}
@@ -621,6 +723,29 @@ function WorkspaceView({ project }: { project: Project }) {
           void qc.invalidateQueries({ queryKey: ['projects', 'detail', project.id] })
         }}
       />
+      <Modal
+        open={printWarn !== null}
+        onClose={() => setPrintWarn(null)}
+        title={t('workspace.printWarn.title')}
+        actions={
+          <>
+            <Button variant="ghost" data-autofocus onClick={() => setPrintWarn(null)}>
+              {t('workspace.printWarn.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setPrintWarn(null)
+                actions.print()
+              }}
+            >
+              {t('workspace.printWarn.continue')}
+            </Button>
+          </>
+        }
+      >
+        <p>{t('workspace.printWarn.body', { count: printWarn?.bad ?? 0, total: printWarn?.total ?? 0 })}</p>
+      </Modal>
       <CopyFallbackDialog blob={actions.fallback} onClose={actions.closeFallback} />
     </div>
   )

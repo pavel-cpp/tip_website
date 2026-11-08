@@ -22,6 +22,7 @@ import {
   type ConflictState,
   cellId,
   type EditState,
+  type FailedState,
   ParticipantRow,
   ROW_HEIGHT,
   type RowHandlers,
@@ -77,6 +78,10 @@ export interface ParticipantsTableProps {
   onPasteRows: (items: ParticipantInput[]) => void
   /** Scrolls this row into view when it changes (e.g. after adding rows at the end). */
   revealId?: string | null
+  /** Bumped when the cursor should move to `revealId` and the grid take keyboard focus. */
+  focusNonce?: number
+  /** Rows with an edit still waiting to be sent while offline. */
+  unsentIds?: ReadonlySet<string>
   query: string
   onQueryChange: (q: string) => void
 }
@@ -106,6 +111,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     onAddRows,
     onPasteRows,
     revealId,
+    focusNonce = 0,
+    unsentIds = EMPTY_SET,
     query,
     onQueryChange,
   } = props
@@ -122,6 +129,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const [anchor, setAnchor] = useState<number | null>(null)
   const [conflicts, setConflicts] = useState<ReadonlyMap<string, ConflictState>>(new Map())
   const [localLocks, setLocalLocks] = useState<ReadonlyMap<string, RowLockOwner>>(new Map())
+  const [failed, setFailed] = useState<ReadonlyMap<string, FailedState>>(new Map())
   const [shakes, setShakes] = useState<ReadonlyMap<string, number>>(new Map())
   const [tipId, setTipId] = useState<string | null>(null)
   const lastPointer = useRef<string>('mouse')
@@ -148,12 +156,11 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     )
   }, [visible.length])
   useEffect(() => {
-    const pruned = pruneSelection(
-      selected,
-      rows.map((r) => r.id),
-    )
+    // The selection never keeps rows the search hides, so bulk actions only touch what is on screen.
+    const pruned = pruneSelection(selected, ids)
     if (pruned !== selected) onSelectedChange(pruned)
-  }, [rows, selected, onSelectedChange])
+  }, [ids, selected, onSelectedChange])
+  const selectedVisible = useMemo(() => ids.filter((id) => selected.has(id)), [ids, selected])
 
   const rowVirtualizer = useVirtualizer({
     count: visible.length,
@@ -170,6 +177,20 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     // Only a new reveal request should scroll, not every row change.
   }, [revealId])
 
+  const focusGrid = useCallback(() => grid.current?.focus({ preventScroll: true }), [])
+
+  const focusSeen = useRef(0)
+  useEffect(() => {
+    if (focusNonce === focusSeen.current) return
+    focusSeen.current = focusNonce
+    const index = revealId ? visible.findIndex((r) => r.id === revealId) : -1
+    if (index < 0) return
+    // Put the cursor on the first new row's name cell so typing can start right away.
+    setActive({ row: index, col: 1 })
+    setAnchor(index)
+    requestAnimationFrame(focusGrid)
+  }, [focusNonce])
+
   const lockFor = useCallback(
     (id: string): RowLockOwner | null => presence.locks.get(id) ?? localLocks.get(id) ?? null,
     [presence.locks, localLocks],
@@ -183,8 +204,6 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     },
     [later],
   )
-
-  const focusGrid = useCallback(() => grid.current?.focus({ preventScroll: true }), [])
 
   const goTo = useCallback(
     (cell: Cell, opts: { extend?: boolean } = {}) => {
@@ -209,10 +228,12 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         return false
       }
       const original = columnValue(row, cell.col)
-      setEdit({ id: row.id, col: cell.col, value: replaceWith ?? original, original })
+      const retained = failed.get(row.id)
+      const prefill = retained?.col === cell.col ? retained.value : original
+      setEdit({ id: row.id, col: cell.col, value: replaceWith ?? prefill, original })
       return true
     },
-    [visible, canEdit, lockFor, shake],
+    [visible, canEdit, lockFor, shake, failed],
   )
 
   const commit = useCallback(
@@ -222,7 +243,17 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       if (!row || value === state.original) return
       const field = COLUMNS[state.col] === 'phone' ? 'phone' : 'name'
       const res = await onCommit(row, { [field]: value })
-      if (res.status === 'conflict') {
+      if (res.status === 'ok') {
+        setFailed((m) => {
+          if (!m.has(row.id)) return m
+          const next = new Map(m)
+          next.delete(row.id)
+          return next
+        })
+      } else if (res.status === 'error') {
+        // Keep what the user typed (marked as unsaved) so a transient error never throws their work away.
+        setFailed((m) => new Map(m).set(row.id, { col: state.col, value }))
+      } else if (res.status === 'conflict') {
         setConflicts((m) => new Map(m).set(row.id, { field, mine: value, current: res.current }))
       } else if (res.status === 'locked') {
         const owner = res.by ? people?.get(res.by) : undefined
@@ -268,9 +299,17 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   )
 
   const cancelEdit = useCallback(() => {
+    if (edit) {
+      setFailed((m) => {
+        if (!m.has(edit.id)) return m
+        const next = new Map(m)
+        next.delete(edit.id)
+        return next
+      })
+    }
     setEdit(null)
     requestAnimationFrame(focusGrid)
-  }, [focusGrid])
+  }, [edit, focusGrid])
 
   const pasteRows = useCallback(
     (text: string): boolean => {
@@ -314,8 +353,19 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     [conflicts, onCommit],
   )
 
+  const retry = useCallback(
+    (id: string) => {
+      const f = failed.get(id)
+      const row = rows.find((r) => r.id === id)
+      if (!f || !row) return
+      void commit({ id, col: f.col, value: f.value, original: columnValue(row, f.col) })
+    },
+    [failed, rows, commit],
+  )
+
   const handlers: RowHandlers = useMemo(
     () => ({
+      onRetry: retry,
       onEditChange: (value) => setEdit((e) => (e ? { ...e, value } : e)),
       onEditPaste: (text) => {
         if (!pasteRows(text)) return false
@@ -325,7 +375,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       onResolveTheirs: resolveTheirs,
       onResolveMine: (id) => void resolveMine(id),
     }),
-    [pasteRows, cancelEdit, resolveTheirs, resolveMine],
+    [retry, pasteRows, cancelEdit, resolveTheirs, resolveMine],
   )
 
   // ---- pointer
@@ -431,12 +481,13 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       return
     }
     if (e.key === 'Escape') {
-      if (selected.size > 1) onSelectedChange(new Set(ids[cell.row] ? [ids[cell.row] as string] : []))
+      if (selectedVisible.length > 1)
+        onSelectedChange(new Set(ids[cell.row] ? [ids[cell.row] as string] : []))
       return
     }
-    if (e.key === 'Delete' && canDelete && selected.size > 0) {
+    if (e.key === 'Delete' && canDelete && selectedVisible.length > 0) {
       e.preventDefault()
-      onDelete([...selected])
+      onDelete(selectedVisible)
       return
     }
     if (e.key === 'Backspace') {
@@ -529,10 +580,10 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
             {t('workspace.addRows')}
           </Button>
         )}
-        {canDelete && selected.size > 0 && (
-          <Button size="sm" variant="danger" onClick={() => onDelete([...selected])}>
+        {canDelete && selectedVisible.length > 0 && (
+          <Button size="sm" variant="danger" onClick={() => onDelete(selectedVisible)}>
             <Icon name="trash" size={16} />
-            {t('workspace.deleteSelected', { count: selected.size })}
+            {t('workspace.deleteSelected', { count: selectedVisible.length })}
           </Button>
         )}
       </div>
@@ -588,6 +639,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           </div>
         </div>
 
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
         <div ref={scroller} className="pt-scroll" tabIndex={0}>
           {loading && rows.length === 0 ? (
             showSkeleton ? (
@@ -625,6 +677,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                     shake={shakes.get(row.id) ?? 0}
                     tipOpen={tipId === row.id}
                     conflict={conflicts.get(row.id) ?? null}
+                    failed={failed.get(row.id) ?? null}
+                    unsent={unsentIds.has(row.id)}
                     rowCount={visible.length}
                     handlers={handlers}
                   />
@@ -637,7 +691,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
       <div className="pt-foot" aria-live="polite">
         {t('workspace.rowCount', { count: visible.length, total: rows.length })}
-        {selected.size > 0 && ` · ${t('workspace.selectedCount', { count: selected.size })}`}
+        {selectedVisible.length > 0 &&
+          ` · ${t('workspace.selectedCount', { count: selectedVisible.length })}`}
       </div>
     </div>
   )

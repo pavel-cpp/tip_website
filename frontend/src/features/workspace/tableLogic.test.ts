@@ -4,11 +4,15 @@ import {
   allVisibleSelected,
   applyClick,
   clampCount,
+  countSuspiciousPhones,
   filterRows,
+  isSuspiciousPhone,
   isTabular,
   moveCell,
   parsePaste,
+  planPaste,
   pruneSelection,
+  safeFilePart,
   selectAllVisible,
 } from './tableLogic'
 
@@ -152,5 +156,52 @@ describe('clampCount', () => {
     expect(clampCount('-3')).toBeNull()
     expect(clampCount('1.5')).toBeNull()
     expect(clampCount('')).toBeNull()
+  })
+})
+
+describe('soft phone validation', () => {
+  it('flags letters and implausible digit counts but not empty or formatted phones', () => {
+    expect(isSuspiciousPhone('abc')).toBe(true)
+    expect(isSuspiciousPhone('+998 90 12a')).toBe(true)
+    expect(isSuspiciousPhone('123')).toBe(true)
+    expect(isSuspiciousPhone('1'.repeat(16))).toBe(true)
+    expect(isSuspiciousPhone('')).toBe(false)
+    expect(isSuspiciousPhone('+7 912 305-14-22')).toBe(false)
+    expect(isSuspiciousPhone('(90) 123.45.67')).toBe(false)
+    expect(countSuspiciousPhones([row(1, 'a', 'abc'), row(2, 'b', '+998901234567')])).toBe(1)
+  })
+})
+
+describe('planPaste', () => {
+  const blank = (n: number) => row(n, '', '')
+  const rows = [row(1, 'A', '+998901234567'), blank(2), blank(3), row(4, 'D', '+998901234568')]
+  const items = [
+    { name: 'X', phone: '1' },
+    { name: 'Y', phone: '2' },
+    { name: 'Z', phone: '3' },
+  ]
+  it('fills blank rows first and returns the remainder', () => {
+    const plan = planPaste(rows, items)
+    expect(plan.fills.map((f) => f.row.id)).toEqual(['id2', 'id3'])
+    expect(plan.rest).toEqual([items[2]])
+  })
+  it('starts at the given blank row', () => {
+    const plan = planPaste(rows, items.slice(0, 1), 'id3')
+    expect(plan.fills.map((f) => f.row.id)).toEqual(['id3'])
+    expect(plan.rest).toEqual([])
+  })
+  it('creates everything when there are no blank rows', () => {
+    const plan = planPaste([rows[0] as Participant], items)
+    expect(plan.fills).toEqual([])
+    expect(plan.rest).toEqual(items)
+  })
+})
+
+describe('safeFilePart', () => {
+  it('keeps letters and digits, replaces the rest and trims', () => {
+    expect(safeFilePart('Tashkent City: Mall / 2026!')).toBe('Tashkent_City_Mall_2026')
+    expect(safeFilePart('  ../..  ')).toBe('')
+    expect(safeFilePart('Узбек Имя')).toBe('Узбек_Имя')
+    expect(safeFilePart('a'.repeat(100), 10)).toBe('aaaaaaaaaa')
   })
 })

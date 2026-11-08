@@ -403,7 +403,7 @@ describe('permission gating', () => {
     renderPage()
     await screen.findByText('Timur Rahimov')
     for (const name of [
-      'Печать',
+      /^Печать/,
       'Копировать билет',
       'Сохранить билет',
       'Импорт',
@@ -419,7 +419,7 @@ describe('permission gating', () => {
     start({ perms: without('participant.print') })
     renderPage()
     await screen.findByText('Timur Rahimov')
-    for (const name of ['Печать', 'Копировать билет', 'Сохранить билет']) {
+    for (const name of [/^Печать/, 'Копировать билет', 'Сохранить билет']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
     expect(screen.queryByText('Копировать —')).not.toBeInTheDocument()
@@ -452,7 +452,7 @@ describe('permission gating', () => {
     expect(screen.getByText(/Проект завершён — только просмотр/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Добавить строки' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Импорт' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Печать' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Печать/ })).toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(cell('Timur Rahimov'))
     await user.keyboard('{Enter}')
@@ -479,5 +479,66 @@ describe('empty and error states', () => {
     start({ rows: [] })
     renderPage()
     expect(await screen.findByText('Участников пока нет')).toBeInTheDocument()
+  })
+})
+
+describe('U1 workspace fixes', () => {
+  it('drops rows hidden by the search from the selection and the delete button', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    const user = userEvent.setup()
+    await user.click(cell('Timur Rahimov'))
+    expect(screen.getByRole('button', { name: /^Удалить/ })).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: 'Поиск по участникам' }), 'zzz-no-match')
+    expect(await screen.findByText('Ничего не найдено')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Удалить/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps the typed value after a failed save and offers a retry', async () => {
+    let fail = true
+    start({
+      patch: (_id, body) =>
+        fail ? apiError(500, 'INTERNAL') : jsonRes(200, { item: { ...ROWS[0], ...body, version: 2 } }),
+    })
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    const user = userEvent.setup()
+    await user.click(cell('Timur Rahimov'))
+    await user.keyboard('{Enter}')
+    await user.clear(screen.getByRole('textbox', { name: 'Имя' }))
+    await user.type(screen.getByRole('textbox', { name: 'Имя' }), 'Typed Name{Enter}')
+    const retry = await screen.findByRole('button', { name: /Повторить сохранение строки № 1/ })
+    expect(screen.getByText('Typed Name')).toBeInTheDocument()
+    fail = false
+    await user.click(retry)
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Повторить сохранение/ })).not.toBeInTheDocument(),
+    )
+    expect(screen.getByText('Typed Name')).toBeInTheDocument()
+  })
+
+  it('highlights a suspicious phone and warns before printing', async () => {
+    start({ rows: [...ROWS, person(4, 'Bad Phone', 'abc')] })
+    renderPage()
+    await screen.findByText('Bad Phone')
+    expect(within(cell('abc')).getByTitle(/Похоже на неверный номер/)).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(cell('Bad Phone'))
+    await user.click(screen.getByRole('button', { name: 'Печать (1)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Проверьте номера телефонов' })
+    expect(within(dialog).getByText(/У 1 из 1 выбранных/)).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Вернуться и исправить' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('shows the selected count on the print button', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    expect(screen.getByRole('button', { name: 'Печать (1)' })).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Выбрать все видимые' }))
+    expect(screen.getByRole('button', { name: 'Печать (3)' })).toBeInTheDocument()
   })
 })
