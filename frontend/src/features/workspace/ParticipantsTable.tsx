@@ -588,7 +588,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           </div>
         </div>
 
-        <div ref={scroller} className="pt-scroll">
+        <div ref={scroller} className="pt-scroll" tabIndex={0}>
           {loading && rows.length === 0 ? (
             showSkeleton ? (
               <div className="pt-skeleton" role="status" aria-label={t('state.loading')}>

@@ -106,7 +106,7 @@ export function TicketPanel({
           type="button"
           className="tk-zoom-value"
           title={t('workspace.zoom.reset')}
-          aria-label={t('workspace.zoom.reset')}
+          aria-label={`${formatNumber(Math.round(zoom * 100))}%, ${t('workspace.zoom.reset')}`}
           onClick={() => setZoom(DEFAULT_ZOOM)}
         >
           {formatNumber(Math.round(zoom * 100))}%

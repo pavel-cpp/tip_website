@@ -15,7 +15,7 @@ export function LanguageMenu() {
         onSelect: () => void setLocale(l),
       }))}
       trigger={(props) => (
-        <Button {...props} variant="ghost" aria-label={t('language.title')}>
+        <Button {...props} variant="ghost" aria-label={`${locale.toUpperCase()}, ${t('language.title')}`}>
           <Icon name="globe" />
           {locale.toUpperCase()}
         </Button>

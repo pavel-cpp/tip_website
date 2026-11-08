@@ -191,7 +191,7 @@ export function PlaceholderPreview({
             onPointerCancel={finish}
             onKeyDown={onKey(key)}
           >
-            <span className="ph-chip-badge" style={{ background: BADGE[key] }}>
+            <span className="ph-chip-badge" aria-hidden="true" style={{ background: BADGE[key] }}>
               {i + 1}
             </span>
             {labelOf(key)}

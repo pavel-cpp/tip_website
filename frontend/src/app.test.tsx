@@ -67,7 +67,7 @@ describe('app shell and routing', () => {
   it('switches language without reloading', async () => {
     open('/profile')
     await screen.findByRole('heading', { name: 'Личный кабинет' })
-    await userEvent.click(screen.getByRole('button', { name: 'Язык' }))
+    await userEvent.click(screen.getByRole('button', { name: /Язык/ }))
     await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Oʻzbekcha' }))
     expect(await screen.findByRole('heading', { name: 'Shaxsiy kabinet' })).toBeInTheDocument()
   })

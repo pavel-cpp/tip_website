@@ -48,6 +48,19 @@ function patchList(
   return list ? { ...list, items: fn(list.items) } : list
 }
 
+/**
+ * Merges rows into a cached list by id. A realtime push can deliver our own new rows before the
+ * HTTP response is handled, so appending blindly would show every created row twice.
+ */
+export function mergeRows(current: readonly Participant[], incoming: readonly Participant[]): Participant[] {
+  const byId = new Map(current.map((r) => [r.id, r]))
+  for (const row of incoming) {
+    const have = byId.get(row.id)
+    if (!have || row.version > have.version) byId.set(row.id, row)
+  }
+  return [...byId.values()].sort((a, b) => a.number - b.number)
+}
+
 export interface UpdateVars {
   id: string
   version: number
@@ -96,7 +109,7 @@ export function useCreateParticipants(projectId: string) {
     mutationFn: async (vars: CreateVars) =>
       (await api.post<{ items: Participant[] }>(`/projects/${projectId}/participants`, vars)).items,
     onSuccess: (items) => {
-      qc.setQueryData<ParticipantList>(key, (list) => patchList(list, (cur) => [...cur, ...items]))
+      qc.setQueryData<ParticipantList>(key, (list) => patchList(list, (cur) => mergeRows(cur, items)))
       void qc.invalidateQueries({ queryKey: ['projects', 'detail', projectId] })
     },
   })
