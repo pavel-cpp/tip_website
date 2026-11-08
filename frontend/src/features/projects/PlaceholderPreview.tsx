@@ -110,6 +110,16 @@ export function PlaceholderPreview({
     return () => ro.disconnect()
   }, [])
 
+  // Handle positions depend on the measured text width, which changes once a web font has loaded.
+  const [, setFontTick] = useState(0)
+  useEffect(() => {
+    const fonts = typeof document === 'undefined' ? undefined : document.fonts
+    if (!fonts?.addEventListener) return
+    const bump = () => setFontTick((n) => n + 1)
+    fonts.addEventListener('loadingdone', bump)
+    return () => fonts.removeEventListener('loadingdone', bump)
+  }, [])
+
   const scale = size.w > 0 ? shown / size.w : 0
   const labelOf = (k: PlaceholderKey) => t(k === 'phone' ? 'settings.ph.phoneFull' : `settings.ph.${k}`)
 

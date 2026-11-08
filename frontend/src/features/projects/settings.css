@@ -28,6 +28,23 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+@media (max-width: 899px) {
+  /* On a phone the form sits below the preview; keeping the preview pinned lets you see the effect of every edit. */
+  .settings-grid > .panel:first-child {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 3;
+  }
+  .settings-grid > .panel:first-child .panel-head {
+    min-height: 36px;
+  }
+  .settings-grid > .panel:first-child .panel-title {
+    font-size: var(--fs-sm);
+  }
+  .settings-grid > .panel:first-child .panel-body {
+    padding: var(--space-2);
+  }
+}
 .settings-fields {
   display: grid;
   /* An implicit auto column grows to the widest input and pushes the actions out of the card. */
