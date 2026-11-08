@@ -83,3 +83,23 @@ export async function enter(page: Page, creds: Creds, locale: Locale, theme: The
 }
 
 export { adminCreds }
+
+/**
+ * Collapses the lists that other tests fill in parallel (project cards, user rows, role cards) to a fixed
+ * height and hides them. Done through the style property, because the server CSP blocks injected
+ * style sheets.
+ */
+export async function hideVolatile(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>(
+      '.project-grid, .role-list, .table-wrap, .state-box',
+    )) {
+      el.style.setProperty('max-height', '120px', 'important')
+      el.style.setProperty('overflow', 'hidden', 'important')
+      el.style.setProperty('visibility', 'hidden', 'important')
+    }
+    for (const el of document.querySelectorAll<HTMLElement>('.project-section ~ .project-section')) {
+      el.style.setProperty('display', 'none', 'important')
+    }
+  })
+}

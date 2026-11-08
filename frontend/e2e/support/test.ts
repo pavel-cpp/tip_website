@@ -20,11 +20,15 @@ interface Fixtures {
  */
 export async function relaxSecureCookie(ctx: BrowserContext): Promise<void> {
   await ctx.route('**/api/v1/auth/**', async (route) => {
-    const response = await route.fetch()
-    const headers = { ...response.headers() }
-    const cookie = headers['set-cookie']
-    if (cookie) headers['set-cookie'] = cookie.replace(/;\s*Secure/gi, '')
-    await route.fulfill({ response, headers })
+    try {
+      const response = await route.fetch()
+      const headers = { ...response.headers() }
+      const cookie = headers['set-cookie']
+      if (cookie) headers['set-cookie'] = cookie.replace(/;\s*Secure/gi, '')
+      await route.fulfill({ response, headers })
+    } catch {
+      // The page was closed while the request was in flight (end of a test): nothing left to answer.
+    }
   })
 }
 
