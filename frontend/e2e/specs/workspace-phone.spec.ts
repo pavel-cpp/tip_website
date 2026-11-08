@@ -178,7 +178,7 @@ test.describe('phone', () => {
     expect(save.y + save.h).toBeLessThanOrEqual((viewport?.height ?? 0) + 0.5)
   })
 
-  test('selection mode: the bulk bar overlays the list and nothing moves (UX audit M7)', async ({
+  test('selection mode: the bulk bar replaces the toolbar in place and the list keeps its height (UX audit N2)', async ({
     admin,
     signedIn,
   }) => {
@@ -188,6 +188,7 @@ test.describe('phone', () => {
     await ws.open(project.id)
     await expect(ws.rows).toHaveCount(5)
 
+    const toolbar = page.getByRole('toolbar', { name: ws.t('workspace.toolbar') })
     const first = ws.rows.first()
     const second = ws.rows.nth(1)
     const before = {
@@ -195,41 +196,117 @@ test.describe('phone', () => {
       first: await box(first),
       second: await box(second),
       tools: await box(page.locator('.pt-tools')),
-      toolbar: await box(page.getByRole('toolbar', { name: ws.t('workspace.toolbar') })),
+      toolbar: await box(toolbar),
     }
     await ws.longPress(first)
-    await expect(ws.bulkBar.getByRole('status')).toHaveText(ws.t('workspace.selectedCount', { count: 1 }))
+    await expect(ws.bulkBar.getByRole('status')).toContainText(ws.t('workspace.selectedCount', { count: 1 }))
     await expect(first).toHaveAttribute('data-selected', 'true')
+    // The toolbar is gone: the bar stands exactly where it was, one row of about 56 px.
+    await expect(toolbar).toHaveCount(0)
+    const bar = await box(ws.bulkBar)
+    expect(bar.y).toBeCloseTo(before.toolbar.y, 0)
+    expect(bar.h).toBeCloseTo(before.toolbar.h, 0)
+    expect(bar.h).toBeLessThanOrEqual(80)
+    // Nothing in the list moved or resized.
     const after = {
       scroller: await box(page.locator('.pc-scroll')),
       first: await box(first),
       second: await box(second),
       tools: await box(page.locator('.pt-tools')),
-      toolbar: await box(page.getByRole('toolbar', { name: ws.t('workspace.toolbar') })),
     }
-    // The audit saw the table jump about 104 px when the first row was selected.
     expect(after.scroller).toEqual(before.scroller)
     expect(after.tools).toEqual(before.tools)
-    expect(after.toolbar).toEqual(before.toolbar)
     expect(after.first.y).toBe(before.first.y)
-    expect(after.first.h).toBe(before.first.h)
     expect(after.second.y).toBe(before.second.y)
-    // The bar is above the list, and the large checkboxes are at least 44 px.
-    const bar = await box(ws.bulkBar)
-    expect(bar.y).toBeGreaterThan(before.scroller.y)
-    expect(bar.y + bar.h).toBeLessThanOrEqual(before.scroller.y + before.scroller.h + 1)
+    // The bar never overlaps the list.
+    expect(bar.y).toBeGreaterThanOrEqual(before.scroller.y + before.scroller.h - 1)
+    // The checkbox takes the number's place and its hit area is at least 44 px.
+    await expect(first.locator('.pc-num')).toHaveCount(0)
     const check = await box(first.locator('.pc-check'))
     expect(check.w).toBeGreaterThanOrEqual(44)
     expect(check.h).toBeGreaterThanOrEqual(44)
+    // Select all and the counter live in the list header.
+    await expect(page.getByRole('checkbox', { name: ws.t('workspace.select.all') })).toBeVisible()
+    await expect(page.getByText(ws.t('workspace.bulk.selectedOf', { count: 1, total: 5 }))).toBeVisible()
 
-    // A tap on the neighbouring card selects it (it does not open the sheet): the audit's mis-tap.
-    // On a short phone viewport the bar covers the lower cards; the list scrolls them clear (its
-    // bottom padding exceeds the bar), and the tap helper scrolls the same way a finger would.
     await second.locator('.pc-main').tap()
     await expect(ws.sheet).toHaveCount(0)
-    await expect(ws.bulkBar.getByRole('status')).toHaveText(ws.t('workspace.selectedCount', { count: 2 }))
-    await expect(second).toHaveAttribute('data-selected', 'true')
+    await expect(page.getByText(ws.t('workspace.bulk.selectedOf', { count: 2, total: 5 }))).toBeVisible()
+    await expect(
+      ws.bulkBar.getByRole('button', { name: ws.t('workspace.print.withCount', { count: 2 }) }),
+    ).toBeVisible()
     expect(await smallTargets(ws.bulkBar)).toEqual([])
+
+    // Copy is labelled as one-ticket-only, saving several tickets is offered as one ZIP.
+    await ws.bulkBar.getByRole('button', { name: ws.t('workspace.more') }).tap()
+    await expect(page.getByRole('menuitem', { name: ws.t('workspace.bulk.copyOne') })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+    await expect(
+      page.getByRole('menuitem', { name: ws.t('workspace.bulk.saveMany', { count: 2 }) }),
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+
+    // Leaving selection mode brings the toolbar back in the same place.
+    await ws.bulkBar.getByRole('button', { name: ws.t('workspace.select.exit') }).tap()
+    await expect(toolbar).toBeVisible()
+    expect(await box(toolbar)).toEqual(before.toolbar)
+  })
+
+  test('the bottom toolbar keeps the Print (N) label and puts the rest into a menu (UX audit N5)', async ({
+    admin,
+    signedIn,
+  }) => {
+    const { project } = await seeded(admin)
+    const page = await signedIn(adminCreds())
+    const ws = new WorkspacePage(page)
+    await ws.open(project.id)
+    const toolbar = page.getByRole('toolbar', { name: ws.t('workspace.toolbar') })
+    await expect(
+      toolbar.getByRole('button', { name: ws.t('workspace.print.withCount', { count: 1 }) }),
+    ).toBeVisible()
+    await toolbar.getByRole('button', { name: ws.t('workspace.more') }).tap()
+    for (const key of [
+      'workspace.copy',
+      'workspace.save',
+      'workspace.import',
+      'workspace.exportAs.xlsx',
+      'workspace.settings',
+    ] as const) {
+      await expect(page.getByRole('menuitem', { name: ws.t(key) })).toBeVisible()
+    }
+  })
+
+  test('cards have one accessible name with number, name and phone (UX audit N13)', async ({
+    admin,
+    signedIn,
+  }) => {
+    const { project } = await seeded(admin)
+    const page = await signedIn(adminCreds())
+    const ws = new WorkspacePage(page)
+    await ws.open(project.id)
+    await expect(
+      ws.rowByText('Bobur').getByRole('button', { name: '№ 2, Bobur Rahimov, +998902223344' }),
+    ).toBeVisible()
+  })
+
+  test('landscape: the list keeps most of the height and the bar is a rail (UX audit N2)', async ({
+    admin,
+    signedIn,
+  }) => {
+    test.skip(test.info().project.name !== 'iphone-15', 'landscape phone check runs on the iphone-15 project')
+    const { project } = await seeded(admin)
+    const page = await signedIn(adminCreds())
+    await page.setViewportSize({ width: 844, height: 390 })
+    const ws = new WorkspacePage(page)
+    await ws.open(project.id)
+    const list = await box(page.locator('.pc-scroll'))
+    expect(list.h / 390).toBeGreaterThanOrEqual(0.55)
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(391)
+    const rail = await box(page.getByRole('toolbar', { name: ws.t('workspace.toolbar') }))
+    expect(rail.w).toBeLessThanOrEqual(70)
+    expect(rail.x + rail.w).toBeLessThanOrEqual(845)
   })
 
   test('bulk delete shows Undo and restores the rows', async ({ admin, signedIn }) => {
@@ -457,7 +534,7 @@ test.describe('tablet', () => {
     await expect(ws.rows.first()).toHaveAttribute('data-selected', 'true')
     expect(await box(page.locator('.pt-scroll'))).toEqual(before.scroller)
     expect((await box(ws.rows.nth(1))).y).toBe(before.row.y)
-    // The delete button appears in the space that was reserved for it.
+    // The delete button appears when something is selected; it no longer holds room back from the search.
     await expect(ws.button('workspace.deleteSelected', { count: 1 })).toBeVisible()
   })
 

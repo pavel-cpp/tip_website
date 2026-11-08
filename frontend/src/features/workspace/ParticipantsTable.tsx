@@ -737,6 +737,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     <div
       className="pt"
       data-cards={cards || undefined}
+      data-select={(cards && selectMode) || undefined}
       onKeyDown={(e) => {
         if (cards && selectMode && e.key === 'Escape') {
           e.stopPropagation()

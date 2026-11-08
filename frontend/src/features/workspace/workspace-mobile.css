@@ -64,7 +64,23 @@
   flex: 1 1 200px;
   min-width: 160px;
 }
-@container pt-tools (max-width: 620px) {
+/* The delete label is long ("Delete 12 rows"): it turns into an icon first, the add button keeps its text longer. */
+@container pt-tools (max-width: 720px) {
+  .pt-tools .pt-delete .pt-btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .pt-tools .pt-delete {
+    padding: 0;
+    width: var(--control-h-sm);
+  }
+}
+@container pt-tools (max-width: 460px) {
   .pt-tools .pt-btn-text {
     position: absolute;
     width: 1px;
@@ -98,6 +114,15 @@
 @media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
   .ws-title {
     font-size: var(--fs-lg);
+  }
+  /* "Projects" above the title; the slash would dangle at the end of the first line. */
+  .ws-head .breadcrumb {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .ws-head .breadcrumb > [aria-hidden="true"] {
+    display: none;
   }
   /* The tabs already name the panel; the panel header only costs list space. */
   .ws-panel > .panel-head {
@@ -145,6 +170,7 @@
     flex: 1 1 0;
     min-width: 0;
     min-height: 48px;
+    padding: 0 12px;
   }
   .ws-main .btn-content {
     min-width: 0;
@@ -155,12 +181,24 @@
     white-space: nowrap;
     font-weight: var(--fw-semibold);
   }
+  .pc-bar .btn-danger {
+    color: var(--danger);
+  }
   .pc-bar-count {
     min-width: 28px;
     text-align: center;
     font-size: var(--fs-md);
     font-weight: var(--fw-semibold);
     font-variant-numeric: tabular-nums;
+  }
+}
+/* On the narrowest phones the count is already in "Print (N)" and in the list header. */
+@media (max-width: 400px) and (orientation: portrait) {
+  .pc-bar-count > [aria-hidden="true"] {
+    display: none;
+  }
+  .pc-bar-count {
+    min-width: 0;
   }
 }
 @keyframes pc-bar-in {
@@ -172,9 +210,12 @@
 /* Landscape phone: tabs share the header row and the bar becomes a rail on the right, so the list keeps the height. */
 @media (orientation: landscape) and (max-height: 500px) {
   .ws {
-    --ws-pad: var(--space-2);
+    --ws-pad: var(--space-1);
+    /* The page padding is wider than on portrait phones; pull the workspace into it so nothing scrolls. */
+    margin-block: calc(var(--ws-pad) - var(--space-6));
+    min-height: 0;
     padding-right: 72px;
-    gap: var(--space-2);
+    gap: var(--space-1);
   }
   .ws-head {
     min-height: var(--touch-target);
@@ -220,8 +261,32 @@
     text-align: center;
     line-height: 1.15;
   }
-  .pc-head {
+  /* The header row replaces the tool row while selecting, so the list neither shrinks nor moves. */
+  .ws .pc-head {
     display: none;
+  }
+  .ws .pt[data-select] .pc-head {
+    display: flex;
+    min-height: 52px;
+  }
+  .ws .pt-tools {
+    padding: 4px var(--space-3) 2px;
+  }
+  .ws .pt[data-select] .pt-tools {
+    display: none;
+  }
+  .ws-head .breadcrumb {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .ws-head .breadcrumb > [aria-hidden="true"] {
+    display: inline;
+  }
+  .ws-title {
+    display: block;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 }
 

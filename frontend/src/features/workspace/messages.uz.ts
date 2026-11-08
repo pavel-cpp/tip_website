@@ -33,7 +33,7 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.col.phone': 'Telefon raqami',
   'workspace.table.label': 'Ishtirokchilar',
   'workspace.search.label': 'Ishtirokchilar boʻyicha qidiruv',
-  'workspace.search.placeholder': 'Ism yoki telefon boʻyicha qidirish',
+  'workspace.search.placeholder': 'Qidiruv',
   'workspace.search.none': 'Hech narsa topilmadi',
   'workspace.empty.title': 'Hozircha ishtirokchilar yoʻq',
   'workspace.empty.hint': 'Boʻsh qatorlar qoʻshing yoki Excel jadvalini joylashtiring (Ctrl+V / Cmd+V)',
@@ -187,7 +187,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   },
   'workspace.bulk.selectedOf': 'Tanlandi: {count} / {total}',
   'workspace.bulk.copyOne': 'Biletdan nusxa olish (faqat bitta)',
-  'workspace.bulk.copyOneReason': 'Faqat bitta biletdan nusxa olish mumkin: bitta qatorni tanlang',
   'workspace.bulk.saveMany': {
     one: '{count} ta biletni saqlash',
     other: '{count} ta biletni ZIP ga saqlash',
@@ -200,7 +199,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.card.state.unsent': 'yuborilmagan',
   'workspace.card.state.locked': '{name} tahrirlayapti',
   'workspace.loadError.title': 'Ishtirokchilarni yuklab boʻlmadi',
-  'workspace.sheet.nameHint': 'Biletdagi ism',
   'workspace.printBig.title': 'Biletlarning katta partiyasi',
   'workspace.printBig.body':
     'Tayyorlanadigan biletlar: {count}. Taxminan {time} ketadi. Varaqni yopmang: hammasi tayyor boʻlgach, chop etish oynasi ochiladi.',

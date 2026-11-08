@@ -364,10 +364,11 @@ function WorkspaceView({ project }: { project: Project }) {
         clearTimeout(freshTimer.current)
         freshTimer.current = setTimeout(() => setFresh(new Set()), FRESH_MS)
         const first = filled?.firstId ?? created[0]?.id
-        if (first) {
+        if (first && 'items' in vars) {
+          follow(first)
+        } else if (first) {
           setReveal(first)
           pendingFocus.current = true
-          if ('items' in vars) setCurrentId(first)
         }
         const firstNumber = filled?.firstNumber ?? created[0]?.number
         if (first && 'items' in vars && firstNumber !== undefined) {
@@ -408,7 +409,7 @@ function WorkspaceView({ project }: { project: Project }) {
       const filled = first ? { count: ok.length, firstId: first.id, firstNumber: first.number } : undefined
       if (plan.rest.length > 0) {
         await addRows({ items: plan.rest }, filled)
-        if (filled) setCurrentId(filled.firstId)
+        if (filled) follow(filled.firstId)
       } else if (filled) {
         follow(filled.firstId)
         toast.show({

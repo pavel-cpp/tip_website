@@ -35,14 +35,12 @@ export function BulkBar(p: BulkBarProps) {
         id: 'copy',
         label: p.copyReady || p.count <= 1 ? t('workspace.copy') : t('workspace.bulk.copyOne'),
         disabled: !p.copyReady,
-        disabledReason: none ? t('workspace.noRowsReason') : t('workspace.bulk.copyOneReason'),
         onSelect: p.onCopy,
       },
       {
         id: 'save',
         label: p.count > 1 ? t('workspace.bulk.saveMany', { count: p.count }) : t('workspace.save'),
         disabled: none || !p.saveReady,
-        disabledReason: none ? t('workspace.noRowsReason') : t('workspace.toast.notReady'),
         onSelect: p.onSave,
       },
     )

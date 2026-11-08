@@ -680,7 +680,10 @@
 }
 
 /* ---------- U1 additions ---------- */
+/* Not shared with the settings page's .breadcrumb: that stylesheet is not loaded here. */
 .ws-head .breadcrumb {
+  flex: 1;
+  display: flex;
   gap: var(--space-2);
   align-items: center;
 }

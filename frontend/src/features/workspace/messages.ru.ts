@@ -31,7 +31,7 @@ export const workspaceRu = {
   'workspace.col.phone': 'Номер телефона',
   'workspace.table.label': 'Участники',
   'workspace.search.label': 'Поиск по участникам',
-  'workspace.search.placeholder': 'Поиск по имени или телефону',
+  'workspace.search.placeholder': 'Поиск',
   'workspace.search.none': 'Ничего не найдено',
   'workspace.empty.title': 'Участников пока нет',
   'workspace.empty.hint': 'Добавьте пустые строки или вставьте таблицу из Excel (Ctrl+V / Cmd+V)',
@@ -197,7 +197,6 @@ export const workspaceRu = {
   },
   'workspace.bulk.selectedOf': 'Выбрано: {count} из {total}',
   'workspace.bulk.copyOne': 'Копировать билет (только один)',
-  'workspace.bulk.copyOneReason': 'Копировать можно только один билет: выберите одну строку',
   'workspace.bulk.saveMany': {
     one: 'Сохранить {count} билет',
     few: 'Сохранить {count} билета в ZIP',
@@ -212,7 +211,6 @@ export const workspaceRu = {
   'workspace.card.state.unsent': 'не отправлено',
   'workspace.card.state.locked': 'редактирует {name}',
   'workspace.loadError.title': 'Не удалось загрузить участников',
-  'workspace.sheet.nameHint': 'Имя на билете',
   'workspace.printBig.title': 'Большая партия билетов',
   'workspace.printBig.body':
     'Будет подготовлено билетов: {count}. Это займёт примерно {time}. Не закрывайте вкладку: диалог печати откроется, когда всё будет готово.',
