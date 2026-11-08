@@ -27,7 +27,7 @@ import {
   type RowHandlers,
 } from './ParticipantRow'
 import { hasCommandKey } from './platform'
-import type { RowLockOwner, RowPresence } from './presence'
+import { type RowLockOwner, type RowPresence, useRowCollab } from './presence'
 import {
   allVisibleSelected,
   applyClick,
@@ -472,6 +472,30 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const everySelected = allVisibleSelected(ids, selected)
   const items = rowVirtualizer.getVirtualItems()
   const activeDescendant = activeRow && active ? cellId(activeRow.id, active.col) : undefined
+
+  // ---- realtime: row lock lifecycle, cursor and denied locks
+  const { editStarted, editEnded, cursor, denied } = useRowCollab()
+  const editRowId = edit?.id ?? null
+  useEffect(() => {
+    if (!editRowId) return
+    editStarted(editRowId)
+    return () => editEnded(editRowId)
+  }, [editRowId, editStarted, editEnded])
+  const cursorRowId = activeRow?.id ?? null
+  const cursorField = active ? COLUMNS[active.col] : undefined
+  useEffect(() => {
+    cursor(cursorRowId, cursorField)
+  }, [cursor, cursorRowId, cursorField])
+  useEffect(() => () => cursor(null), [cursor])
+  const seenDenied = useRef(denied?.seq ?? 0)
+  useEffect(() => {
+    if (!denied || denied.seq <= seenDenied.current) return
+    seenDenied.current = denied.seq
+    // Someone else holds the row: drop the edit and show the same shake and tooltip as a locked row.
+    setEdit((e) => (e && e.id === denied.rowId ? null : e))
+    shake(denied.rowId)
+    requestAnimationFrame(focusGrid)
+  }, [denied, shake, focusGrid])
 
   if (error) return <div className="pt-state">{error}</div>
 

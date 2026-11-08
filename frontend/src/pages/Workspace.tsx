@@ -25,6 +25,8 @@ import { useToast } from '../components/Toast'
 import { Tooltip } from '../components/Tooltip'
 import { type Project, useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
+import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeProvider'
+import { ConnectionBadge, OnlineAvatars } from '../features/realtime/RealtimeStatus'
 import {
   downloadExport,
   type ExportFormat,
@@ -116,7 +118,11 @@ export default function Workspace() {
       </div>
     ) : null
   }
-  return <WorkspaceView project={project.data} />
+  return (
+    <RealtimeProvider projectId={project.data.id}>
+      <WorkspaceView project={project.data} />
+    </RealtimeProvider>
+  )
 }
 
 function ToolButton({
@@ -186,6 +192,12 @@ function WorkspaceView({ project }: { project: Project }) {
   const selectedRows = useMemo(() => rows.filter((r) => selected.has(r.id)), [rows, selected])
 
   const presence = useRowPresence(project.id)
+  const remoteLeaving = useRealtime()?.leaving
+  const remoteFresh = useRealtime()?.remoteFresh
+  const leavingAll = useMemo(
+    () => (remoteLeaving?.size ? new Set([...undoable.leaving, ...remoteLeaving]) : undoable.leaving),
+    [undoable.leaving, remoteLeaving],
+  )
   const people = useMemo(() => {
     const m = new Map<string, RowLockOwner>()
     for (const c of project.contributors) m.set(c.id, c)
@@ -233,6 +245,11 @@ function WorkspaceView({ project }: { project: Project }) {
   const chains = useRef(new Map<string, Promise<unknown>>())
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set())
   const [reveal, setReveal] = useState<string | null>(null)
+  // Rows added by colleagues glow in the accent colour (the frame does not say who added them).
+  const freshAll = useMemo(
+    () => (remoteFresh?.size ? new Set([...fresh, ...remoteFresh]) : fresh),
+    [fresh, remoteFresh],
+  )
   const freshTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(freshTimer.current), [])
 
@@ -375,9 +392,9 @@ function WorkspaceView({ project }: { project: Project }) {
           onSelectedChange={setSelected}
           currentId={current?.id ?? null}
           onCurrentChange={setCurrentId}
-          leaving={undoable.leaving}
-          freshIds={fresh}
-          freshColor={user?.color}
+          leaving={leavingAll}
+          freshIds={freshAll}
+          freshColor={remoteFresh?.size ? undefined : user?.color}
           presence={presence}
           people={people}
           onCommit={commit}
@@ -435,6 +452,8 @@ function WorkspaceView({ project }: { project: Project }) {
           </span>
           <h1 className="breadcrumb-current">{project.title}</h1>
         </nav>
+        <ConnectionBadge />
+        <OnlineAvatars />
         {project.contributors.length > 0 && (
           <AvatarStack users={project.contributors.map((c) => ({ ...c, avatar: null }))} />
         )}
