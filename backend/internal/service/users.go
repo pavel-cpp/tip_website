@@ -43,8 +43,8 @@ type UsersDeps struct {
 	Tokens     TokenStore
 	Hasher     PasswordHasher
 	Passwords  PasswordGenerator
-	Images     ImageProcessor
-	Audit      Audit
+	Images     AvatarProcessor
+	Audit      AccountAudit
 	Clock      Clock
 	IDs        IDGen
 	RefreshTTL time.Duration
@@ -63,7 +63,7 @@ type Users struct {
 // NewUsers builds the users service.
 func NewUsers(d UsersDeps) *Users { return &Users{UsersDeps: d} }
 
-func (s *Users) audit(ctx context.Context, e domain.AuditEntry) error {
+func (s *Users) audit(ctx context.Context, e domain.AccountAuditEntry) error {
 	if s.Audit == nil {
 		return nil
 	}
@@ -290,7 +290,7 @@ func (s *Users) CreateUser(ctx context.Context, actor domain.Actor, in CreateUse
 			return err
 		}
 		out = CreatedUser{Profile: ProfileOf(rec), TempPassword: temp}
-		return s.audit(ctx, domain.AuditEntry{Action: "user.create", ActorID: actor.UserID, TargetID: id, IP: in.IP,
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "user.create", ActorID: actor.UserID, TargetID: id, IP: in.IP,
 			Meta: map[string]any{"roleIds": roleIDs}})
 	})
 	if err != nil {
@@ -389,12 +389,12 @@ func (s *Users) UpdateUser(ctx context.Context, actor domain.Actor, id string, i
 					return err
 				}
 			}
-			if err := s.audit(ctx, domain.AuditEntry{Action: action, ActorID: actor.UserID, TargetID: id}); err != nil {
+			if err := s.audit(ctx, domain.AccountAuditEntry{Action: action, ActorID: actor.UserID, TargetID: id}); err != nil {
 				return err
 			}
 		}
 		if name != nil && *name != rec.DisplayName {
-			if err := s.audit(ctx, domain.AuditEntry{Action: "user.update", ActorID: actor.UserID, TargetID: id}); err != nil {
+			if err := s.audit(ctx, domain.AccountAuditEntry{Action: "user.update", ActorID: actor.UserID, TargetID: id}); err != nil {
 				return err
 			}
 		}
@@ -454,7 +454,7 @@ func (s *Users) SetRoles(ctx context.Context, actor domain.Actor, id string, rol
 		for i, r := range rec.Roles {
 			before[i] = r.ID
 		}
-		if err := s.audit(ctx, domain.AuditEntry{Action: "user.roles.set", ActorID: actor.UserID, TargetID: id,
+		if err := s.audit(ctx, domain.AccountAuditEntry{Action: "user.roles.set", ActorID: actor.UserID, TargetID: id,
 			Meta: map[string]any{"added": difference(ids, before), "removed": difference(before, ids)}}); err != nil {
 			return err
 		}
@@ -504,7 +504,7 @@ func (s *Users) ResetPassword(ctx context.Context, actor domain.Actor, id string
 		if err := s.revoke(ctx, id); err != nil {
 			return err
 		}
-		return s.audit(ctx, domain.AuditEntry{Action: "password.reset", ActorID: actor.UserID, TargetID: id})
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "password.reset", ActorID: actor.UserID, TargetID: id})
 	})
 	if err != nil {
 		return "", err

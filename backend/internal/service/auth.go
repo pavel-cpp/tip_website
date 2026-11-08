@@ -43,7 +43,7 @@ type AuthDeps struct {
 	Codec   TokenCodec
 	Hasher  PasswordHasher
 	Limiter LoginLimiter
-	Audit   Audit
+	Audit   AccountAudit
 	Epoch   *Epoch
 	Clock   Clock
 	IDs     IDGen
@@ -94,7 +94,7 @@ func (a *Auth) storeErr(op string, err error) error {
 	return domain.ErrAuthUnavailable
 }
 
-func (a *Auth) audit(ctx context.Context, e domain.AuditEntry) {
+func (a *Auth) audit(ctx context.Context, e domain.AccountAuditEntry) {
 	if a.Audit == nil {
 		return
 	}
@@ -136,7 +136,7 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	}
 	if !ok || hash == "" || !rec.IsActive {
 		a.Limiter.Fail(in.IP, login)
-		a.audit(ctx, domain.AuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP})
+		a.audit(ctx, domain.AccountAuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP})
 		return Session{}, domain.ErrBadCredentials
 	}
 	a.Limiter.Succeed(in.IP, login)
@@ -158,7 +158,7 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	if err != nil {
 		return Session{}, err
 	}
-	a.audit(ctx, domain.AuditEntry{Action: "login", ActorID: rec.ID, IP: in.IP})
+	a.audit(ctx, domain.AccountAuditEntry{Action: "login", ActorID: rec.ID, IP: in.IP})
 	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 
@@ -384,7 +384,7 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 	if err != nil {
 		return Session{}, err
 	}
-	a.audit(ctx, domain.AuditEntry{Action: "password.change", ActorID: rec.ID, TargetID: rec.ID, IP: in.IP})
+	a.audit(ctx, domain.AccountAuditEntry{Action: "password.change", ActorID: rec.ID, TargetID: rec.ID, IP: in.IP})
 	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 

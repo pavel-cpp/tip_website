@@ -15,11 +15,11 @@ const (
 )
 
 type rig struct {
-	clock  *fakeClock
-	db     *fakeDB
+	clock  *acctFakeClock
+	db     *acctFakeDB
 	store  *fakeTokenStore
 	codec  *fakeCodec
-	audit  *fakeAudit
+	audit  *acctFakeAudit
 	epoch  *Epoch
 	auth   *Auth
 	users  *Users
@@ -39,7 +39,7 @@ type rigOpts struct {
 
 func newRig(t *testing.T, o rigOpts) *rig {
 	t.Helper()
-	r := &rig{clock: newClock(), db: newDB(), codec: newCodec(), audit: &fakeAudit{}}
+	r := &rig{clock: newClock(), db: newDB(), codec: newCodec(), audit: &acctFakeAudit{}}
 	r.store = newTokenStore(r.clock)
 	r.db.addUser("u-admin", "admin", "admin-pass", "role-admin")
 	r.db.addUser("u-worker", "worker1", "worker-pass", "role-worker")
@@ -51,7 +51,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 	r.epoch = ep
 	r.limit = NewMemoryLoginLimiter(r.clock)
 	r.hasher = &fakeHasher{rehash: o.rehash}
-	ids := &seqIDs{}
+	ids := &acctSeqIDs{}
 	r.auth = NewAuth(AuthDeps{
 		Config:  AuthConfig{AccessTTL: accessTTL, RefreshTTL: refreshTTL, FailOpen: o.failOpen, ForcePasswordChange: o.force},
 		Users:   r.db,
@@ -69,13 +69,13 @@ func newRig(t *testing.T, o rigOpts) *rig {
 		Sleep: func(d time.Duration) { r.clock.Advance(d) },
 	})
 	r.users = NewUsers(UsersDeps{
-		Users: r.db, Avatars: r.db, Roles: r.db.roleStore(), Authz: r.db, Epoch: r.epoch, Tx: fakeTx{},
-		Tokens: r.store, Hasher: r.hasher, Passwords: &fixedPasswords{}, Images: fakeImages{}, Audit: r.audit,
+		Users: r.db, Avatars: r.db, Roles: r.db.roleStore(), Authz: r.db, Epoch: r.epoch, Tx: acctFakeTx{},
+		Tokens: r.store, Hasher: r.hasher, Passwords: &fixedPasswords{}, Images: acctFakeImages{}, Audit: r.audit,
 		Clock: r.clock, IDs: ids, RefreshTTL: refreshTTL,
 		OnUserRevoked:     func(id string) { r.revoked = append(r.revoked, id) },
 		OnTokenStoreError: func(op string, err error) { r.storeErrs = append(r.storeErrs, op) },
 	})
-	r.roles = NewRoles(RolesDeps{Roles: r.db.roleStore(), Authz: r.db, Epoch: r.epoch, Tx: fakeTx{}, Audit: r.audit, IDs: ids})
+	r.roles = NewRoles(RolesDeps{Roles: r.db.roleStore(), Authz: r.db, Epoch: r.epoch, Tx: acctFakeTx{}, Audit: r.audit, IDs: ids})
 	return r
 }
 

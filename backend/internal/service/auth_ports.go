@@ -61,16 +61,16 @@ type LoginLimiter interface {
 	Succeed(ip, login string)
 }
 
-// ImageProcessor validates and normalizes uploaded avatars (implemented by the imaging stream).
-type ImageProcessor interface {
+// AvatarProcessor validates and normalizes uploaded avatars (implemented by the imaging stream).
+type AvatarProcessor interface {
 	// ProcessAvatar decodes raw (PNG or JPEG), rejects hostile input with the domain errors
 	// UNSUPPORTED_MEDIA, TOO_LARGE or IMAGE_INVALID and returns a 256x256 image.
 	ProcessAvatar(ctx context.Context, raw []byte) (mime string, data []byte, err error)
 }
 
-// Audit records audited actions (implemented by the audit stream).
-type Audit interface {
-	Record(ctx context.Context, e domain.AuditEntry) error
+// AccountAudit records audited account actions (implemented by the audit stream).
+type AccountAudit interface {
+	Record(ctx context.Context, e domain.AccountAuditEntry) error
 }
 
 // UserStore persists users. Every method joins the transaction carried by ctx.

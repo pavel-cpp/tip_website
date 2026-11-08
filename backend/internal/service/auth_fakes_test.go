@@ -12,43 +12,43 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
 
-type fakeClock struct {
+type acctFakeClock struct {
 	mu sync.Mutex
 	t  time.Time
 }
 
-func newClock() *fakeClock {
-	return &fakeClock{t: time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)}
+func newClock() *acctFakeClock {
+	return &acctFakeClock{t: time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)}
 }
 
-func (c *fakeClock) Now() time.Time {
+func (c *acctFakeClock) Now() time.Time {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.t
 }
 
-func (c *fakeClock) Advance(d time.Duration) {
+func (c *acctFakeClock) Advance(d time.Duration) {
 	c.mu.Lock()
 	c.t = c.t.Add(d)
 	c.mu.Unlock()
 }
 
-type seqIDs struct {
+type acctSeqIDs struct {
 	mu sync.Mutex
 	n  int
 }
 
-func (s *seqIDs) NewID() string {
+func (s *acctSeqIDs) NewID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.n++
 	return fmt.Sprintf("id-%04d", s.n)
 }
 
-// fakeTx runs the function directly; rollback is not modelled.
-type fakeTx struct{}
+// acctFakeTx runs the function directly; rollback is not modelled.
+type acctFakeTx struct{}
 
-func (fakeTx) Do(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+func (acctFakeTx) Do(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
 
 type fakeHasher struct {
 	rehash   bool
@@ -131,7 +131,7 @@ func (c *fakeCodec) VerifyRefresh(tok string, now time.Time) (domain.RefreshClai
 
 // fakeTokenStore models the Redis token store, expiring entries on a fake clock.
 type fakeTokenStore struct {
-	clock *fakeClock
+	clock *acctFakeClock
 	mu    sync.Mutex
 	down  error
 
@@ -149,7 +149,7 @@ type entry struct {
 	expires time.Time
 }
 
-func newTokenStore(c *fakeClock) *fakeTokenStore {
+func newTokenStore(c *acctFakeClock) *fakeTokenStore {
 	return &fakeTokenStore{
 		clock: c, burned: map[string]time.Time{}, replays: map[string]entry{},
 		families: map[string]bool{}, access: map[string]bool{}, cutoffs: map[string]time.Time{},
@@ -242,13 +242,13 @@ func (s *fakeTokenStore) SetUserCutoff(_ context.Context, uid string, cutoff tim
 	return nil
 }
 
-type fakeAudit struct {
+type acctFakeAudit struct {
 	mu      sync.Mutex
-	entries []domain.AuditEntry
+	entries []domain.AccountAuditEntry
 	err     error
 }
 
-func (a *fakeAudit) Record(_ context.Context, e domain.AuditEntry) error {
+func (a *acctFakeAudit) Record(_ context.Context, e domain.AccountAuditEntry) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.err != nil {
@@ -258,7 +258,7 @@ func (a *fakeAudit) Record(_ context.Context, e domain.AuditEntry) error {
 	return nil
 }
 
-func (a *fakeAudit) actions() []string {
+func (a *acctFakeAudit) actions() []string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var out []string
@@ -268,19 +268,19 @@ func (a *fakeAudit) actions() []string {
 	return out
 }
 
-type fakeImages struct {
+type acctFakeImages struct {
 	err error
 }
 
-func (f fakeImages) ProcessAvatar(_ context.Context, raw []byte) (string, []byte, error) {
+func (f acctFakeImages) ProcessAvatar(_ context.Context, raw []byte) (string, []byte, error) {
 	if f.err != nil {
 		return "", nil, f.err
 	}
 	return "image/jpeg", append([]byte("jpeg:"), raw...), nil
 }
 
-// fakeDB implements UserStore, AvatarStore, RoleStore and AuthzState in memory.
-type fakeDB struct {
+// acctFakeDB implements UserStore, AvatarStore, RoleStore and AuthzState in memory.
+type acctFakeDB struct {
 	mu       sync.Mutex
 	users    map[string]*dbUser
 	roles    map[string]*domain.Role
@@ -302,8 +302,8 @@ type dbUser struct {
 	theme     domain.Theme
 }
 
-func newDB() *fakeDB {
-	db := &fakeDB{
+func newDB() *acctFakeDB {
+	db := &acctFakeDB{
 		users: map[string]*dbUser{}, roles: map[string]*domain.Role{},
 		assign: map[string][]string{}, avatars: map[string]domain.Avatar{}, epoch: 1,
 	}
@@ -313,7 +313,7 @@ func newDB() *fakeDB {
 }
 
 // addUser seeds a user with the given roles.
-func (db *fakeDB) addUser(id, login, password string, roleIDs ...string) {
+func (db *acctFakeDB) addUser(id, login, password string, roleIDs ...string) {
 	db.users[id] = &dbUser{
 		NewUser: domain.NewUser{ID: id, Login: login, DisplayName: login, Color: domain.DefaultColor, PasswordHash: "hash:" + password},
 		active:  true, hash: "hash:" + password, locale: domain.LocaleRU, theme: domain.ThemeDark,
@@ -321,7 +321,7 @@ func (db *fakeDB) addUser(id, login, password string, roleIDs ...string) {
 	db.assign[id] = roleIDs
 }
 
-func (db *fakeDB) record(u *dbUser) domain.UserRecord {
+func (db *acctFakeDB) record(u *dbUser) domain.UserRecord {
 	rec := domain.UserRecord{
 		User: domain.User{
 			ID: u.ID, Login: u.Login, DisplayName: u.DisplayName, Color: u.Color, Locale: u.locale, Theme: u.theme,
@@ -344,7 +344,7 @@ func (db *fakeDB) record(u *dbUser) domain.UserRecord {
 	return rec
 }
 
-func (db *fakeDB) Create(_ context.Context, u domain.NewUser) error {
+func (db *acctFakeDB) Create(_ context.Context, u domain.NewUser) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for _, x := range db.users {
@@ -356,7 +356,7 @@ func (db *fakeDB) Create(_ context.Context, u domain.NewUser) error {
 	return nil
 }
 
-func (db *fakeDB) GetByID(_ context.Context, id string) (domain.UserRecord, error) {
+func (db *acctFakeDB) GetByID(_ context.Context, id string) (domain.UserRecord, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	u, ok := db.users[id]
@@ -366,7 +366,7 @@ func (db *fakeDB) GetByID(_ context.Context, id string) (domain.UserRecord, erro
 	return db.record(u), nil
 }
 
-func (db *fakeDB) GetByLogin(_ context.Context, login string) (domain.UserRecord, error) {
+func (db *acctFakeDB) GetByLogin(_ context.Context, login string) (domain.UserRecord, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	for _, u := range db.users {
@@ -377,7 +377,7 @@ func (db *fakeDB) GetByLogin(_ context.Context, login string) (domain.UserRecord
 	return domain.UserRecord{}, domain.ErrNotFound
 }
 
-func (db *fakeDB) List(context.Context) ([]domain.UserRecord, error) {
+func (db *acctFakeDB) List(context.Context) ([]domain.UserRecord, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if db.failList != nil {
@@ -391,7 +391,7 @@ func (db *fakeDB) List(context.Context) ([]domain.UserRecord, error) {
 	return out, nil
 }
 
-func (db *fakeDB) UpdateProfile(_ context.Context, id string, p domain.ProfilePatch) error {
+func (db *acctFakeDB) UpdateProfile(_ context.Context, id string, p domain.ProfilePatch) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	u, ok := db.users[id]
@@ -413,7 +413,7 @@ func (db *fakeDB) UpdateProfile(_ context.Context, id string, p domain.ProfilePa
 	return nil
 }
 
-func (db *fakeDB) SetPassword(_ context.Context, id, hash string, temporary bool) error {
+func (db *acctFakeDB) SetPassword(_ context.Context, id, hash string, temporary bool) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	u, ok := db.users[id]
@@ -424,7 +424,7 @@ func (db *fakeDB) SetPassword(_ context.Context, id, hash string, temporary bool
 	return nil
 }
 
-func (db *fakeDB) SetActive(_ context.Context, id string, active bool) error {
+func (db *acctFakeDB) SetActive(_ context.Context, id string, active bool) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	u, ok := db.users[id]
@@ -435,7 +435,7 @@ func (db *fakeDB) SetActive(_ context.Context, id string, active bool) error {
 	return nil
 }
 
-func (db *fakeDB) TouchLastLogin(_ context.Context, id string, at time.Time) error {
+func (db *acctFakeDB) TouchLastLogin(_ context.Context, id string, at time.Time) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	if u, ok := db.users[id]; ok {
@@ -444,14 +444,14 @@ func (db *fakeDB) TouchLastLogin(_ context.Context, id string, at time.Time) err
 	return nil
 }
 
-func (db *fakeDB) SetRoles(_ context.Context, userID string, roleIDs []string) error {
+func (db *acctFakeDB) SetRoles(_ context.Context, userID string, roleIDs []string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.assign[userID] = slices.Clone(roleIDs)
 	return nil
 }
 
-func (db *fakeDB) CountActiveAdmins(context.Context) (int, error) {
+func (db *acctFakeDB) CountActiveAdmins(context.Context) (int, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	n := 0
@@ -469,14 +469,14 @@ func (db *fakeDB) CountActiveAdmins(context.Context) (int, error) {
 	return n, nil
 }
 
-func (db *fakeDB) PutAvatar(_ context.Context, id string, a domain.Avatar, _ time.Time) error {
+func (db *acctFakeDB) PutAvatar(_ context.Context, id string, a domain.Avatar, _ time.Time) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.avatars[id] = a
 	return nil
 }
 
-func (db *fakeDB) GetAvatar(_ context.Context, id string) (domain.Avatar, error) {
+func (db *acctFakeDB) GetAvatar(_ context.Context, id string) (domain.Avatar, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	a, ok := db.avatars[id]
@@ -486,14 +486,14 @@ func (db *fakeDB) GetAvatar(_ context.Context, id string) (domain.Avatar, error)
 	return a, nil
 }
 
-func (db *fakeDB) DeleteAvatar(_ context.Context, id string) error {
+func (db *acctFakeDB) DeleteAvatar(_ context.Context, id string) error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	delete(db.avatars, id)
 	return nil
 }
 
-func (db *fakeDB) userCount(roleID string) int {
+func (db *acctFakeDB) userCount(roleID string) int {
 	n := 0
 	for _, ids := range db.assign {
 		if slices.Contains(ids, roleID) {
@@ -505,7 +505,7 @@ func (db *fakeDB) userCount(roleID string) int {
 
 // RoleStore.
 
-func (db *fakeDB) roleList() []domain.Role {
+func (db *acctFakeDB) roleList() []domain.Role {
 	var out []domain.Role
 	for _, r := range db.roles {
 		c := *r
@@ -516,9 +516,9 @@ func (db *fakeDB) roleList() []domain.Role {
 	return out
 }
 
-type roleStoreView struct{ db *fakeDB }
+type roleStoreView struct{ db *acctFakeDB }
 
-func (db *fakeDB) roleStore() roleStoreView { return roleStoreView{db} }
+func (db *acctFakeDB) roleStore() roleStoreView { return roleStoreView{db} }
 
 func (v roleStoreView) List(context.Context) ([]domain.Role, error) {
 	v.db.mu.Lock()
@@ -632,13 +632,13 @@ func (v roleStoreView) SetPermissions(_ context.Context, roleID string, perms []
 
 // AuthzState.
 
-func (db *fakeDB) Epoch(context.Context) (int64, error) {
+func (db *acctFakeDB) Epoch(context.Context) (int64, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	return db.epoch, nil
 }
 
-func (db *fakeDB) BumpEpoch(context.Context) (int64, error) {
+func (db *acctFakeDB) BumpEpoch(context.Context) (int64, error) {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 	db.epoch++

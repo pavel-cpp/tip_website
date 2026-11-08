@@ -552,7 +552,7 @@ func TestMeEndpoints(t *testing.T) {
 	}
 }
 
-func multipartBody(t *testing.T, field string, data []byte) (*bytes.Buffer, string) {
+func acctMultipartBody(t *testing.T, field string, data []byte) (*bytes.Buffer, string) {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -576,19 +576,19 @@ func putAvatar(e *env, body *bytes.Buffer, ct string) *httptest.ResponseRecorder
 
 func TestPutAvatar(t *testing.T) {
 	e := newEnv(t)
-	body, ct := multipartBody(t, "file", []byte("PNGDATA"))
+	body, ct := acctMultipartBody(t, "file", []byte("PNGDATA"))
 	if rec := putAvatar(e, body, ct); rec.Code != 200 || string(e.users.avatarRaw) != "PNGDATA" {
 		t.Fatalf("upload: %d %s raw=%q", rec.Code, rec.Body, e.users.avatarRaw)
 	}
-	body, ct = multipartBody(t, "other", []byte("x"))
+	body, ct = acctMultipartBody(t, "other", []byte("x"))
 	if rec := putAvatar(e, body, ct); rec.Code != 400 {
 		t.Errorf("missing file field: %d", rec.Code)
 	}
-	body, ct = multipartBody(t, "file", make([]byte, service.MaxAvatarUpload+1))
+	body, ct = acctMultipartBody(t, "file", make([]byte, service.MaxAvatarUpload+1))
 	if rec := putAvatar(e, body, ct); rec.Code != 413 {
 		t.Errorf("too large: %d", rec.Code)
 	}
-	body, ct = multipartBody(t, "file", make([]byte, service.MaxAvatarUpload+authMultipartOverhead+10))
+	body, ct = acctMultipartBody(t, "file", make([]byte, service.MaxAvatarUpload+authMultipartOverhead+10))
 	if rec := putAvatar(e, body, ct); rec.Code != 413 {
 		t.Errorf("way too large: %d", rec.Code)
 	}
@@ -599,7 +599,7 @@ func TestPutAvatar(t *testing.T) {
 		t.Errorf("broken multipart: %d", rec.Code)
 	}
 	e.users.err = domain.ErrImageInvalid
-	body, ct = multipartBody(t, "file", []byte("x"))
+	body, ct = acctMultipartBody(t, "file", []byte("x"))
 	if rec := putAvatar(e, body, ct); rec.Code != 422 {
 		t.Errorf("invalid image: %d", rec.Code)
 	}

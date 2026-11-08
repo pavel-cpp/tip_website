@@ -14,7 +14,7 @@ type RolesDeps struct {
 	Authz AuthzState
 	Epoch *Epoch
 	Tx    Tx
-	Audit Audit
+	Audit AccountAudit
 	IDs   IDGen
 }
 
@@ -26,7 +26,7 @@ type Roles struct {
 // NewRoles builds the roles service.
 func NewRoles(d RolesDeps) *Roles { return &Roles{RolesDeps: d} }
 
-func (s *Roles) audit(ctx context.Context, e domain.AuditEntry) error {
+func (s *Roles) audit(ctx context.Context, e domain.AccountAuditEntry) error {
 	if s.Audit == nil {
 		return nil
 	}
@@ -112,7 +112,7 @@ func (s *Roles) Create(ctx context.Context, actor domain.Actor, in RoleCreate) (
 		if err := s.Roles.Create(ctx, role); err != nil {
 			return err
 		}
-		return s.audit(ctx, domain.AuditEntry{Action: "role.create", ActorID: actor.UserID, TargetID: role.ID,
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "role.create", ActorID: actor.UserID, TargetID: role.ID,
 			Meta: map[string]any{"permissions": permStrings(role.Permissions)}})
 	})
 	if err != nil {
@@ -175,7 +175,7 @@ func (s *Roles) Update(ctx context.Context, actor domain.Actor, id string, in Ro
 			}
 		}
 		out = next
-		return s.audit(ctx, domain.AuditEntry{Action: "role.update", ActorID: actor.UserID, TargetID: id,
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "role.update", ActorID: actor.UserID, TargetID: id,
 			Meta: map[string]any{"addedPermissions": added, "removedPermissions": removed}})
 	})
 	if err != nil {
@@ -214,7 +214,7 @@ func (s *Roles) Delete(ctx context.Context, actor domain.Actor, id string) error
 		if err := s.Roles.Delete(ctx, id); err != nil {
 			return err
 		}
-		return s.audit(ctx, domain.AuditEntry{Action: "role.delete", ActorID: actor.UserID, TargetID: id})
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "role.delete", ActorID: actor.UserID, TargetID: id})
 	})
 }
 

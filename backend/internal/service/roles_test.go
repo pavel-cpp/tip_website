@@ -8,11 +8,11 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
 
-var roleAdminActor = actorWith("u-admin", domain.PermRoleManage)
+var roleAdminActor = acctActorWith("u-admin", domain.PermRoleManage)
 
 func TestRolesRequirePermission(t *testing.T) {
 	r := newRig(t, rigOpts{})
-	nobody := actorWith("x", domain.PermUserManage)
+	nobody := acctActorWith("x", domain.PermUserManage)
 	if _, err := r.roles.Catalog(nobody); !isErr(err, domain.ErrForbidden) {
 		t.Errorf("catalog: %v", err)
 	}
