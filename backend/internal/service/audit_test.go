@@ -57,14 +57,14 @@ func (f *fakeAuditStore) DeleteBeyondMax(_ context.Context, keep, batch int) (in
 }
 
 func newAudit(store *fakeAuditStore, cfg AuditConfig) *Audit {
-	return NewAudit(store, &fixedClock{testNow}, cfg)
+	return NewAudit(store, &ptFixedClock{testNow}, cfg)
 }
 
 func TestAuditRecord(t *testing.T) {
 	st := &fakeAuditStore{}
 	s := newAudit(st, AuditConfig{})
 	ctx := WithClientIP(context.Background(), "203.0.113.9:51234")
-	err := s.Record(ctx, actorWith("u1"), "tickets.print", "p1", "e1", map[string]any{"count": 3})
+	err := s.Record(ctx, ptActorWith("u1"), "tickets.print", "p1", "e1", map[string]any{"count": 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,17 +73,17 @@ func TestAuditRecord(t *testing.T) {
 		t.Fatalf("entry = %+v", e)
 	}
 
-	if err := s.Record(context.Background(), actorWith(""), "system.job", "", "", nil); err != nil {
+	if err := s.Record(context.Background(), ptActorWith(""), "system.job", "", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if st.inserted[1].IP != "" {
 		t.Fatalf("no ip expected, got %q", st.inserted[1].IP)
 	}
-	if err := s.Record(context.Background(), actorWith("u"), "", "", "", nil); err == nil {
+	if err := s.Record(context.Background(), ptActorWith("u"), "", "", "", nil); err == nil {
 		t.Fatal("empty action must be rejected")
 	}
 	st.insErr = errors.New("db down")
-	if err := s.Record(context.Background(), actorWith("u"), "x", "", "", nil); err == nil || !errors.Is(err, st.insErr) {
+	if err := s.Record(context.Background(), ptActorWith("u"), "x", "", "", nil); err == nil || !errors.Is(err, st.insErr) {
 		t.Fatalf("store error must be wrapped, got %v", err)
 	}
 }
@@ -112,9 +112,9 @@ func TestAuditListPermissionAndPaging(t *testing.T) {
 		st.rows = append(st.rows, domain.AuditEntry{ID: int64(i)})
 	}
 	s := newAudit(st, AuditConfig{})
-	admin := actorWith("a", domain.PermAuditView)
+	admin := ptActorWith("a", domain.PermAuditView)
 
-	_, err := s.List(context.Background(), actorWith("w", domain.PermUserView), AuditQuery{})
+	_, err := s.List(context.Background(), ptActorWith("w", domain.PermUserView), AuditQuery{})
 	mustCode(t, err, domain.CodeForbidden)
 
 	page, err := s.List(context.Background(), admin, AuditQuery{Limit: 4, ProjectID: "p", ActorID: "u", Before: 99})

@@ -14,9 +14,9 @@ import (
 
 var testNow = time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 
-type fixedClock struct{ t time.Time }
+type ptFixedClock struct{ t time.Time }
 
-func (c *fixedClock) Now() time.Time { return c.t }
+func (c *ptFixedClock) Now() time.Time { return c.t }
 
 // fakeTx runs fn directly and counts calls; it does not roll anything back.
 type fakeTx struct{ calls int }
@@ -94,7 +94,7 @@ type fakeParticipantRepo struct {
 	lists      int
 }
 
-func newFakeRepo() *fakeParticipantRepo {
+func newPtFakeRepo() *fakeParticipantRepo {
 	return &fakeParticipantRepo{rows: map[string]domain.Participant{}, nextNumber: map[string]int{}, finished: map[string]bool{}}
 }
 
@@ -245,7 +245,7 @@ type fixture struct {
 	audit    *fakeAuditRecorder
 	tx       *fakeTx
 	sheets   *fakeSheets
-	clock    *fixedClock
+	clock    *ptFixedClock
 }
 
 const (
@@ -255,13 +255,13 @@ const (
 
 func newFixture() *fixture {
 	f := &fixture{
-		repo:   newFakeRepo(),
+		repo:   newPtFakeRepo(),
 		locks:  &fakeLocks{locks: map[string]domain.RowLock{}},
 		notify: &fakeNotifier{},
 		audit:  &fakeAuditRecorder{},
 		tx:     &fakeTx{},
 		sheets: &fakeSheets{},
-		clock:  &fixedClock{testNow},
+		clock:  &ptFixedClock{testNow},
 		projects: &fakeProjects{byID: map[string]domain.Project{
 			projActive:   {ID: projActive, Title: "Raffle", Status: domain.ProjectActive, NextNumber: 1},
 			projFinished: {ID: projFinished, Title: "Old", Status: domain.ProjectFinished, NextNumber: 1},
@@ -275,14 +275,14 @@ func newFixture() *fixture {
 	return f
 }
 
-// actorWith builds an actor holding exactly the given permissions.
-func actorWith(user string, perms ...domain.Permission) domain.Actor {
+// ptActorWith builds an actor holding exactly the given permissions.
+func ptActorWith(user string, perms ...domain.Permission) domain.Actor {
 	return domain.Actor{UserID: user, Perms: domain.NewPermissionSet(perms...)}
 }
 
 // operator has the default worker permissions plus delete, clear and import.
 func operator() domain.Actor {
-	return actorWith("user-1",
+	return ptActorWith("user-1",
 		domain.PermProjectView, domain.PermProjectViewFinished,
 		domain.PermParticipantView, domain.PermParticipantEdit, domain.PermParticipantPrint,
 		domain.PermParticipantExport, domain.PermParticipantImport, domain.PermParticipantDelete, domain.PermParticipantClear)

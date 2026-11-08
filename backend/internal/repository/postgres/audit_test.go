@@ -12,7 +12,7 @@ func TestAuditRepoInsertAndList(t *testing.T) {
 	d := newMigratedDB(t)
 	r := NewAuditRepo(d)
 	ctx := context.Background()
-	u1, u2 := seedUser(t, d, "admin.one"), seedUser(t, d, "admin.two")
+	u1, u2 := ptSeedUser(t, d, "admin.one"), ptSeedUser(t, d, "admin.two")
 	p1, p2 := seedProject(t, d, "active"), seedProject(t, d, "active")
 
 	entries := []domain.AuditEntry{
@@ -70,7 +70,7 @@ func TestAuditRepoKeepsEntriesWhenActorIsDeleted(t *testing.T) {
 	d := newMigratedDB(t)
 	r := NewAuditRepo(d)
 	ctx := context.Background()
-	u := seedUser(t, d, "gone.soon")
+	u := ptSeedUser(t, d, "gone.soon")
 	if err := r.Insert(ctx, domain.AuditEntry{ActorID: u, Action: "x"}); err != nil {
 		t.Fatal(err)
 	}

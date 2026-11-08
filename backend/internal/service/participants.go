@@ -167,7 +167,7 @@ func (s *Participants) List(ctx context.Context, a domain.Actor, in ListInput) (
 		Rev:  lastWrite.UnixMicro(),
 		ETag: participantsETag(in.ProjectID, q, count, versionSum, lastWrite),
 	}
-	if etagMatches(in.IfNoneMatch, out.ETag) {
+	if participantsETagMatches(in.IfNoneMatch, out.ETag) {
 		out.NotModified = true
 		return out, nil
 	}
@@ -184,9 +184,9 @@ func participantsETag(projectID, q string, count int, versionSum int64, lastWrit
 	return `"` + hex.EncodeToString(h.Sum(nil)[:16]) + `"`
 }
 
-// etagMatches implements the weak comparison of If-None-Match for GET: "*" or any listed
+// participantsETagMatches implements the weak comparison of If-None-Match for GET: "*" or any listed
 // tag equal to etag, ignoring a W/ prefix.
-func etagMatches(header, etag string) bool {
+func participantsETagMatches(header, etag string) bool {
 	for _, tok := range strings.Split(header, ",") {
 		tok = strings.TrimSpace(tok)
 		if tok == "*" || strings.TrimPrefix(tok, "W/") == etag {

@@ -27,15 +27,15 @@ func TestListPermissionsAndVisibility(t *testing.T) {
 	f.seed(projFinished, 1)
 
 	t.Run("no project.view hides everything", func(t *testing.T) {
-		_, err := f.svc.List(ctx, actorWith("u", domain.PermParticipantView), ListInput{ProjectID: projActive})
+		_, err := f.svc.List(ctx, ptActorWith("u", domain.PermParticipantView), ListInput{ProjectID: projActive})
 		mustCode(t, err, domain.CodeNotFound)
 	})
 	t.Run("participant.view required", func(t *testing.T) {
-		_, err := f.svc.List(ctx, actorWith("u", domain.PermProjectView), ListInput{ProjectID: projActive})
+		_, err := f.svc.List(ctx, ptActorWith("u", domain.PermProjectView), ListInput{ProjectID: projActive})
 		mustCode(t, err, domain.CodeForbidden)
 	})
 	t.Run("finished project hidden without view_finished", func(t *testing.T) {
-		a := actorWith("u", domain.PermProjectView, domain.PermParticipantView)
+		a := ptActorWith("u", domain.PermProjectView, domain.PermParticipantView)
 		_, err := f.svc.List(ctx, a, ListInput{ProjectID: projFinished})
 		mustCode(t, err, domain.CodeNotFound)
 	})
@@ -169,10 +169,10 @@ func TestAddGuards(t *testing.T) {
 	ctx := context.Background()
 	_, err := f.svc.Add(ctx, operator(), AddInput{ProjectID: projFinished, Count: 1})
 	mustCode(t, err, domain.CodeProjectFinished)
-	_, err = f.svc.Add(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantView), AddInput{ProjectID: projActive, Count: 1})
+	_, err = f.svc.Add(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), AddInput{ProjectID: projActive, Count: 1})
 	mustCode(t, err, domain.CodeForbidden)
 	// a user who cannot see finished projects gets 404, not 409
-	a := actorWith("u", domain.PermProjectView, domain.PermParticipantEdit)
+	a := ptActorWith("u", domain.PermProjectView, domain.PermParticipantEdit)
 	_, err = f.svc.Add(ctx, a, AddInput{ProjectID: projFinished, Count: 1})
 	mustCode(t, err, domain.CodeNotFound)
 }
@@ -232,7 +232,7 @@ func TestUpdateRejections(t *testing.T) {
 	row := f.seed(projActive, 1)[0]
 	fin := f.seed(projFinished, 1)[0]
 
-	_, err := f.svc.Update(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantView), UpdateInput{ID: row.ID, Name: ptr("x"), Version: 1})
+	_, err := f.svc.Update(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), UpdateInput{ID: row.ID, Name: ptr("x"), Version: 1})
 	mustCode(t, err, domain.CodeForbidden)
 	_, err = f.svc.Update(ctx, operator(), UpdateInput{ID: row.ID, Version: 1})
 	mustCode(t, err, domain.CodeValidation)
@@ -351,7 +351,7 @@ func TestDelete(t *testing.T) {
 	mustCode(t, err, domain.CodeValidation)
 	_, err = f.svc.Delete(ctx, operator(), projFinished, []string{"x"})
 	mustCode(t, err, domain.CodeProjectFinished)
-	_, err = f.svc.Delete(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantEdit), projActive, []string{"x"})
+	_, err = f.svc.Delete(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantEdit), projActive, []string{"x"})
 	mustCode(t, err, domain.CodeForbidden)
 }
 
@@ -389,7 +389,7 @@ func TestClear(t *testing.T) {
 		t.Fatalf("events = %+v", f.notify.events)
 	}
 
-	_, err = f.svc.Clear(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantDelete), projActive, "Raffle")
+	_, err = f.svc.Clear(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantDelete), projActive, "Raffle")
 	mustCode(t, err, domain.CodeForbidden)
 	_, err = f.svc.Clear(ctx, operator(), projFinished, "Old")
 	mustCode(t, err, domain.CodeProjectFinished)
@@ -428,7 +428,7 @@ func TestLogPrinted(t *testing.T) {
 		t.Fatalf("finished: %v", err)
 	}
 	mustCode(t, f.svc.LogPrinted(ctx, operator(), projActive, nil), domain.CodeValidation)
-	mustCode(t, f.svc.LogPrinted(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, ids), domain.CodeForbidden)
+	mustCode(t, f.svc.LogPrinted(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, ids), domain.CodeForbidden)
 }
 
 func TestExport(t *testing.T) {
@@ -454,9 +454,9 @@ func TestExport(t *testing.T) {
 
 	_, err = f.svc.Export(ctx, operator(), projActive, "pdf")
 	mustCode(t, err, domain.CodeValidation)
-	_, err = f.svc.Export(ctx, actorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, FormatCSV)
+	_, err = f.svc.Export(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, FormatCSV)
 	mustCode(t, err, domain.CodeForbidden)
-	_, err = f.svc.Export(ctx, actorWith("u", domain.PermParticipantExport), projActive, FormatCSV)
+	_, err = f.svc.Export(ctx, ptActorWith("u", domain.PermParticipantExport), projActive, FormatCSV)
 	mustCode(t, err, domain.CodeNotFound)
 }
 
@@ -587,7 +587,7 @@ func TestImportGuards(t *testing.T) {
 		mustCode(t, err, want)
 	}
 	mustErr(importIn("merge", false, "a|b"), operator(), domain.CodeValidation)
-	mustErr(importIn(ImportAppend, false, "a|b"), actorWith("u", domain.PermProjectView, domain.PermParticipantEdit), domain.CodeForbidden)
+	mustErr(importIn(ImportAppend, false, "a|b"), ptActorWith("u", domain.PermProjectView, domain.PermParticipantEdit), domain.CodeForbidden)
 	mustErr(ImportInput{ProjectID: projFinished, Mode: ImportAppend, File: strings.NewReader("a|b")}, operator(), domain.CodeProjectFinished)
 	mustErr(ImportInput{ProjectID: projFinished, Mode: ImportAppend, DryRun: true, File: strings.NewReader("a|b")}, operator(), domain.CodeProjectFinished)
 

@@ -22,9 +22,9 @@ func NewParticipantRepo(db *sql.DB) *ParticipantRepo { return &ParticipantRepo{d
 const participantColumns = `p.id::text, p.project_id::text, p.number, p.name, p.phone, p.version,
 	coalesce(p.updated_by::text, ''), p.updated_at`
 
-type rowScanner interface{ Scan(dest ...any) error }
+type partRowScanner interface{ Scan(dest ...any) error }
 
-func scanParticipant(s rowScanner) (domain.Participant, error) {
+func scanParticipant(s partRowScanner) (domain.Participant, error) {
 	var p domain.Participant
 	err := s.Scan(&p.ID, &p.ProjectID, &p.Number, &p.Name, &p.Phone, &p.Version, &p.UpdatedBy, &p.UpdatedAt)
 	return p, err

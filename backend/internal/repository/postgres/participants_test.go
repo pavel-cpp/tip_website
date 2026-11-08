@@ -12,7 +12,7 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
 
-func seedUser(t *testing.T, d *sql.DB, login string) string {
+func ptSeedUser(t *testing.T, d *sql.DB, login string) string {
 	t.Helper()
 	var id string
 	err := d.QueryRowContext(context.Background(),
@@ -46,7 +46,7 @@ func TestParticipantRepoAddAndList(t *testing.T) {
 	d := newMigratedDB(t)
 	r := NewParticipantRepo(d)
 	ctx := context.Background()
-	user := seedUser(t, d, "op.one")
+	user := ptSeedUser(t, d, "op.one")
 	proj := seedProject(t, d, "active")
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
@@ -180,7 +180,7 @@ func TestParticipantRepoUpdateIfVersion(t *testing.T) {
 	d := newMigratedDB(t)
 	r := NewParticipantRepo(d)
 	ctx := context.Background()
-	user := seedUser(t, d, "op.two")
+	user := ptSeedUser(t, d, "op.two")
 	proj := seedProject(t, d, "active")
 	rows, err := r.AddEmpty(ctx, proj, 1, "", time.Now())
 	if err != nil {
