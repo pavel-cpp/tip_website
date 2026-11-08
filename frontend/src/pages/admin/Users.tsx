@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { type CSSProperties, useMemo, useState } from 'react'
+import { useAuth } from '../../auth/AuthProvider'
 import { useCan } from '../../auth/guards'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Button } from '../../components/Button'
@@ -33,6 +34,7 @@ interface Secret {
 export default function Users() {
   const { t, formatDate } = useI18n()
   const toast = useToast()
+  const me = useAuth().user
   const canManage = useCan('user.manage')
   const canRoles = useCan('role.manage')
   const users = useUsersQuery()
@@ -56,9 +58,19 @@ export default function Users() {
     )
   }, [users.data, query])
 
-  const toggleActive = useMutation({
-    mutationFn: (u: AdminUser) => updateUser(u.user.id, { isActive: !u.isActive }),
-    onSuccess: () => invalidate(keys.users),
+  const setActive = useMutation({
+    mutationFn: ({ u, active }: { u: AdminUser; active: boolean }) =>
+      updateUser(u.user.id, { isActive: active }),
+    onSuccess: (_res, { u, active }) => {
+      void invalidate(keys.users)
+      // Deactivating is reversible at once from the toast; no confirmation dialog in the way.
+      toast.show({
+        message: t(active ? 'admin.users.activated' : 'admin.users.deactivated', {
+          name: u.user.displayName,
+        }),
+        action: { label: t('admin.users.undo'), onAction: () => setActive.mutate({ u, active: !active }) },
+      })
+    },
     onError: (err) => toast.show({ message: errorText(err), tone: 'error' }),
   })
 
@@ -84,7 +96,10 @@ export default function Users() {
         label: t(u.isActive ? 'admin.users.deactivate' : 'admin.users.activate'),
         icon: u.isActive ? 'x' : 'check',
         danger: u.isActive,
-        onSelect: () => toggleActive.mutate(u),
+        // Switching off your own account would lock you out.
+        disabled: u.isActive && u.user.id === me?.id,
+        disabledReason: t('admin.users.selfDeactivate'),
+        onSelect: () => setActive.mutate({ u, active: !u.isActive }),
       })
       items.push({
         id: 'reset',
@@ -155,7 +170,7 @@ export default function Users() {
                 <th scope="col">{t('admin.users.colStatus')}</th>
                 <th scope="col">{t('admin.users.colLastLogin')}</th>
                 <th scope="col">
-                  <span className="sr-only">{t('action.more')}</span>
+                  <span className="sr-only">{t('admin.users.colActions')}</span>
                 </th>
               </tr>
             </thead>

@@ -252,9 +252,7 @@ func (s *Users) CreateUser(ctx context.Context, actor domain.Actor, in CreateUse
 	name, nameErr := domain.NormalizeDisplayName(in.DisplayName)
 	color := in.Color
 	var colorErr error
-	if color == "" {
-		color = domain.DefaultColor
-	} else {
+	if color != "" {
 		colorErr = domain.ValidateColor("color", color)
 	}
 	if err := joinValidation(loginErr, nameErr, colorErr); err != nil {
@@ -276,6 +274,10 @@ func (s *Users) CreateUser(ctx context.Context, actor domain.Actor, in CreateUse
 			return fmt.Errorf("hash password: %w", err)
 		}
 		id := s.IDs.NewID()
+		// Without an explicit colour every user gets a palette colour, so colleagues are told apart in the table.
+		if color == "" {
+			color = domain.PaletteColor(id)
+		}
 		if err := s.Users.Create(ctx, domain.NewUser{
 			ID: id, Login: login, DisplayName: name, Color: color,
 			PasswordHash: hash, PasswordTemporary: true, CreatedAt: s.Clock.Now(),

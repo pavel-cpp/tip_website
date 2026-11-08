@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"hash/fnv"
 	"regexp"
 	"strings"
 	"time"
@@ -30,6 +31,17 @@ const (
 	DefaultLocale = LocaleRU
 	DefaultTheme  = ThemeDark
 )
+
+// UserPalette is the six-colour user palette (design tokens --user-1..6, dark theme values).
+var UserPalette = [...]string{"#ff6b9d", "#ffb84d", "#3ddc97", "#6cb4ff", "#b18cff", "#ff9559"}
+
+// PaletteColor picks a palette colour for a user id. The choice is a pure function of the id, so it is
+// stable and spreads colleagues over the palette without a counter or a database round trip.
+func PaletteColor(userID string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(userID))
+	return UserPalette[h.Sum32()%uint32(len(UserPalette))]
+}
 
 // Field length limits; they mirror the CHECK constraints in the schema.
 const (

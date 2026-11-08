@@ -1,6 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { useOptionalAuth } from '../auth/AuthProvider'
 import { UserAvatar } from '../auth/UserAvatar'
+import { getSystem, keys } from '../features/admin/api'
 import { useI18n } from '../i18n'
 import { AppLink } from './AppLink'
 import { Button } from './Button'
@@ -15,6 +17,15 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
   const user = auth?.user ?? null
   const go = (to: string) => () => void navigate(to, { viewTransition: true })
   const can = (perm: string) => user?.permissions.includes(perm as never) ?? false
+
+  // The operator links come with the system status; fetched once and cached, never polled.
+  const systemLinks = useQuery({
+    queryKey: keys.system,
+    queryFn: getSystem,
+    enabled: can('system.view') && !minimal,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  }).data?.links
 
   // Items without the permission are left out entirely (no permission, no element).
   const items: MenuItem[] = user
@@ -45,15 +56,34 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
               },
             ]
           : []),
-        {
-          id: 'design',
-          label: t('nav.design'),
-          icon: 'pencil',
-          onSelect: go('/design'),
-          separatorBefore: true,
-        },
+        ...(can('system.view') && systemLinks?.grafana
+          ? [
+              {
+                id: 'grafana',
+                label: t('nav.grafana'),
+                icon: 'monitor' as const,
+                href: systemLinks.grafana,
+                onSelect: () => undefined,
+              },
+            ]
+          : []),
+        ...(can('system.view') && systemLinks?.swagger
+          ? [
+              {
+                id: 'swagger',
+                label: t('nav.swagger'),
+                icon: 'info' as const,
+                href: systemLinks.swagger,
+                onSelect: () => undefined,
+              },
+            ]
+          : []),
+        ...(import.meta.env.DEV && can('system.view')
+          ? [{ id: 'design', label: t('nav.design'), icon: 'pencil' as const, onSelect: go('/design') }]
+          : []),
         {
           id: 'logout',
+          separatorBefore: true,
           label: t('action.signOut'),
           icon: 'logout',
           onSelect: () => void auth?.logout(),

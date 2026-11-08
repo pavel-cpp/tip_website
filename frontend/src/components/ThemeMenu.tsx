@@ -1,3 +1,4 @@
+import { usePersistPreference } from '../auth/usePreferences'
 import { useI18n } from '../i18n'
 import { THEME_MODES, type ThemeMode, useTheme } from '../theme/theme'
 import { Button } from './Button'
@@ -10,6 +11,7 @@ const MODE_ICON: Record<ThemeMode, IconName> = { dark: 'moon', light: 'sun', sys
 export function ThemeMenu() {
   const { t } = useI18n()
   const { mode, setMode } = useTheme()
+  const persist = usePersistPreference()
   return (
     <Menu
       label={t('theme.title')}
@@ -18,7 +20,10 @@ export function ThemeMenu() {
         label: t(`theme.${m}`),
         icon: MODE_ICON[m],
         checked: m === mode,
-        onSelect: () => setMode(m),
+        onSelect: () => {
+          setMode(m)
+          void persist({ theme: m })
+        },
       }))}
       trigger={(props) => (
         <Button {...props} variant="ghost" iconOnly aria-label={t('theme.title')}>

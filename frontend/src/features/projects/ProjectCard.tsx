@@ -65,7 +65,7 @@ export function ProjectCard({ project, index, actions, onAction }: ProjectCardPr
   }))
 
   const background = image
-    ? `linear-gradient(180deg, rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.7)), center / cover url(${image})`
+    ? `linear-gradient(180deg, rgb(0 0 0 / 0) 25%, rgb(0 0 0 / 0.78)), left top / cover url(${image})`
     : gradientFor(project.id)
 
   return (

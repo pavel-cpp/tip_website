@@ -14,6 +14,15 @@ beforeEach(() => {
     if (method === 'POST' && path === '/auth/refresh')
       return jsonRes(200, { accessToken: 't', expiresIn: 900 })
     if (method === 'GET' && path === '/me') return jsonRes(200, { user: makeUser() })
+    if (path === '/admin/system')
+      return jsonRes(200, {
+        version: 'test',
+        uptime: 60,
+        checks: [],
+        db: { sizeBytes: 1024, pool: { inUse: 0, open: 1, maxOpen: 5 } },
+        disk: { free: 1, total: 2 },
+        retention: { obsDays: 7, auditDays: 30 },
+      })
     if (path.startsWith('/admin/')) return jsonRes(200, [])
     return undefined
   })

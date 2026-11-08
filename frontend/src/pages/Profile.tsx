@@ -1,6 +1,7 @@
 import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
 import { UserAvatar } from '../auth/UserAvatar'
+import { usePersistPreference } from '../auth/usePreferences'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { Input } from '../components/Input'
@@ -9,11 +10,11 @@ import { ChangePasswordForm } from '../features/auth/ChangePasswordForm'
 import { checkAvatarFile, deleteAvatar, USER_COLORS, updateMe, uploadAvatar } from '../features/profile/api'
 import { Segmented } from '../features/profile/Segmented'
 import '../features/profile/profile.css'
-import { LOCALES, type Locale, useI18n } from '../i18n'
+import { LOCALES, useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
 import { cx } from '../lib/cx'
 import { useReduceMotionSetting } from '../lib/motion'
-import { THEME_MODES, type ThemeMode, useTheme } from '../theme/theme'
+import { THEME_MODES, useTheme } from '../theme/theme'
 
 const THEME_ICON = { dark: 'moon', light: 'sun', system: 'monitor' } as const
 
@@ -21,6 +22,7 @@ export default function Profile() {
   const { t, locale, setLocale } = useI18n()
   const { user, setUser } = useAuth()
   const toast = useToast()
+  const persistPreference = usePersistPreference()
   const theme = useTheme()
   const [reduceMotion, setReduceMotion] = useReduceMotionSetting()
 
@@ -95,15 +97,6 @@ export default function Profile() {
       setAvatarError(errorText(err))
     } finally {
       setAvatarBusy(false)
-    }
-  }
-
-  // Applied at once on this device, then stored on the server so other devices follow.
-  async function persistPreference(patch: { locale: Locale } | { theme: ThemeMode }) {
-    try {
-      setUser(await updateMe(patch))
-    } catch (err) {
-      toast.show({ message: errorText(err), tone: 'error' })
     }
   }
 

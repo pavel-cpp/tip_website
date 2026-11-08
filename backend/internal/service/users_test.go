@@ -112,7 +112,7 @@ func TestCreateUserDefaultsToWorker(t *testing.T) {
 		t.Fatalf("created = %+v", c)
 	}
 	u := c.Profile.User
-	if u.Login != "new.user" || !u.PasswordTemporary || !u.IsActive || u.Color != domain.DefaultColor {
+	if u.Login != "new.user" || !u.PasswordTemporary || !u.IsActive || u.Color != domain.PaletteColor(u.ID) {
 		t.Fatalf("user = %+v", u)
 	}
 	if r.db.users[u.ID].hash != "hash:"+c.TempPassword {

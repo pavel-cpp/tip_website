@@ -1,11 +1,13 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { CSSProperties } from 'react'
 import { Can } from '../../auth/guards'
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { Panel } from '../../components/Panel'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
-import { getAuditPage, getSystem, keys, type SystemStatus } from '../../features/admin/api'
+import { AuditLog } from '../../features/admin/AuditLog'
+import { getSystem, keys, type SystemStatus } from '../../features/admin/api'
+import { checkDetail, checkTitle } from '../../features/admin/checks'
 import { diskUsedRatio, splitBytes, splitUptime } from '../../features/admin/format'
 import '../../features/admin/admin.css'
 import { type MessageKey, useI18n } from '../../i18n'
@@ -78,7 +80,7 @@ function StatusView({ data }: { data: SystemStatus }) {
           <Icon name="alert" size={20} />
           <div>
             <strong>{t('admin.system.failBanner', { count: failing.length })}</strong>
-            <span className="banner-list">{failing.map((c) => c.name).join(', ')}</span>
+            <span className="banner-list">{failing.map(checkTitle).join(', ')}</span>
           </div>
         </div>
       )}
@@ -92,8 +94,12 @@ function StatusView({ data }: { data: SystemStatus }) {
                 <Icon name={STATUS_ICON[c.status]} size={14} />
               </span>
               <span className="check-main">
-                <span className="check-title">{c.name}</span>
-                {c.detail && <span className="muted check-detail">{c.detail}</span>}
+                <span className="check-title">{checkTitle(c)}</span>
+                {c.detail && (
+                  <span className="muted check-detail">
+                    {checkDetail(c, { free: bytes(data.disk.free), total: bytes(data.disk.total) })}
+                  </span>
+                )}
               </span>
               <span className="check-status" data-status={c.status}>
                 {t(STATUS_TEXT[c.status])}
@@ -151,73 +157,5 @@ function Metric({ label, value, hint, bar }: { label: string; value: string; hin
         </span>
       )}
     </div>
-  )
-}
-
-function AuditLog() {
-  const { t, formatDate } = useI18n()
-  const audit = useInfiniteQuery({
-    queryKey: keys.audit,
-    queryFn: ({ pageParam }) => getAuditPage(pageParam),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (last) => last.next ?? undefined,
-  })
-  const items = audit.data?.pages.flatMap((p) => p.items) ?? []
-  const showSkeleton = useSkeleton(audit.isPending)
-
-  return (
-    <Panel title={t('admin.audit.title')} icon="pencil">
-      {audit.isError && items.length === 0 ? (
-        <div className="state-box" role="alert">
-          <p>{errorText(audit.error)}</p>
-          <Button onClick={() => void audit.refetch()}>{t('action.retry')}</Button>
-        </div>
-      ) : audit.isPending ? (
-        <div className="table-skeleton" role="status" aria-label={t('state.loading')}>
-          {showSkeleton && [0, 1, 2].map((i) => <Skeleton key={i} height={32} />)}
-        </div>
-      ) : items.length === 0 ? (
-        <p className="muted">{t('admin.audit.empty')}</p>
-      ) : (
-        <>
-          <div className="table-wrap">
-            <table className="table table-compact">
-              <thead>
-                <tr>
-                  <th scope="col">{t('admin.audit.time')}</th>
-                  <th scope="col">{t('admin.audit.actor')}</th>
-                  <th scope="col">{t('admin.audit.action')}</th>
-                  <th scope="col">{t('admin.audit.details')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((e) => (
-                  <tr key={e.id}>
-                    <td data-label={t('admin.audit.time')} className="nowrap">
-                      {formatDate(new Date(e.at), { dateStyle: 'short', timeStyle: 'medium' })}
-                    </td>
-                    <td data-label={t('admin.audit.actor')}>{e.actorLogin}</td>
-                    <td data-label={t('admin.audit.action')}>
-                      <code>{e.action}</code>
-                    </td>
-                    <td data-label={t('admin.audit.details')} className="muted audit-meta">
-                      {Object.keys(e.meta).length > 0 ? JSON.stringify(e.meta) : ''}
-                      {e.ip ? ` ${e.ip}` : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {audit.hasNextPage && (
-            <div className="load-more">
-              <Button loading={audit.isFetchingNextPage} onClick={() => void audit.fetchNextPage()}>
-                {t('admin.audit.more')}
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </Panel>
   )
 }

@@ -266,6 +266,10 @@ describe('password change prompt', () => {
       return undefined
     })
 
+  // The prompt belongs to a fresh sign-in; the flag stands in for it (login() sets it).
+  beforeEach(() => sessionStorage.setItem('tip.pwPrompt', 'pending'))
+  afterEach(() => sessionStorage.clear())
+
   it('recommends changing a temporary password and can be postponed', async () => {
     session()
     renderWithProviders(<Probe />)
@@ -274,6 +278,42 @@ describe('password change prompt', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Напомнить позже' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(status()).toBe('authenticated')
+  })
+
+  it('does not come back after a reload once it was postponed', async () => {
+    session()
+    const first = renderWithProviders(<Probe />)
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: 'Напомнить позже' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    first.unmount()
+
+    renderWithProviders(<Probe />)
+    await waitFor(() => expect(status()).toBe('authenticated'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('is not offered when the session is merely restored', async () => {
+    sessionStorage.clear()
+    session()
+    renderWithProviders(<Probe />)
+    await waitFor(() => expect(status()).toBe('authenticated'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('is offered right after signing in', async () => {
+    sessionStorage.clear()
+    const temp = makeUser({ passwordTemporary: true })
+    stubFetch(({ method, path }) => {
+      if (path === '/auth/refresh') return apiError(401, 'UNAUTHENTICATED')
+      if (method === 'POST' && path === '/auth/login')
+        return jsonRes(200, { accessToken: 't', expiresIn: 900, user: temp })
+      return undefined
+    })
+    renderWithProviders(<Probe />)
+    await waitFor(() => expect(status()).toBe('anonymous'))
+    await userEvent.click(screen.getByRole('button', { name: 'do-login' }))
+    expect(await screen.findByRole('dialog', { name: 'Смените временный пароль' })).toBeInTheDocument()
   })
 
   it('"Change now" opens the form and a successful change closes the prompt', async () => {

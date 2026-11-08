@@ -15,6 +15,8 @@ export const ru = {
   'nav.adminRoles': 'Роли',
   'nav.adminSystem': 'Система',
   'nav.design': 'Дизайн-система',
+  'nav.grafana': 'Grafana',
+  'nav.swagger': 'Документация API',
   'nav.userMenu': 'Меню пользователя',
 
   'action.save': 'Сохранить',

@@ -105,7 +105,23 @@ export function formatDate(
   value: Date | number,
   opts: Intl.DateTimeFormatOptions = { dateStyle: 'medium' },
 ): string {
+  if (locale === 'uz') return new Intl.DateTimeFormat('ru-RU', numericDate(opts)).format(value)
   return new Intl.DateTimeFormat(INTL_TAG[locale], opts).format(value)
+}
+
+// ICU renders uz dates like "2026 M11 8"; Uzbek users read dd.mm.yyyy, which the ru-RU tag produces.
+function numericDate(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
+  const { dateStyle, timeStyle, ...rest } = opts
+  if (!dateStyle && !timeStyle) return opts
+  return {
+    ...rest,
+    ...(dateStyle && { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    ...(timeStyle && {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(timeStyle !== 'short' && { second: '2-digit' }),
+    }),
+  }
 }
 
 function subscribe(cb: () => void): () => void {

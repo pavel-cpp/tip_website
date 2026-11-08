@@ -9,6 +9,8 @@ export interface MenuItem {
   label: string
   icon?: IconName
   onSelect: () => void
+  /** When set the item is a link opened in a new tab (rel=noopener noreferrer) instead of a button. */
+  href?: string
   danger?: boolean
   disabled?: boolean
   /** Shown as a tooltip on a disabled item. */
@@ -83,7 +85,22 @@ export function Menu({ label, items, trigger, align = 'end' }: MenuProps) {
         <div ref={list} onKeyDown={onKeyDown}>
           {items.map((item) => {
             const radio = item.checked !== undefined
-            const button = (
+            const link = item.href ? (
+              <a
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                role="menuitem"
+                tabIndex={-1}
+                className="menu-item"
+                onClick={() => setOpen(false)}
+              >
+                {item.icon && <Icon name={item.icon} />}
+                {item.label}
+                <Icon name="external" size={14} className="menu-check" />
+              </a>
+            ) : null
+            const button = link ?? (
               // biome-ignore lint/a11y/useAriaPropsSupportedByRole: aria-checked is set only for the menuitemradio role
               <button
                 type="button"

@@ -52,26 +52,63 @@ function applyUserPreferences(user: AuthUser): void {
   if (user.theme !== getThemeMode()) setThemeMode(user.theme)
 }
 
+// Session-scoped on purpose: a reload keeps an unanswered prompt, an answered one never returns.
+const PROMPT_KEY = 'tip.pwPrompt'
+
+function isPromptPending(): boolean {
+  try {
+    return sessionStorage.getItem(PROMPT_KEY) === 'pending'
+  } catch {
+    return false
+  }
+}
+
+function markPromptPending(): void {
+  try {
+    sessionStorage.setItem(PROMPT_KEY, 'pending')
+  } catch {
+    // The prompt then only lives until the next reload.
+  }
+}
+
+function clearPromptPending(): void {
+  try {
+    sessionStorage.removeItem(PROMPT_KEY)
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [user, setUserState] = useState<AuthUser | null>(null)
-  const [snoozed, setSnoozed] = useState(false)
+  const [pending, setPending] = useState(isPromptPending)
   const [forced, setForced] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
+  // Caches the user. Preferences are applied only when a session starts (see `start`), never when the
+  // cache is refreshed, so a slow PATCH /me reply cannot overwrite a fresher local choice.
   const adopt = useCallback((u: AuthUser) => {
     setUserState(u)
     setStatus('authenticated')
-    applyUserPreferences(u)
   }, [])
+
+  const start = useCallback(
+    (u: AuthUser) => {
+      adopt(u)
+      applyUserPreferences(u)
+    },
+    [adopt],
+  )
 
   const forget = useCallback(() => {
     clearAccessToken()
     cancelRefresh()
     setUserState(null)
     setStatus('anonymous')
-    setSnoozed(false)
+    setPending(false)
+    clearPromptPending()
     setForced(false)
   }, [])
 
@@ -80,7 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     setStatus('loading')
     restoreSession().then(
-      (u) => !cancelled && adopt(u),
+      (u) => !cancelled && start(u),
       (e: unknown) => {
         if (cancelled) return
         // 401 already emitted logout; a dead network or backend is not "signed out".
@@ -90,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [adopt, attempt])
+  }, [start, attempt])
 
   useEffect(() => watchRefresh(), [])
   useEffect(() => onLogout(forget), [forget])
@@ -115,10 +152,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (loginName: string, password: string) => {
       const u = await loginRequest(loginName, password)
-      adopt(u)
+      // The recommendation to replace a temporary password is offered right after signing in only.
+      if (u.passwordTemporary) markPromptPending()
+      setPending(u.passwordTemporary === true)
+      start(u)
       return u
     },
-    [adopt],
+    [start],
   )
 
   const logout = useCallback(async () => {
@@ -139,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [status, user, login, logout, adopt, reloadUser, retry],
   )
 
-  const promptOpen = status === 'authenticated' && (forced || (user?.passwordTemporary === true && !snoozed))
+  const promptOpen = status === 'authenticated' && (forced || (user?.passwordTemporary === true && pending))
 
   return (
     <AuthContext.Provider value={value}>
@@ -148,8 +188,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         <Suspense fallback={null}>
           <PasswordPrompt
             required={forced}
-            onLater={() => setSnoozed(true)}
-            onChanged={() => setForced(false)}
+            onLater={() => {
+              clearPromptPending()
+              setPending(false)
+            }}
+            onChanged={() => {
+              clearPromptPending()
+              setForced(false)
+            }}
           />
         </Suspense>
       )}
