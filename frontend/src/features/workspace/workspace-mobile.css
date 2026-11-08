@@ -19,13 +19,24 @@
     height: var(--touch-target);
   }
 }
+.ws-head .breadcrumb a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h);
+}
 .tk-zoom-value {
   min-height: var(--control-h-sm);
+}
+/* The field fills its frame, so the whole frame is the tap target. */
+.pt-search input {
+  min-height: var(--control-h);
+  margin-block: -1px;
 }
 .tk-zoom[hidden] {
   display: none;
 }
 .pt-check-hit {
+  flex: none;
   display: grid;
   place-items: center;
   width: 40px;
@@ -48,11 +59,13 @@
 .pt-delete[data-idle] {
   visibility: hidden;
 }
-@media (max-width: 1099px) {
-  .pt-search {
-    flex-basis: 200px;
-    min-width: 160px;
-  }
+/* One row: the (hidden) delete button must not wrap onto a row of its own and leave a gap. */
+.pt-tools {
+  flex-wrap: nowrap;
+}
+.pt-search {
+  flex: 1 1 200px;
+  min-width: 120px;
 }
 
 /* Project title: at most two lines, the full text is in the title attribute. */
@@ -101,6 +114,24 @@
   }
   .ws-toolbar .btn {
     min-width: var(--touch-target);
+  }
+  /* One row of icon buttons: the print label would push the toolbar onto a second row and eat list space. */
+  .ws-toolbar {
+    flex-wrap: nowrap;
+    gap: var(--space-1);
+  }
+  .ws-toolbar .ws-sep {
+    display: none;
+  }
+  .ws-toolbar .btn-primary .ws-tool-text {
+    display: none;
+  }
+  .ws-toolbar .btn-primary {
+    min-width: var(--touch-target);
+    padding: 0 var(--space-3);
+  }
+  .pc-bar-btn {
+    min-height: 48px;
   }
 }
 

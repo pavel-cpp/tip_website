@@ -777,7 +777,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
             variant="danger"
             className="pt-delete"
             data-idle={selectedVisible.length === 0 || undefined}
-            tabIndex={selectedVisible.length === 0 ? -1 : undefined}
+            aria-hidden={selectedVisible.length === 0 || undefined}
+            inert={selectedVisible.length === 0}
             onClick={() => onDelete(selectedVisible)}
           >
             <Icon name="trash" size={16} />

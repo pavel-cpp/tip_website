@@ -23,8 +23,7 @@ async function openPrintPage(admin: Api, page: Page, count: number): Promise<Wor
   })
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
-  await ws.grid.getByRole('checkbox', { name: ws.t('workspace.selectVisible') }).check()
-  await ws.button('workspace.print').click()
+  await ws.selectAllAndPrint()
   await expect(page).toHaveURL(/\/print$/)
   await expect(page.locator('.print-ticket')).toHaveCount(count, { timeout: 30_000 })
   return ws

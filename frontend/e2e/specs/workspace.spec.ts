@@ -43,7 +43,8 @@ test('add rows, edit a cell and search', async ({ admin, signedIn }) => {
   await expect(ws.rows).toHaveCount(5)
 })
 
-test('paste spreadsheet rows', async ({ admin, signedIn }) => {
+test('paste spreadsheet rows', async ({ admin, signedIn, viewport }) => {
+  test.skip((viewport?.width ?? 1024) < 700, 'pasting into the grid is a desktop flow; phones have cards')
   const { project } = await seeded(admin, people.slice(0, 1))
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
@@ -64,15 +65,15 @@ test('delete with Undo restores the row, and a plain delete is committed', async
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
 
-  await ws.cell(ws.rowByText('Alisher'), 'number').click()
-  await ws.button('workspace.deleteSelected', { count: 1 }).click()
+  await ws.selectRow(ws.rowByText('Alisher'))
+  await ws.deleteSelected(1)
   await expect(ws.rows).toHaveCount(2)
   await page.getByRole('button', { name: ws.t('action.undo') }).click()
   await expect(ws.rows).toHaveCount(3)
   expect(await admin.participants(project.id)).toHaveLength(3)
 
-  await ws.cell(ws.rowByText('Alisher'), 'number').click()
-  await ws.button('workspace.deleteSelected', { count: 1 }).click()
+  await ws.selectRow(ws.rowByText('Alisher'))
+  await ws.deleteSelected(1)
   await expect(ws.rows).toHaveCount(2)
   // The server delete is sent once the undo window (5 s) has passed.
   await expect.poll(async () => (await admin.participants(project.id)).length, { timeout: 15_000 }).toBe(2)
