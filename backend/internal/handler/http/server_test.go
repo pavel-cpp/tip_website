@@ -20,12 +20,15 @@ func newTestRouter(t *testing.T, checks ...Check) (http.Handler, *bytes.Buffer, 
 	t.Helper()
 	var buf bytes.Buffer
 	m := metrics.New("test", "test")
-	h := NewRouter(Deps{
+	h, err := NewRouter(Deps{
 		Logger:  zerolog.New(&buf).Level(zerolog.DebugLevel),
 		Metrics: m,
 		NewID:   func() string { return "generated-id" },
 		Ready:   checks,
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	return h, &buf, m
 }
 

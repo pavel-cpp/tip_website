@@ -75,6 +75,10 @@ type Config struct {
 
 	LogLevel         string
 	ObsRetentionDays int
+	// LokiURL is the base URL probed by the admin system page; "off" disables the check.
+	LokiURL string
+	// BackupMetricsPath is the Prometheus textfile written by the backup container.
+	BackupMetricsPath string
 }
 
 // String renders the config for diagnostics. Secret fields redact themselves, and the
@@ -124,6 +128,9 @@ func Load(getenv func(string) string) (Config, error) {
 
 		LogLevel:         strings.ToLower(l.str("LOG_LEVEL", "info")),
 		ObsRetentionDays: l.positiveInt("OBS_RETENTION_DAYS", 3),
+		LokiURL:          l.str("LOKI_URL", "http://loki:3100"),
+
+		BackupMetricsPath: l.str("BACKUP_METRICS_PATH", "/backups/metrics/backup.prom"),
 	}
 	for _, o := range strings.Split(l.str("ALLOWED_ORIGINS", ""), ",") {
 		if o = strings.TrimSpace(o); o != "" {

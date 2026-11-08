@@ -42,12 +42,11 @@ type ProjectReader interface {
 	Get(ctx context.Context, id string) (domain.Project, error)
 }
 
-// ParticipantLocks exposes the realtime row locks (held in memory by the Hub). The realtime
-// area implements it, typically as a thin adapter over its RowLocks.
+// ParticipantLocks exposes the realtime row locks (held in memory by the Hub, which implements it).
 type ParticipantLocks interface {
-	// LockOf returns the current lock on a row, if any. An expired lock may be returned;
-	// the caller checks expiry through domain.RowLock.
-	LockOf(rowID string) (domain.RowLock, bool)
+	// EnsureFree returns ROW_LOCKED (carrying the owner) when another user holds a live lock on
+	// the row; expired locks and locks of userID pass.
+	EnsureFree(ctx context.Context, rowID, userID string) error
 }
 
 // ParticipantNotifier publishes realtime events to the project's room. Publishing never

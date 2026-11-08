@@ -42,9 +42,12 @@ func (f *fakeProjects) Get(_ context.Context, id string) (domain.Project, error)
 
 type fakeLocks struct{ locks map[string]domain.RowLock }
 
-func (f *fakeLocks) LockOf(rowID string) (domain.RowLock, bool) {
+func (f *fakeLocks) EnsureFree(_ context.Context, rowID, userID string) error {
 	l, ok := f.locks[rowID]
-	return l, ok
+	if !ok {
+		return nil
+	}
+	return l.EnsureAvailableTo(userID, testNow)
 }
 
 type published struct {

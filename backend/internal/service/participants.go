@@ -326,10 +326,8 @@ func (s *Participants) Update(ctx context.Context, a domain.Actor, in UpdateInpu
 			return err
 		}
 		now := s.d.Clock.Now()
-		if lock, ok := s.d.Locks.LockOf(cur.ID); ok {
-			if err := lock.EnsureAvailableTo(a.UserID, now); err != nil {
-				return err
-			}
+		if err := s.d.Locks.EnsureFree(ctx, cur.ID, a.UserID); err != nil {
+			return err
 		}
 		name, phone := cur.Name, cur.Phone
 		if in.Name != nil {
