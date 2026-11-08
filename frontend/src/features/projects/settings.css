@@ -41,7 +41,22 @@
   font-size: var(--fs-lg);
   margin-top: var(--space-2);
 }
+/* The shared panel body scrolls and contains overscroll; the page itself must scroll here, otherwise
+   a wheel or touch gesture over a panel is swallowed by a body with nothing to scroll (Chromium). */
+.settings-grid .panel {
+  /* overflow: hidden would make the panel the sticky container of the action bar. */
+  overflow: visible;
+}
+.settings-grid .panel-body {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
 .settings-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bg-elev);
+  padding-bottom: max(var(--space-2), env(safe-area-inset-bottom));
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);

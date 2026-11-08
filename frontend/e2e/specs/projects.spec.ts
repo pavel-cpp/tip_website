@@ -119,3 +119,33 @@ test('delete a project after typing its title', async ({ admin, signedIn }) => {
   await confirm.click()
   await expect(page.getByText(t('projects.toast.deleted', { title: project.title }))).toBeVisible()
 })
+
+// Regression: the panels used to swallow the wheel over them (overflow plus contained overscroll), so the
+// page could not be scrolled with the pointer over the form, and the save bar was out of reach.
+test('settings page scrolls under the pointer and keeps the save bar in view', async ({
+  admin,
+  signedIn,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'wheel scrolling is the Chromium-specific failure')
+  const project = await admin.createProject()
+  const page = await signedIn(adminCreds())
+  await page.setViewportSize({ width: 1366, height: 600 })
+  await page.goto(`/projects/${project.id}/settings`)
+  const form = page.locator('.settings-fields')
+  await expect(form).toBeVisible()
+
+  const save = page.getByRole('button', { name: t('action.save') })
+  const inView = async () => {
+    const box = await save.boundingBox()
+    const height = page.viewportSize()?.height ?? 0
+    return box !== null && box.y >= 0 && box.y + box.height <= height
+  }
+  expect(await inView(), 'save bar visible without scrolling').toBe(true)
+
+  const box = await form.boundingBox()
+  await page.mouse.move((box?.x ?? 0) + 40, (box?.y ?? 0) + 40)
+  await page.mouse.wheel(0, 400)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0)
+  expect(await inView(), 'save bar stays in view after scrolling').toBe(true)
+})
