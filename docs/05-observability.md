@@ -80,10 +80,10 @@ flowchart LR
 | Группа | Метрики (префикс `tip_`) |
 |---|---|
 | HTTP | `http_requests_total{route,method,status}`, `http_request_duration_seconds` (histogram), `http_in_flight`, `http_response_bytes` |
-| WebSocket | `ws_connections`, `ws_rooms`, `ws_messages_in_total{t}`, `ws_messages_out_total{t}`, `ws_slow_client_disconnects_total`, `ws_locks_active`, `ws_lock_conflicts_total` |
-| БД | `db_open_connections`, `db_in_use`, `db_wait_count_total`, `db_wait_seconds_total`, `db_query_duration_seconds{query}` (histogram, имя запроса — константа) |
+| WebSocket | `ws_connections`, `ws_rooms`, `ws_messages_in_total{type}`, `ws_messages_out_total{type}`, `ws_slow_client_disconnects_total`, `ws_locks_active`, `ws_lock_conflicts_total` |
+| БД | `db_open_connections`, `db_in_use`, `db_wait_count_total`, `db_wait_seconds_total`, `db_query_duration_seconds{query}` (histogram, `query` — категория оператора, см. раздел 9) |
 | Бизнес | `logins_total{result}`, `token_refresh_total{result}` (в т.ч. `reuse_detected`, `idempotent_replay`), `blacklist_checks_total{result}` (`ok`/`revoked`/`error`), `blacklist_check_duration_seconds`, `redis_up`, `participants_written_total`, `tickets_printed_total`, `uploads_total{kind,result}`, `rate_limited_total{kind}` |
-| Диск и данные | `uploads_bytes`, `data_dir_free_bytes`, `db_size_bytes` (раз в 5 мин) |
+| Диск и данные | `uploads_bytes`, `data_dir_free_bytes`, `db_size_bytes` (кэш 60 с, см. раздел 9) |
 | Рантайм | стандартные `go_*`, `process_*` (горутины, GC, RSS), `build_info{version,commit}`, `log_dropped_total` (события, потерянные неблокирующим логгером) |
 | Хост | `node_exporter` (CPU, память, диск, файловая система) |
 
@@ -190,6 +190,19 @@ flowchart LR
 
 ## 9. Статус реализации метрик
 
-Реализованы: `tip_http_*` (запросы, длительность, in-flight), `tip_db_*` (пул), `tip_build_info`, `tip_log_dropped_total`, `tip_ws_*` (соединения, комнаты, сообщения, медленные клиенты, конфликты локов), `tip_redis_up`, `tip_blacklist_checks_total`, `tip_token_refresh_total{result=ok|invalid|error}`, `tip_logins_total`.
+Реализованы все метрики раздела 3:
+`tip_http_*` (запросы, длительность, in-flight, `tip_http_response_bytes{route}` — гистограмма размера ответа), `tip_db_*` (пул), `tip_build_info`, `tip_log_dropped_total`,
+`tip_ws_*` (соединения, комнаты, сообщения, медленные клиенты, конфликты локов, `tip_ws_locks_active`), `tip_redis_up`, `tip_blacklist_checks_total{result=ok|revoked|error}`,
+`tip_blacklist_check_duration_seconds`, `tip_logins_total`, `tip_token_refresh_total{result=ok|idempotent_replay|reuse_detected|invalid|error}`,
+`tip_participants_written_total`, `tip_tickets_printed_total`, `tip_uploads_total{kind=project_image|avatar,result=ok|rejected|error}`,
+`tip_rate_limited_total{kind=login|client_errors|api|ws}`, `tip_db_query_duration_seconds{query}`, `tip_uploads_bytes`, `tip_data_dir_free_bytes`, `tip_db_size_bytes`.
 
-Ещё не реализованы (из раздела 3): `blacklist_check_duration_seconds`, `ws_locks_active`, `db_query_duration_seconds`, `http_response_bytes`, `participants_written_total`, `tickets_printed_total`, `uploads_total`, `rate_limited_total`, `uploads_bytes`, `data_dir_free_bytes`, `db_size_bytes`; у `token_refresh_total` пока нет меток `reuse_detected` и `idempotent_replay`. Дашборды и алерты в `deploy/grafana/` ссылаются на часть из них — они покажут «нет данных», пока метрики не добавлены (задача Фазы 6).
+Где что считается и чем реализация отличается от текста раздела 3:
+* **`token_refresh_total`:** `ok` — обычная ротация; `idempotent_replay` — повтор уже использованного refresh внутри окна повтора (10 с), клиенту отдаётся тот же новый токен; `reuse_detected` — повтор после окна, цепочка закрыта (клиент получает тот же `REFRESH_INVALID`); `invalid` — прочие отказы (подпись, срок, закрытая цепочка, пользователь деактивирован); `error` — сбой хранилища токенов. Различает исходы сам `service.Auth` и сообщает через `AuthDeps.OnRefresh`.
+* **`db_query_duration_seconds{query}`:** метка `query` — **категория оператора** (`select`, `insert`, `update`, `delete`, `tx` для begin/commit/rollback, `other`), а не имя запроса: измеряется на уровне драйвера (трассировщик pgx в `platform/db`), текст SQL в метки не попадает. Поимённая метка потребовала бы правок каждого запроса во всех репозиториях.
+* **`ws_messages_*_total`:** метка называется `type`, а не `t` (как в коде); дашборд «Realtime» приведён к `type`.
+* **`rate_limited_total`:** HTTP-ответы 429 считаются в middleware метрик по шаблону маршрута (`login` — `/auth/login`, `client_errors` — `/client-errors`, остальное — `api`); `ws` — отказы лимитера кадров соединения.
+* **`participants_written_total`:** успешные создание, правка и импорт строк (удаление не считается); **`tickets_printed_total`:** число ID в успешном `POST …/participants/printed`. Счётчики ставят декораторы в `cmd/tipd/adapters_metrics.go`, сервисы метрик не знают.
+* **Диск и данные:** `tip_data_dir_free_bytes` (syscall, при каждом скрейпе), `tip_uploads_bytes` (обход `DATA_DIR/uploads`) и `tip_db_size_bytes` (`pg_database_size`) считаются при скрейпе, но кэшируются на 60 с, общий таймаут пересчёта — 2 с; при ошибке сохраняется последнее значение, а если замера ещё не было, серия не публикуется (нет ложного нуля). Раз в 5 мин из раздела 3 заменено кэшем на 60 с.
+
+Дашборд `deploy/grafana/dashboards/business.json` («TIP Business and Data») показывает новые метрики; алерты по ним пока не заведены (кандидаты: рост `reuse_detected`, `rate_limited_total{kind="login"}`, `tip_data_dir_free_bytes`).
