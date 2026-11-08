@@ -15,26 +15,7 @@
     <!-- Placeholder: replace with a real 180x180 PNG when the brand assets exist. -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
     <title>TIP</title>
-    <script>
-      // Runs before first paint so the page never flashes the wrong theme.
-      // Logic mirrors src/theme/theme.ts (storage key, colours) and src/lib/motion.ts.
-      (function () {
-        var mode = 'dark', reduce = false
-        try {
-          var m = localStorage.getItem('tip.theme')
-          if (m === 'dark' || m === 'light' || m === 'system') mode = m
-          reduce = localStorage.getItem('tip.reduceMotion') === '1'
-        } catch (e) {}
-        var light = mode === 'light' || (mode === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches)
-        var t = light ? 'light' : 'dark'
-        var root = document.documentElement
-        root.setAttribute('data-theme', t)
-        root.style.colorScheme = t
-        if (reduce) root.setAttribute('data-reduce-motion', 'true')
-        var meta = document.querySelector('meta[name="theme-color"]')
-        if (meta) meta.setAttribute('content', light ? '#f4f5f8' : '#131418')
-      })()
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

@@ -101,11 +101,8 @@ test('finish, reopen and delete a project from the list', async ({ admin, signed
   await expect(page.getByRole('heading', { name: t('projects.active') })).toBeVisible()
 })
 
-// BUG Q1-2: DELETE /api/v1/projects/{id} answers 500 INTERNAL for every project (empty or with
-// participants), so the "Delete forever" dialog ends with "Internal error". Reproduce: create a project
-// as admin, then `DELETE /api/v1/projects/<id>`. Suspect: the audit insert inside the delete
-// transaction (service/projects.go Delete) after the row is removed.
-test.fixme('delete a project after typing its title', async ({ admin, signedIn }) => {
+// Regression: deleting a project used to answer 500 because the audit row referenced the deleted project.
+test('delete a project after typing its title', async ({ admin, signedIn }) => {
   const project = await admin.createProject(uniq('Doomed '))
   const page = await signedIn(adminCreds())
   const menuFor = () => page.getByRole('button', { name: t('projects.menu.label', { title: project.title }) })

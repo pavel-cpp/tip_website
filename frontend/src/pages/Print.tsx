@@ -16,6 +16,29 @@ import '../features/workspace/print.css'
  * tickets with zero margins. Tickets are rendered one by one, then the browser print dialog opens.
  * The audit record (ids only) is sent after the dialog closes.
  */
+/**
+ * Applies CSS without an inline <style> element, which the server's Content-Security-Policy
+ * blocks. A constructed stylesheet is created through the CSSOM and is not subject to that
+ * check. Returns false where the browser lacks support, so the caller can fall back.
+ */
+function useConstructedStyle(css: string): boolean {
+  const supported =
+    typeof document !== 'undefined' &&
+    'adoptedStyleSheets' in document &&
+    typeof CSSStyleSheet !== 'undefined' &&
+    'replaceSync' in CSSStyleSheet.prototype
+  useEffect(() => {
+    if (!supported) return
+    const sheet = new CSSStyleSheet()
+    sheet.replaceSync(css)
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet]
+    return () => {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== sheet)
+    }
+  }, [css, supported])
+  return supported
+}
+
 export default function Print() {
   const { id = '' } = useParams()
   const job = getPrintJob(id)
@@ -83,6 +106,8 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
   const total = rows.length
   const done = urls.length > 0 && urls.length === total
   const pages = useMemo(() => paginate(urls.length), [urls.length])
+  const css = useMemo(() => printCss(), [])
+  const styled = useConstructedStyle(css)
 
   const doPrint = useCallback(async () => {
     // Printing before the images are decoded yields blank tickets in Chrome.
@@ -109,7 +134,7 @@ function PrintSheet({ projectId, ids }: { projectId: string; ids: string[] }) {
 
   return (
     <div className="print-root">
-      <style>{printCss()}</style>
+      {!styled && <style>{css}</style>}
       <div className="print-ui">
         <div className="print-bar">
           <button type="button" className="print-btn" onClick={back}>

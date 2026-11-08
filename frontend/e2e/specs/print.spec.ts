@@ -46,12 +46,10 @@ test('print page splits 22 tickets into two A4 sheets of 21 and 1', async ({ adm
     .toBeGreaterThan(0)
 })
 
-// BUG Q1-1: the print layout is injected as an inline <style> element (Print.tsx, printCss()), but the
-// server sends `Content-Security-Policy: default-src 'self'; ...` without 'unsafe-inline' or a nonce for
-// style-src. The browser blocks the style element, so on the real (embedded) server the sheet is not
-// 210 mm wide, tickets keep their natural pixel size and flow in one column. Works under `vite preview`
-// (no CSP header), which is why unit tests did not catch it.
-test.fixme('print sheet is A4 with a 3 x 7 grid of 70 x 40 mm tickets', async ({ admin, signedIn }) => {
+// Regression: the print layout used to be an inline <style> element, which the server's
+// Content-Security-Policy blocks. It is now applied as a constructed stylesheet; this checks the
+// real geometry on the embedded server.
+test('print sheet is A4 with a 3 x 7 grid of 70 x 40 mm tickets', async ({ admin, signedIn }) => {
   const page = await signedIn(adminCreds())
   await openPrintPage(admin, page, 22)
   const geometry = await page.evaluate(() => {

@@ -88,18 +88,24 @@ describe('setThemeMode / useTheme', () => {
   })
 })
 
-describe('inline script in index.html', () => {
+describe('pre-paint theme script', () => {
   const html = readFileSync('index.html', 'utf8')
+  const script = readFileSync('public/theme-init.js', 'utf8')
 
   it('reads the same storage key and uses the same colours as the module', () => {
-    expect(html).toContain(`'${THEME_KEY}'`)
-    expect(html).toContain(THEME_COLORS.dark)
-    expect(html).toContain(THEME_COLORS.light)
+    expect(script).toContain(`'${THEME_KEY}'`)
+    expect(script).toContain(THEME_COLORS.dark)
+    expect(script).toContain(THEME_COLORS.light)
   })
 
-  it('runs before the app bundle so there is no flash', () => {
-    const script = html.indexOf("setAttribute('data-theme'")
-    expect(script).toBeGreaterThan(-1)
-    expect(script).toBeLessThan(html.indexOf('/src/main.tsx'))
+  it('is a blocking external file that loads before the app bundle, so there is no flash', () => {
+    const tag = html.indexOf('<script src="/theme-init.js"></script>')
+    expect(tag).toBeGreaterThan(-1)
+    expect(tag).toBeLessThan(html.indexOf('/src/main.tsx'))
+    expect(script).toContain("setAttribute('data-theme'")
+  })
+
+  it('leaves no inline script behind, which the Content-Security-Policy would block', () => {
+    expect(html).not.toMatch(/<script>/)
   })
 })

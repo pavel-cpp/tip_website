@@ -112,6 +112,13 @@ describe('print page', () => {
 
   it('lays tickets out as A4 sheets of 21, with the print CSS, then prints and records only ids', async () => {
     setPrintJob({ projectId: 'p1', ids: people.map((p) => p.id) })
+    // The page applies its CSS as a constructed stylesheet (an inline <style> would violate the CSP).
+    const applied: string[] = []
+    if (typeof CSSStyleSheet !== 'undefined' && 'replaceSync' in CSSStyleSheet.prototype) {
+      vi.spyOn(CSSStyleSheet.prototype, 'replaceSync').mockImplementation((text: string) => {
+        applied.push(text)
+      })
+    }
     const mock = mount()
 
     await waitFor(() => expect(screen.getAllByRole('region')).toHaveLength(2))
@@ -120,7 +127,7 @@ describe('print page', () => {
     expect(pages[1]?.querySelectorAll('img.print-ticket')).toHaveLength(25 - TICKETS_PER_PAGE)
     expect(TICKETS_PER_PAGE).toBe(21)
 
-    const css = document.querySelector('style')?.textContent ?? ''
+    const css = applied.join(' ') || (document.querySelector('style')?.textContent ?? '')
     expect(css).toContain('@page { size: A4; margin: 0mm }')
     expect(css).toContain('width: 70mm')
     expect(css).toContain('height: 40mm')
