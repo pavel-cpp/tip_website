@@ -43,8 +43,13 @@ export const updateRole = (id: string, body: Schemas['UpdateRoleRequest']) =>
   api.patch<Schemas['RoleResponse']>(`/admin/roles/${id}`, body)
 export const deleteRole = (id: string) => api.delete<void>(`/admin/roles/${id}`)
 
-export const getAuditPage = (before?: number) =>
-  api.get<AuditPage>('/admin/audit', { query: { limit: 50, before } })
+export interface AuditFilter {
+  actor?: string
+  projectId?: string
+}
+
+export const getAuditPage = (before?: number, filter: AuditFilter = {}) =>
+  api.get<AuditPage>('/admin/audit', { query: { limit: 50, before, ...filter } })
 export const getSystem = () => api.get<SystemStatus>('/admin/system')
 
 export function useUsersQuery() {

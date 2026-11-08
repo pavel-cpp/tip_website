@@ -3,7 +3,7 @@ import { ru } from '../../i18n/ru'
 import type { PermissionCode } from './api'
 
 // Permission and group names come from the dictionaries by code; the server's English text is only a fallback.
-function lookup(key: string, fallback: string): string {
+export function lookup(key: string, fallback: string): string {
   return key in ru ? t(key as MessageKey) : fallback
 }
 

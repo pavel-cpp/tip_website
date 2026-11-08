@@ -48,7 +48,8 @@ export function CreateUserDialog({ open, roles, onClose, onCreated }: CreateProp
         isApiError(err) && err.code === 'VALIDATION' ? (err.details?.fields as { field: string }[]) : []
       const next: typeof errors = {}
       for (const f of fields ?? []) {
-        if (f.field === 'login' || f.field === 'displayName') next[f.field] = t('validation.invalid')
+        if (f.field === 'login') next.login = t('admin.users.loginRules')
+        else if (f.field === 'displayName') next.displayName = t('validation.invalid')
       }
       setErrors(Object.keys(next).length > 0 ? next : { form: errorText(err) })
     },
@@ -88,6 +89,7 @@ export function CreateUserDialog({ open, roles, onClose, onCreated }: CreateProp
           autoCapitalize="none"
           spellCheck={false}
           value={login}
+          hint={t('admin.users.loginRules')}
           error={errors.login}
           data-autofocus
           onChange={(e) => setLogin(e.target.value)}

@@ -1,7 +1,7 @@
 import { type CSSProperties, type FormEvent, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthProvider'
-import { usePersistPreference } from '../auth/usePreferences'
 import { UserAvatar } from '../auth/UserAvatar'
+import { usePersistPreference } from '../auth/usePreferences'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { Input } from '../components/Input'

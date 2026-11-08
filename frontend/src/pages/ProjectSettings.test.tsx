@@ -143,6 +143,8 @@ describe('ProjectSettings', () => {
     mockApi()
     renderPage()
     await screen.findByDisplayValue('Tashkent City')
+    // The first field (Number) is open by default.
+    await userEvent.click(screen.getByRole('tab', { name: /Имя/ }))
     const x = screen.getByLabelText('X')
     await userEvent.clear(x)
     await userEvent.type(x, '600')

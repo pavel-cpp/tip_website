@@ -17,11 +17,17 @@ import {
   useRolesQuery,
 } from '../../features/admin/api'
 import { ConfirmDialog } from '../../features/admin/ConfirmDialog'
+import { lookup } from '../../features/admin/labels'
 import { isLockedRole, RoleEditor } from '../../features/admin/RoleEditor'
 import '../../features/admin/admin.css'
 import { useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
 import { DURATION, prefersReducedMotion } from '../../lib/motion'
+
+/** System roles carry English text from the seed; the dictionary translates it by role code. */
+function roleDescription(r: Role): string {
+  return r.isSystem ? lookup(`admin.role.desc.${r.name}`, r.description) : r.description
+}
 
 export default function Roles() {
   const { t } = useI18n()
@@ -117,7 +123,7 @@ export default function Roles() {
                     <h2 className="role-name">{r.name}</h2>
                     {r.isSystem && <span className="badge">{t('admin.roles.system')}</span>}
                   </div>
-                  {r.description && <p className="muted">{r.description}</p>}
+                  {r.description && <p className="muted">{roleDescription(r)}</p>}
                   <p className="role-meta muted">
                     {t('admin.roles.permCount', { count: r.permissions.length })}
                     {' · '}
@@ -165,6 +171,14 @@ export default function Roles() {
         onClose={() => setDeleting(null)}
       >
         <p>{t('admin.roles.deleteBody', { name: deleting?.name ?? '' })}</p>
+        {deleting && deleting.userCount > 0 && (
+          <p className="notice" role="note">
+            <Icon name="alert" />
+            {t('admin.roles.deleteUsed', {
+              users: t('admin.roles.userCount', { count: deleting.userCount }),
+            })}
+          </p>
+        )}
       </ConfirmDialog>
 
       <Modal

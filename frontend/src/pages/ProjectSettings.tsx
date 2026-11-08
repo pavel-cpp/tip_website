@@ -71,7 +71,7 @@ function SettingsEditor({
   const replace = useReplaceImage(project.id)
 
   const [draft, setDraft] = useState<Draft>(() => toDraft(project))
-  const [active, setActive] = useState<PlaceholderKey>('name')
+  const [active, setActive] = useState<PlaceholderKey>('number')
   const [progress, setProgress] = useState<number | null>(null)
   const [conflict, setConflict] = useState(false)
   const [saved, setSaved] = useState(false)

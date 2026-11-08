@@ -9,21 +9,69 @@
 .admin-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
 }
 .admin-head .page-title {
   margin-bottom: 0;
 }
+/* Title on the left, actions on the right in one row; on a narrow screen the actions take their own row. */
 .admin-tools {
   display: flex;
-  align-items: flex-end;
-  flex-wrap: wrap;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: var(--space-3);
+}
+.admin-tools > .button,
+.admin-tools > button {
+  flex-shrink: 0;
 }
 .admin-search {
   width: min(280px, 100%);
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .admin-tools {
+    width: 100%;
+  }
+  .admin-search {
+    flex: 1 1 auto;
+    width: auto;
+  }
+}
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.audit-filter {
+  min-width: 160px;
+  flex: 1 1 160px;
+  max-width: 260px;
+}
+.audit-select {
+  min-height: var(--control-h);
+  padding: 0 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+}
+.audit-raw {
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.audit-raw summary {
+  cursor: pointer;
+  min-height: 24px;
+}
+.audit-meta {
+  margin: var(--space-1) 0 0;
+  white-space: pre-wrap;
 }
 .admin-search .field-label {
   position: absolute;

@@ -81,7 +81,6 @@ export default function Login() {
             spellCheck={false}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            // biome-ignore lint/a11y/noAutofocus: the login field is the only thing to do on this screen
             autoFocus
           />
           <PasswordInput

@@ -124,8 +124,9 @@
   color: #fff;
 }
 @media (hover: hover) {
+  /* Dimmed but always visible, so the menu can be discovered without hovering. */
   .project-card-menu {
-    opacity: 0;
+    opacity: 0.65;
     transition: opacity var(--dur-fast) var(--ease-standard);
   }
   .project-card:hover .project-card-menu,
