@@ -34,7 +34,7 @@ export const uzAccess: Record<keyof typeof ruAccess, Message> = {
   'profile.color': 'Loyihadagi rang',
   'profile.colorOption': '{n}-rang',
   'profile.colorHint':
-    'Jadvaldagi qatorlaringiz va loyiha ishtirokchilari uchun kursoringiz shu rangda belgilanadi.',
+    'Jadvaldagi qatorlaringiz va loyiha hamkasblari uchun kursoringiz shu rangda belgilanadi.',
   'profile.save': 'Oʻzgarishlarni saqlash',
   'profile.appearance': 'Koʻrinish',
   'profile.reduceMotionHint': 'Interfeysdagi harakat va silliq oʻtishlarni olib tashlaydi',

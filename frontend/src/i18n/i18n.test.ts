@@ -147,3 +147,16 @@ describe('locale detection and switching', () => {
     expect(t('action.cancel')).toBe('Bekor qilish')
   })
 })
+
+describe('Uzbek terminology', () => {
+  const texts = Object.values(uzDict).flatMap((m) => (typeof m === 'string' ? [m] : Object.values(m)))
+
+  it('uses one word for a ticket: chipta, never bilet', () => {
+    expect(texts.filter((s) => /bilet/i.test(s))).toEqual([])
+  })
+
+  it('does not call project colleagues "ishtirokchilar" (that word means contest participants)', () => {
+    expect(uzDict['workspace.people.contributors']).toBe('Loyiha hamkasblari')
+    expect(texts.filter((s) => /loyiha ishtirokchi/i.test(s))).toEqual([])
+  })
+})
