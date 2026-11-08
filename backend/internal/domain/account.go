@@ -51,8 +51,8 @@ type UserRef struct {
 	AvatarSHA   string
 }
 
-// AccountAuditEntry describes one audited account action. Meta carries ids and counts only, never names,
-// phone numbers or secrets. The audit implementation resolves the actor login itself.
+// AccountAuditEntry describes one audited account action. Meta carries ids and counts only, plus the target
+// login of account actions; never display names, phone numbers or secrets. The audit implementation resolves the actor login itself.
 type AccountAuditEntry struct {
 	Action   string
 	ActorID  string

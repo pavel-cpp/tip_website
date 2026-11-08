@@ -36,11 +36,33 @@ const (
 var UserPalette = [...]string{"#ff6b9d", "#ffb84d", "#3ddc97", "#6cb4ff", "#b18cff", "#ff9559"}
 
 // PaletteColor picks a palette colour for a user id. The choice is a pure function of the id, so it is
-// stable and spreads colleagues over the palette without a counter or a database round trip.
+// stable; it only serves callers that have no view of the colours already taken (see LeastUsedColor).
 func PaletteColor(userID string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(userID))
 	return UserPalette[h.Sum32()%uint32(len(UserPalette))]
+}
+
+// LeastUsedColor returns the palette colour held by the fewest of the given colours. Ties go to the
+// colour that comes first in UserPalette, so the result is deterministic. Colours outside the palette
+// (chosen by hand) are ignored and the comparison is case-insensitive.
+func LeastUsedColor(taken []string) string {
+	var counts [len(UserPalette)]int
+	for _, c := range taken {
+		for i, p := range UserPalette {
+			if strings.EqualFold(c, p) {
+				counts[i]++
+				break
+			}
+		}
+	}
+	best := 0
+	for i := 1; i < len(counts); i++ {
+		if counts[i] < counts[best] {
+			best = i
+		}
+	}
+	return UserPalette[best]
 }
 
 // Field length limits; they mirror the CHECK constraints in the schema.

@@ -274,9 +274,18 @@ func (s *Users) CreateUser(ctx context.Context, actor domain.Actor, in CreateUse
 			return fmt.Errorf("hash password: %w", err)
 		}
 		id := s.IDs.NewID()
-		// Without an explicit colour every user gets a palette colour, so colleagues are told apart in the table.
+		// Without an explicit colour the user gets the least-used palette colour, so colleagues stay
+		// distinguishable in the table for as long as the palette allows.
 		if color == "" {
-			color = domain.PaletteColor(id)
+			existing, err := s.Users.List(ctx)
+			if err != nil {
+				return fmt.Errorf("list users for colour: %w", err)
+			}
+			taken := make([]string, len(existing))
+			for i, u := range existing {
+				taken[i] = u.Color
+			}
+			color = domain.LeastUsedColor(taken)
 		}
 		if err := s.Users.Create(ctx, domain.NewUser{
 			ID: id, Login: login, DisplayName: name, Color: color,
@@ -293,7 +302,7 @@ func (s *Users) CreateUser(ctx context.Context, actor domain.Actor, in CreateUse
 		}
 		out = CreatedUser{Profile: ProfileOf(rec), TempPassword: temp}
 		return s.audit(ctx, domain.AccountAuditEntry{Action: "user.create", ActorID: actor.UserID, TargetID: id, IP: in.IP,
-			Meta: map[string]any{"roleIds": roleIDs}})
+			Meta: map[string]any{"roleIds": roleIDs, "login": login}})
 	})
 	if err != nil {
 		return CreatedUser{}, err
@@ -391,12 +400,14 @@ func (s *Users) UpdateUser(ctx context.Context, actor domain.Actor, id string, i
 					return err
 				}
 			}
-			if err := s.audit(ctx, domain.AccountAuditEntry{Action: action, ActorID: actor.UserID, TargetID: id}); err != nil {
+			if err := s.audit(ctx, domain.AccountAuditEntry{Action: action, ActorID: actor.UserID, TargetID: id,
+				Meta: map[string]any{"login": rec.Login}}); err != nil {
 				return err
 			}
 		}
 		if name != nil && *name != rec.DisplayName {
-			if err := s.audit(ctx, domain.AccountAuditEntry{Action: "user.update", ActorID: actor.UserID, TargetID: id}); err != nil {
+			if err := s.audit(ctx, domain.AccountAuditEntry{Action: "user.update", ActorID: actor.UserID, TargetID: id,
+				Meta: map[string]any{"login": rec.Login}}); err != nil {
 				return err
 			}
 		}
@@ -457,7 +468,7 @@ func (s *Users) SetRoles(ctx context.Context, actor domain.Actor, id string, rol
 			before[i] = r.ID
 		}
 		if err := s.audit(ctx, domain.AccountAuditEntry{Action: "user.roles.set", ActorID: actor.UserID, TargetID: id,
-			Meta: map[string]any{"added": difference(ids, before), "removed": difference(before, ids)}}); err != nil {
+			Meta: map[string]any{"added": difference(ids, before), "removed": difference(before, ids), "login": rec.Login}}); err != nil {
 			return err
 		}
 		updated, err := s.load(ctx, id)
@@ -497,7 +508,8 @@ func (s *Users) ResetPassword(ctx context.Context, actor domain.Actor, id string
 		return "", fmt.Errorf("hash password: %w", err)
 	}
 	err = s.Tx.Do(ctx, func(ctx context.Context) error {
-		if _, err := s.load(ctx, id); err != nil {
+		rec, err := s.load(ctx, id)
+		if err != nil {
 			return err
 		}
 		if err := s.Users.SetPassword(ctx, id, hash, true); err != nil {
@@ -506,7 +518,8 @@ func (s *Users) ResetPassword(ctx context.Context, actor domain.Actor, id string
 		if err := s.revoke(ctx, id); err != nil {
 			return err
 		}
-		return s.audit(ctx, domain.AccountAuditEntry{Action: "password.reset", ActorID: actor.UserID, TargetID: id})
+		return s.audit(ctx, domain.AccountAuditEntry{Action: "password.reset", ActorID: actor.UserID, TargetID: id,
+			Meta: map[string]any{"login": rec.Login}})
 	})
 	if err != nil {
 		return "", err
@@ -541,7 +554,7 @@ func (s *Users) EnsureAdmin(ctx context.Context, login, password string) (create
 			userID = s.IDs.NewID()
 			created = true
 			if err := s.Users.Create(ctx, domain.NewUser{
-				ID: userID, Login: login, DisplayName: login, Color: domain.DefaultColor,
+				ID: userID, Login: login, DisplayName: login, Color: domain.UserPalette[0],
 				PasswordHash: hash, PasswordTemporary: false, CreatedAt: s.Clock.Now(),
 			}); err != nil {
 				return err
