@@ -11,7 +11,13 @@ export function tr(locale: Locale = 'ru') {
   const dict = (locale === 'uz' ? uz : ru) as Record<string, unknown>
   return (key: Key, params: Record<string, string | number> = {}): string => {
     const raw = dict[key]
-    const text = typeof raw === 'string' ? raw : ((raw as Record<string, string> | undefined)?.other ?? String(key))
+    let text: string
+    if (typeof raw === 'string') text = raw
+    else {
+      const forms = (raw ?? {}) as Record<string, string>
+      const category = new Intl.PluralRules(locale).select(Number(params.count ?? 0))
+      text = forms[category] ?? forms.other ?? String(key)
+    }
     return text.replace(/\{(\w+)\}/g, (w, n: string) => (n in params ? String(params[n]) : w))
   }
 }
