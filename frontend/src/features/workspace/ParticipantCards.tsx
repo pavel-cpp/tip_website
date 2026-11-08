@@ -188,10 +188,11 @@ function ParticipantCardImpl({
         >
           {/* In selection mode the checkbox takes the number's place, so names keep their width. */}
           {!selectMode && <span className="pc-num">{row.number}</span>}
+          {/* Plain spaces between the spans keep the visible text equal to the accessible name (WCAG 2.5.3). */}{' '}
           <span className="pc-body">
             <span className="pc-name" data-empty={name === '' || undefined}>
               {name || t('workspace.conflict.empty')}
-            </span>
+            </span>{' '}
             <span className="pc-phone" data-suspicious={suspicious || undefined}>
               {phone || t('workspace.conflict.empty')}
               {suspicious && (

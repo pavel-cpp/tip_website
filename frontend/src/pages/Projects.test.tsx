@@ -131,7 +131,7 @@ describe('Projects screen', () => {
   it('shows the admin empty state with a create action and the worker hint otherwise', async () => {
     mockApi([])
     const { unmount } = renderPage()
-    expect(await screen.findByText('Создайте первый проект')).toBeInTheDocument()
+    expect(await screen.findByText(/Создайте проект, загрузите картинку билета/)).toBeInTheDocument()
     unmount()
     setAccessToken(jwt(['project.view']))
     mockApi([])

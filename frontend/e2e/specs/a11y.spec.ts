@@ -63,6 +63,11 @@ for (const locale of LOCALES) {
         const page = await ctx.newPage()
         await enter(page, user, locale, theme)
         await screen.open(page, { api: admin, projectId, locale })
+        if (screen.id === 'settings') {
+          // The pinned save bar covers the lowest fields on a short window until the page is scrolled to its
+          // end; measure that state, because axe reports a target hidden under the bar as too small.
+          await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+        }
         await audit(page, `${screen.id}-${locale}-${theme}`)
       })
     }

@@ -292,7 +292,6 @@
   padding: var(--space-2);
   border: 1px dashed transparent;
   border-radius: var(--radius);
-  transition: border-color var(--dur-fast) var(--ease-standard);
 }
 .image-field.is-over {
   border-color: var(--accent);

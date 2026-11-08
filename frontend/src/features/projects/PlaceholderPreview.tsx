@@ -223,7 +223,7 @@ export function PlaceholderPreview({
             type="button"
             className="ph-chip"
             aria-pressed={active === key}
-            aria-label={t('settings.drag', { label: labelOf(key) })}
+            aria-label={t('settings.drag', { label: `${labelOf(key)} ${i + 1}` })}
             style={{ transform: `translate(${at.x}px, ${at.y}px) translate(-100%, -50%)` }}
             onPointerDown={onDown(key)}
             onPointerMove={onPointerMove}
@@ -233,7 +233,7 @@ export function PlaceholderPreview({
           >
             <span className="ph-chip-label" aria-hidden="true">
               {labelOf(key)}
-            </span>
+            </span>{' '}
             <span className="ph-chip-badge" aria-hidden="true" style={{ background: BADGE[key] }}>
               {i + 1}
             </span>

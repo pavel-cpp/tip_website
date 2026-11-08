@@ -66,15 +66,15 @@ function setup(extra: Partial<React.ComponentProps<typeof PlaceholderPreview>> =
       {...extra}
     />,
   )
-  return { onMove, onSelect, chip: screen.getByRole('button', { name: 'Имя, перетащить' }) }
+  return { onMove, onSelect, chip: screen.getByRole('button', { name: 'Имя 2, перетащить' }) }
 }
 
 describe('PlaceholderPreview dragging', () => {
   it('renders one chip per placeholder and marks the active one', () => {
     setup()
     expect(screen.getAllByRole('button')).toHaveLength(3)
-    expect(screen.getByRole('button', { name: 'Имя, перетащить' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Номер телефона, перетащить' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Имя 2, перетащить' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Номер телефона 3, перетащить' })).toHaveAttribute(
       'aria-pressed',
       'false',
     )

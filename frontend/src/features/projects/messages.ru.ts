@@ -28,7 +28,7 @@ export const projectsRu = {
   },
   'projects.card.finished': 'Завершён',
   'projects.empty.admin.title': 'Проектов пока нет',
-  'projects.empty.admin.hint': 'Создайте первый проект',
+  'projects.empty.admin.hint': 'Создайте проект, загрузите картинку билета, добавьте участников и печатайте',
   'projects.empty.admin.cta': 'Создать проект',
   'projects.empty.worker.title': 'Проектов пока нет',
   'projects.empty.worker.hint': 'Обратитесь к администратору, чтобы вас добавили в проект',

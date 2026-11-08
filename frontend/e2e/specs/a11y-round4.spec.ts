@@ -99,7 +99,9 @@ test('focus ring of buttons has at least 3:1 against the page', async ({ signedI
   expect((ring as { ratio: number }).ratio).toBeGreaterThanOrEqual(3)
 })
 
-test('skip link is the first tab stop and moves focus to the main content', async ({ signedIn }) => {
+test('skip link is the first tab stop and moves focus to the main content', async ({ signedIn }, info) => {
+  // WebKit does not Tab to links unless the user enables it; phones have no Tab key at all.
+  test.skip(COARSE.includes(info.project.name), 'needs a Tab key that reaches links')
   const page = await signedIn(adminCreds())
   await page.goto('/profile')
   await page.locator('.profile').waitFor()

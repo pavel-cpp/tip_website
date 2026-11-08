@@ -27,7 +27,8 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   },
   'projects.card.finished': 'Yakunlangan',
   'projects.empty.admin.title': 'Hozircha loyihalar yoʻq',
-  'projects.empty.admin.hint': 'Birinchi loyihani yarating',
+  'projects.empty.admin.hint':
+    'Loyiha yarating, chipta rasmini yuklang, ishtirokchilarni qoʻshing va chop eting',
   'projects.empty.admin.cta': 'Loyiha yaratish',
   'projects.empty.worker.title': 'Hozircha loyihalar yoʻq',
   'projects.empty.worker.hint': 'Loyihaga qoʻshilish uchun administratorga murojaat qiling',
