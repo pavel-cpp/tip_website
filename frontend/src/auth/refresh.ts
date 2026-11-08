@@ -1,6 +1,6 @@
 import { networkError, readApiError } from '../api/errors'
 import type { TokenResponse } from '../api/types'
-import { emitLogout } from './events'
+import { emitLogout, emitTokenRefreshed } from './events'
 import { clearAccessToken, setAccessToken } from './tokenStore'
 
 export const REFRESH_URL = '/api/v1/auth/refresh'
@@ -30,6 +30,7 @@ async function doRefresh(): Promise<string> {
   }
   const body = (await res.json()) as TokenResponse
   setAccessToken(body.accessToken)
+  emitTokenRefreshed(body.expiresIn)
   return body.accessToken
 }
 

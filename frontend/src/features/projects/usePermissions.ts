@@ -1,9 +1,9 @@
+import { useOptionalAuth } from '../../auth/AuthProvider'
 import { getAccessToken } from '../../auth/tokenStore'
 
 /**
- * Temporary stand-in for the auth context owned by the auth stream: reads the `perms` claim of the
- * in-memory access token (docs/04-api.md: the user's permissions live in the JWT claims).
- * Swap the body for the real auth context hook when it lands; the signature is the contract.
+ * Delegates to the auth context (src/auth); the `perms` claim of the in-memory access token
+ * (docs/04-api.md) is only a fallback when rendered outside the provider.
  * The server still decides everything; this only shows or hides UI.
  */
 export interface Permissions {
@@ -24,6 +24,9 @@ export function permissionsFromToken(token: string | null): ReadonlySet<string> 
 }
 
 export function usePermissions(): Permissions {
-  const perms = permissionsFromToken(getAccessToken())
+  const auth = useOptionalAuth()
+  const perms: ReadonlySet<string> = auth?.user
+    ? new Set<string>(auth.user.permissions)
+    : permissionsFromToken(getAccessToken())
   return { can: (p) => perms.has(p) }
 }
