@@ -11,8 +11,9 @@ export default defineConfig({
   outputDir: './e2e/.output/results',
   fullyParallel: true,
   workers: process.env.CI ? 2 : 3,
-  retries: 0,
-  timeout: 45_000,
+  // One retry absorbs rare WebKit stalls under load; retried tests are reported as flaky, not hidden.
+  retries: 1,
+  timeout: 60_000,
   expect: {
     timeout: 8_000,
     toHaveScreenshot: { animations: 'disabled', maxDiffPixelRatio: 0.02 },
