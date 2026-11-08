@@ -42,7 +42,7 @@ const BADGE: Record<PlaceholderKey, string> = {
 /** Below this stage width only the selected field's handle is shown, so the picture stays readable. */
 const NARROW_STAGE = 460
 const DOT = 22
-const GAP = 10
+const GAP = 14
 
 let measurer: CanvasRenderingContext2D | null | undefined
 

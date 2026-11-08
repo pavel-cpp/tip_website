@@ -81,6 +81,12 @@
   aspect-ratio: 7 / 4;
   border-bottom: 1px solid var(--border);
 }
+@media (max-width: 559px) {
+  /* A full-width 7:4 picture would fill the phone screen; the crop is only a preview. */
+  .project-card-thumb {
+    aspect-ratio: 16 / 7;
+  }
+}
 .project-card.is-finished .project-card-thumb {
   filter: saturate(0.4);
 }

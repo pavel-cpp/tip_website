@@ -131,7 +131,8 @@
 }
 .pw-form-pair {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* minmax(0, ...) lets the columns shrink below the intrinsic width of an input (it overflowed the card). */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-4);
 }
 .pw-form-actions {
@@ -142,6 +143,6 @@
 }
 @media (max-width: 559px) {
   .pw-form-pair {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

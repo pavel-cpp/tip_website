@@ -125,7 +125,7 @@ describe('ProjectSettings', () => {
     expect(save).toHaveAttribute('aria-disabled', 'true')
 
     await userEvent.click(screen.getByRole('tab', { name: 'Телефон' }))
-    const size = screen.getByLabelText('Размер')
+    const size = screen.getByLabelText('Размер шрифта')
     await userEvent.clear(size)
     await userEvent.type(size, '40')
     await userEvent.click(screen.getByRole('button', { name: 'Курсив' }))

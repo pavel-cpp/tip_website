@@ -187,7 +187,8 @@
   display: grid;
   place-items: center;
   width: var(--control-h);
-  height: var(--control-h);
+  /* The field border takes 2px, so the field stays exactly one control height tall. */
+  height: calc(var(--control-h) - 2px);
   margin-right: -12px;
   background: none;
   border: 0;
@@ -265,6 +266,8 @@
 .panel-title {
   flex: 1;
   min-width: 0;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-tight);
 }
 .panel-body {
   flex: 1;
@@ -445,7 +448,8 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--space-6) + var(--safe-bottom));
+  /* Top, under the bar: the bottom of a page holds footers, save bars and the phone toolbar. */
+  top: calc(var(--topbar-h) + var(--space-3) + var(--safe-top));
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
@@ -499,13 +503,13 @@
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(-16px);
   }
 }
 @keyframes toast-out {
   to {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(-8px);
   }
 }
 @keyframes toast-timer {
