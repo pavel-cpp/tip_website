@@ -11,6 +11,8 @@ export interface RequestOptions {
   body?: unknown
   query?: Record<string, string | number | boolean | undefined>
   signal?: AbortSignal
+  /** Extra request headers (e.g. If-None-Match); they override the defaults such as Accept. */
+  headers?: Record<string, string>
   /** For /auth/login and /auth/refresh: no token refresh and no logout on 401. */
   skipAuthRetry?: boolean
 }
@@ -26,6 +28,7 @@ async function send(path: string, opts: RequestOptions): Promise<Response> {
   const headers = new Headers({ Accept: 'application/json' })
   const token = getAccessToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  for (const [k, v] of Object.entries(opts.headers ?? {})) headers.set(k, v)
 
   let body: BodyInit | undefined
   if (opts.body instanceof FormData || opts.body instanceof Blob) {
@@ -57,19 +60,20 @@ async function parse<T>(res: Response): Promise<T> {
 const needsRefresh = (e: ApiError) => e.code === 'TOKEN_EXPIRED' || e.code === 'TOKEN_STALE'
 
 /**
- * Typed fetch wrapper. On 401 TOKEN_EXPIRED / TOKEN_STALE it performs one shared refresh and
- * retries the request exactly once; a closed refresh chain clears the token and emits logout.
+ * Like apiFetch but hands back the raw Response (2xx or 304), for callers that need headers
+ * (ETag) or non-JSON bodies (file downloads). Same shared refresh and logout handling.
  */
-export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+export async function apiRequest(path: string, opts: RequestOptions = {}): Promise<Response> {
+  const accepted = (r: Response) => r.ok || r.status === 304
   let res = await send(path, opts)
-  if (res.ok) return parse<T>(res)
+  if (accepted(res)) return res
 
   let err = await readApiError(res)
   if (!opts.skipAuthRetry) {
     if (needsRefresh(err)) {
       await refreshAccessToken()
       res = await send(path, opts)
-      if (res.ok) return parse<T>(res)
+      if (accepted(res)) return res
       err = await readApiError(res)
     }
     if (err.code === 'UNAUTHENTICATED') {
@@ -78,6 +82,14 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     }
   }
   throw err
+}
+
+/**
+ * Typed fetch wrapper. On 401 TOKEN_EXPIRED / TOKEN_STALE it performs one shared refresh and
+ * retries the request exactly once; a closed refresh chain clears the token and emits logout.
+ */
+export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
+  return parse<T>(await apiRequest(path, opts))
 }
 
 type BodyOpts = Omit<RequestOptions, 'method' | 'body'>
