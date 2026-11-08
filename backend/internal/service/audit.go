@@ -94,6 +94,7 @@ type AuditQuery struct {
 	Before    int64
 	ProjectID string
 	ActorID   string
+	Action    string
 }
 
 // AuditPage is one page of entries, newest first.
@@ -124,7 +125,7 @@ func (s *Audit) List(ctx context.Context, actor domain.Actor, q AuditQuery) (Aud
 
 	// One extra row tells whether another page exists without a second query.
 	rows, err := s.store.List(ctx, domain.AuditFilter{
-		ProjectID: q.ProjectID, ActorID: q.ActorID, Before: q.Before, Limit: q.Limit + 1,
+		ProjectID: q.ProjectID, ActorID: q.ActorID, Action: q.Action, Before: q.Before, Limit: q.Limit + 1,
 	})
 	if err != nil {
 		return AuditPage{}, fmt.Errorf("list audit: %w", err)

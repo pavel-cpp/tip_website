@@ -283,9 +283,17 @@ td.cell-actions {
     border: 0;
     grid-column: 1 / -1;
   }
+  .table td[data-label]:not(:first-child) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    font-size: var(--fs-sm);
+  }
   .table td[data-label]:not(:first-child)::before {
-    content: attr(data-label) ": ";
-    color: var(--text-faint);
+    content: attr(data-label) ":";
+    min-width: 88px;
+    color: var(--text-muted);
     font-size: var(--fs-xs);
   }
   .table td:first-child {
@@ -527,6 +535,16 @@ td.cell-actions {
   display: block;
   font-size: var(--fs-sm);
 }
+.tools-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+.tools-note a {
+  color: var(--accent-text);
+}
 .checks {
   list-style: none;
   margin: 0;
@@ -582,7 +600,7 @@ td.cell-actions {
 }
 .numbers {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
   gap: var(--space-3);
 }
 .number {

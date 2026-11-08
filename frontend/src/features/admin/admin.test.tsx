@@ -34,25 +34,57 @@ const entry = (patch: Partial<AuditEntry>): AuditEntry => ({
 })
 
 describe('audit sentences', () => {
+  const none = { projects: null }
+
   it('names the actor, count and project', () => {
     const projects = new Map([['p1', 'Tashkent City Mall']])
-    expect(auditSentence(entry({}), projects)).toBe(
+    expect(auditSentence(entry({}), { projects })).toBe(
       'admin напечатал 5 билетов в проекте «Tashkent City Mall»',
     )
   })
 
   it('says "deleted project" for an unknown id and omits the project while titles are unknown', () => {
-    expect(auditSentence(entry({}), new Map())).toContain('в удалённом проекте')
-    expect(auditSentence(entry({}), null)).toBe('admin напечатал 5 билетов')
+    expect(auditSentence(entry({}), { projects: new Map() })).toContain('в удалённом проекте')
+    expect(auditSentence(entry({}), none)).toBe('admin напечатал 5 билетов')
+  })
+
+  it('puts the project into project actions without repeating it', () => {
+    const projects = new Map([['p1', 'Layout check']])
+    const created = entry({ action: 'project.create', meta: {} })
+    expect(auditSentence(created, { projects })).toBe('admin создал проект «Layout check»')
+    expect(auditSentence(entry({ action: 'project.delete', meta: {} }), { projects: new Map() })).toBe(
+      'admin удалил проект',
+    )
+    expect(auditSentence(entry({ action: 'project.reopen', meta: {} }), { projects })).toBe(
+      'admin вернул в работу проект «Layout check»',
+    )
+  })
+
+  it('names the target user from the user list, else from the stored login', () => {
+    const create = entry({
+      action: 'user.create',
+      projectId: null,
+      entityId: 'u9',
+      meta: { login: 'n.rahimova' },
+    })
+    const users = new Map([['u9', 'Нигора Рахимова']])
+    expect(auditSentence(create, { projects: null, users })).toBe(
+      'admin создал пользователя «Нигора Рахимова»',
+    )
+    expect(auditSentence(create, none)).toBe('admin создал пользователя «n.rahimova»')
+    const off = entry({ action: 'user.deactivate', projectId: null, entityId: 'u9', meta: {} })
+    expect(auditSentence(off, none)).toBe('admin отключил пользователя')
   })
 
   it('falls back to the raw code for an action without a phrase', () => {
-    expect(auditSentence(entry({ action: 'brand.new', projectId: null }), null)).toBe('admin: brand.new')
+    expect(auditSentence(entry({ action: 'brand.new', projectId: null }), none)).toBe('admin: brand.new')
   })
 
   it('is translated to Uzbek', async () => {
     await setLocale('uz')
-    expect(auditSentence(entry({ projectId: null }), null)).toBe('admin 5 ta chipta chop etdi')
+    expect(auditSentence(entry({ projectId: null }), none)).toBe('admin 5 ta chipta chop etdi')
+    const create = entry({ action: 'user.create', projectId: null, meta: { login: 'n.rahimova' } })
+    expect(auditSentence(create, none)).toBe('admin «n.rahimova» foydalanuvchisini yaratdi')
   })
 })
 

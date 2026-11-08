@@ -28,6 +28,23 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+@media (max-width: 899px) {
+  /* On a phone the form sits below the preview; keeping the preview pinned lets you see the effect of every edit. */
+  .settings-grid > .panel:first-child {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 3;
+  }
+  .settings-grid > .panel:first-child .panel-head {
+    min-height: 36px;
+  }
+  .settings-grid > .panel:first-child .panel-title {
+    font-size: var(--fs-sm);
+  }
+  .settings-grid > .panel:first-child .panel-body {
+    padding: var(--space-2);
+  }
+}
 .settings-fields {
   display: grid;
   /* An implicit auto column grows to the widest input and pushes the actions out of the card. */
@@ -110,11 +127,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
-  padding: 0 10px 0 4px;
+  padding: 0;
+  border: 0;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong);
-  background: rgb(19 20 24 / 0.82);
+  background: transparent;
   color: #e8e9ec;
   font: inherit;
   font-size: var(--fs-sm);
@@ -124,14 +140,19 @@
   touch-action: none;
   will-change: transform;
 }
+/* The visible handle is a 22px dot; the hit area is stretched to a comfortable target. */
+.ph-chip::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+@media (pointer: coarse) {
+  .ph-chip::after {
+    inset: -11px;
+  }
+}
 .ph-chip:active {
   cursor: grabbing;
-}
-.ph-chip[aria-pressed="true"] {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 2px var(--accent-soft),
-    0 0 0 1px var(--accent);
 }
 .ph-stage[data-disabled] .ph-chip {
   cursor: default;
@@ -139,12 +160,37 @@
 .ph-chip-badge {
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   color: #101218;
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
+  /* A dark ring keeps the dot readable on any picture. */
+  box-shadow:
+    0 0 0 2px rgb(19 20 24 / 0.85),
+    0 1px 6px rgb(0 0 0 / 0.4);
+}
+.ph-chip[aria-pressed="true"] .ph-chip-badge {
+  box-shadow:
+    0 0 0 2px rgb(19 20 24 / 0.9),
+    0 0 0 4px var(--accent);
+}
+/* The name of the selected field appears to the left of its dot, away from the glyphs. */
+.ph-chip-label {
+  display: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: rgb(19 20 24 / 0.85);
+  line-height: 18px;
+}
+.ph-chip[aria-pressed="true"] .ph-chip-label {
+  display: inline;
+}
+/* On a narrow stage (phone) only the selected handle is drawn, without a label. */
+.ph-stage[data-narrow] .ph-chip[aria-pressed="false"],
+.ph-stage[data-narrow] .ph-chip-label {
+  display: none;
 }
 
 /* ---------- controls ---------- */
@@ -153,6 +199,7 @@
   gap: var(--space-4);
 }
 .ph-row {
+  align-items: end;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
@@ -160,7 +207,7 @@
 .input select {
   flex: 1;
   min-width: 0;
-  min-height: 40px;
+  min-height: calc(var(--control-h) - 2px);
   background: transparent;
   border: 0;
   outline: 0;
@@ -182,8 +229,10 @@
 .color-field {
   gap: var(--space-2);
 }
-.color-swatch {
+/* Same specificity as ".input input" so the swatch keeps its own size inside the field. */
+.input .color-swatch {
   flex: none;
+  align-self: center;
   width: 24px;
   height: 24px;
   padding: 0;
@@ -201,7 +250,7 @@
 }
 .style-toggle {
   min-width: var(--touch-target);
-  min-height: 40px;
+  min-height: calc(var(--control-h) - 2px);
   padding: 0 var(--space-3);
   background: none;
   border: 0;

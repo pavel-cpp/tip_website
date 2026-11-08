@@ -70,15 +70,3 @@ export function isOffRatio(w: number, h: number, target = 7 / 4, tolerance = 0.0
   if (w <= 0 || h <= 0) return false
   return Math.abs(w / h / target - 1) > tolerance
 }
-
-export function formatBytes(bytes: number, locale: string): string {
-  const mb = bytes / (1024 * 1024)
-  const fmt = (n: number, unit: 'megabyte' | 'kilobyte') =>
-    new Intl.NumberFormat(locale, {
-      style: 'unit',
-      unit,
-      unitDisplay: 'short',
-      maximumFractionDigits: 1,
-    }).format(n)
-  return mb >= 1 ? fmt(mb, 'megabyte') : fmt(bytes / 1024, 'kilobyte')
-}

@@ -943,7 +943,7 @@ export interface components {
             projectId: string | null;
             /** Format: uuid */
             entityId: string | null;
-            /** @description Ids and numbers only, never names or phones. */
+            /** @description Ids and numbers only, plus the target `login` of account actions; never display names or phones. */
             meta: {
                 [key: string]: unknown;
             };
@@ -2216,6 +2216,8 @@ export interface operations {
                 projectId?: string;
                 /** @description Restrict to actions of one user (user id). */
                 actor?: string;
+                /** @description Restrict to one dotted action name, for example `user.create`. */
+                action?: string;
             };
             header?: never;
             path?: never;

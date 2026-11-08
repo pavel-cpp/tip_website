@@ -8,7 +8,7 @@ import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { AuditLog } from '../../features/admin/AuditLog'
 import { getSystem, keys, type SystemStatus } from '../../features/admin/api'
 import { checkDetail, checkTitle } from '../../features/admin/checks'
-import { diskUsedRatio, splitBytes, splitUptime } from '../../features/admin/format'
+import { diskUsedRatio, splitUptime } from '../../features/admin/format'
 import '../../features/admin/admin.css'
 import { type MessageKey, useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
@@ -64,12 +64,8 @@ export default function System() {
 }
 
 function StatusView({ data }: { data: SystemStatus }) {
-  const { t, formatNumber } = useI18n()
+  const { t, formatNumber, formatBytes: bytes } = useI18n()
   const failing = data.checks.filter((c) => c.status === 'fail')
-  const bytes = (n: number) => {
-    const { value, unit } = splitBytes(n)
-    return `${formatNumber(value)} ${t(`admin.unit.${unit}`)}`
-  }
   const up = splitUptime(data.uptime)
   const used = diskUsedRatio(data.disk.free, data.disk.total)
 
@@ -84,6 +80,17 @@ function StatusView({ data }: { data: SystemStatus }) {
           </div>
         </div>
       )}
+
+      <p className="muted tools-note" data-testid="grafana-note">
+        <Icon name="monitor" size={16} />
+        {data.links?.grafana ? (
+          <a href={data.links.grafana} target="_blank" rel="noopener noreferrer">
+            {t('admin.system.grafanaOpen')}
+          </a>
+        ) : (
+          t('admin.system.grafanaMissing')
+        )}
+      </p>
 
       <Panel title={t('admin.system.checks')} icon="info">
         <ul className="checks">

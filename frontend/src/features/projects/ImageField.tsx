@@ -1,10 +1,10 @@
 import { type DragEvent, useRef, useState } from 'react'
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
-import { INTL_TAG, useI18n } from '../../i18n'
+import { useI18n } from '../../i18n'
 import { cx } from '../../lib/cx'
 import type { Project } from './api'
-import { formatBytes, isOffRatio } from './draft'
+import { isOffRatio } from './draft'
 import { useAuthedImage } from './useAuthedImage'
 import './settings.css'
 
@@ -21,7 +21,7 @@ interface Props {
 
 /** Thumbnail + replace button + drop target. The ratio hint is gentle: it never blocks an upload. */
 export function ImageField({ image, progress, disabled, onFile, onReject }: Props) {
-  const { t, locale } = useI18n()
+  const { t, formatBytes } = useI18n()
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
   const thumb = useAuthedImage(image?.thumbUrl)
@@ -86,7 +86,7 @@ export function ImageField({ image, progress, disabled, onFile, onReject }: Prop
             <span className="muted image-meta">
               {t('settings.image.meta', {
                 name: image.name,
-                size: formatBytes(image.bytes, INTL_TAG[locale]),
+                size: formatBytes(image.bytes),
               })}
             </span>
           )

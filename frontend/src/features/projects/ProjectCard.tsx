@@ -64,9 +64,7 @@ export function ProjectCard({ project, index, actions, onAction }: ProjectCardPr
     onSelect: () => onAction(action, project),
   }))
 
-  const background = image
-    ? `linear-gradient(180deg, rgb(0 0 0 / 0) 25%, rgb(0 0 0 / 0.78)), left top / cover url(${image})`
-    : gradientFor(project.id)
+  const background = image ? `left top / cover url(${image})` : gradientFor(project.id)
 
   return (
     <div
@@ -75,26 +73,27 @@ export function ProjectCard({ project, index, actions, onAction }: ProjectCardPr
       data-flip-id={project.id}
       style={{ '--i': Math.min(index, 7) } as CSSProperties}
     >
-      <AppLink to={`/projects/${project.id}`} className="project-card-link" style={{ background }}>
-        <span className="project-card-title">{project.title}</span>
-        <span className="project-card-meta">
-          {project.contributors.length > 0 && (
-            <AvatarStack
-              users={project.contributors.map((c) => ({
-                id: c.id,
-                displayName: c.displayName,
-                color: c.color,
-                avatar: c.avatarUrl,
-              }))}
-            />
-          )}
-          <span className="project-card-count">
-            {finished && `${t('projects.card.finished')} · `}
-            {t('projects.card.participants', { count: project.participantCount })}
+      <AppLink to={`/projects/${project.id}`} className="project-card-link">
+        {/* The picture stays clean: title, status and actions live on the solid strip below it. */}
+        <span className="project-card-thumb" style={{ background }} aria-hidden="true" />
+        <span className="project-card-body">
+          <span className="project-card-title">{project.title}</span>
+          <span className="project-card-meta">
+            {project.contributors.length > 0 && (
+              <AvatarStack
+                users={project.contributors.map((c) => ({
+                  id: c.id,
+                  displayName: c.displayName,
+                  color: c.color,
+                  avatar: c.avatarUrl,
+                }))}
+              />
+            )}
+            {finished && <span className="project-card-status">{t('projects.card.finished')}</span>}
+            <span className="project-card-count">
+              {t('projects.card.participants', { count: project.participantCount })}
+            </span>
           </span>
-        </span>
-        <span className="project-card-open" aria-hidden="true">
-          <Icon name="arrowRight" size={16} />
         </span>
       </AppLink>
       {items.length > 0 && (

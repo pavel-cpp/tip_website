@@ -58,6 +58,11 @@ func TestAuditRepoInsertAndList(t *testing.T) {
 		t.Fatalf("both = %+v", both)
 	}
 
+	byAction, _ := r.List(ctx, domain.AuditFilter{Action: "tickets.print", Limit: 10})
+	if len(byAction) != 1 || byAction[0].Action != "tickets.print" {
+		t.Fatalf("by action = %+v", byAction)
+	}
+
 	// cursor paging: two entries per page, no overlap, no gaps
 	page1, _ := r.List(ctx, domain.AuditFilter{Limit: 2})
 	page2, _ := r.List(ctx, domain.AuditFilter{Limit: 2, Before: page1[1].ID})

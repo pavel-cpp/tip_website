@@ -46,6 +46,7 @@ export const deleteRole = (id: string) => api.delete<void>(`/admin/roles/${id}`)
 export interface AuditFilter {
   actor?: string
   projectId?: string
+  action?: string
 }
 
 export const getAuditPage = (before?: number, filter: AuditFilter = {}) =>

@@ -16,10 +16,21 @@ type Dictionary = Record<string, Message>
 const numberFormats = new Map<Locale, Intl.NumberFormat>()
 const pluralRules = new Map<Locale, Intl.PluralRules>()
 
+/**
+ * Uzbek (Latin) numbers use a no-break space for grouping and a decimal comma, exactly like Russian,
+ * but browsers that ship without Uzbek ICU data fall back to the English "5,000" / "1.5". The ru-RU
+ * rules give the CLDR uz result everywhere, and grouping is forced on so "5 000" has its space.
+ */
+function numberOptions(locale: Locale, opts?: Intl.NumberFormatOptions): [string, Intl.NumberFormatOptions] {
+  if (locale === 'uz') return ['ru-RU', { useGrouping: 'always', ...opts } as Intl.NumberFormatOptions]
+  return [INTL_TAG[locale], opts ?? {}]
+}
+
 function numberFormat(locale: Locale): Intl.NumberFormat {
   const cached = numberFormats.get(locale)
   if (cached) return cached
-  const created = new Intl.NumberFormat(INTL_TAG[locale])
+  const [tag, opts] = numberOptions(locale)
+  const created = new Intl.NumberFormat(tag, opts)
   numberFormats.set(locale, created)
   return created
 }
@@ -98,7 +109,28 @@ export function t(key: MessageKey, params?: Params): string {
 }
 
 export function formatNumber(value: number, opts?: Intl.NumberFormatOptions): string {
-  return new Intl.NumberFormat(INTL_TAG[locale], opts).format(value)
+  if (!opts) return numberFormat(locale).format(value)
+  const [tag, merged] = numberOptions(locale, opts)
+  return new Intl.NumberFormat(tag, merged).format(value)
+}
+
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+
+/** Splits a byte count into a value (1 decimal at most) and a unit code for the `admin.unit.*` keys. */
+export function splitBytes(bytes: number): { value: number; unit: (typeof BYTE_UNITS)[number] } {
+  let value = Math.max(0, bytes)
+  let i = 0
+  while (value >= 1024 && i < BYTE_UNITS.length - 1) {
+    value /= 1024
+    i++
+  }
+  return { value: Math.round(value * 10) / 10, unit: BYTE_UNITS[i] as (typeof BYTE_UNITS)[number] }
+}
+
+/** "1 006,9 ГБ" / "1 006,9 GB": number in the current locale, unit from the dictionary. */
+export function formatBytes(bytes: number): string {
+  const { value, unit } = splitBytes(bytes)
+  return `${formatNumber(value)} ${t(`admin.unit.${unit}` as MessageKey)}`
 }
 
 export function formatDate(
@@ -132,5 +164,5 @@ function subscribe(cb: () => void): () => void {
 export function useI18n() {
   const current = useSyncExternalStore(subscribe, getLocale, getLocale)
   // The bound functions read module state, which already matches `current` when this runs.
-  return useMemo(() => ({ locale: current, t, setLocale, formatNumber, formatDate }), [current])
+  return useMemo(() => ({ locale: current, t, setLocale, formatNumber, formatDate, formatBytes }), [current])
 }

@@ -30,7 +30,7 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
   // Items without the permission are left out entirely (no permission, no element).
   const items: MenuItem[] = user
     ? [
-        { id: 'projects', label: t('nav.projects'), onSelect: go('/') },
+        { id: 'projects', label: t('nav.projects'), icon: 'folder' as const, onSelect: go('/') },
         { id: 'profile', label: t('nav.profile'), icon: 'user', onSelect: go('/profile') },
         ...(can('user.view')
           ? [

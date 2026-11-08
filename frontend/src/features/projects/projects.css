@@ -39,11 +39,13 @@
 
 .project-card {
   position: relative;
-  min-height: 216px;
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-strong);
   overflow: hidden;
   background: var(--bg-elev);
+  box-shadow: var(--shadow-card);
   transition:
     transform var(--dur-fast) var(--ease-standard),
     border-color var(--dur-fast) var(--ease-standard);
@@ -67,75 +69,74 @@
   border-color: var(--accent);
 }
 .project-card-link {
-  position: absolute;
-  inset: 0;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
-  color: #fff;
+  flex: 1;
+  color: var(--text);
   text-decoration: none;
+}
+/* 7:4 is the ticket picture ratio, so the picture is shown whole and nothing overlays it. */
+.project-card-thumb {
+  display: block;
+  aspect-ratio: 7 / 4;
+  border-bottom: 1px solid var(--border);
+}
+@media (max-width: 559px) {
+  /* A full-width 7:4 picture would fill the phone screen; the crop is only a preview. */
+  .project-card-thumb {
+    aspect-ratio: 16 / 7;
+  }
+}
+.project-card.is-finished .project-card-thumb {
+  filter: saturate(0.4);
+}
+.project-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  /* Room for the actions button that sits on the strip. */
+  padding-right: calc(var(--touch-target) + var(--space-2));
+  min-height: 84px;
 }
 .project-card-title {
   font-size: var(--fs-lg);
   font-weight: var(--fw-semibold);
+  line-height: var(--lh-tight);
   overflow-wrap: anywhere;
-  text-shadow: 0 1px 8px rgb(0 0 0 / 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .project-card-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  min-height: 28px;
-}
-.project-card-count {
+  min-height: 24px;
+  color: var(--text-muted);
   font-size: var(--fs-sm);
-  color: rgb(255 255 255 / 0.78);
 }
-.project-card-open {
-  position: absolute;
-  right: var(--space-4);
-  bottom: var(--space-4);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition:
-    opacity var(--dur-fast) var(--ease-standard),
-    transform var(--dur-fast) var(--ease-standard);
-}
-.project-card:hover .project-card-open,
-.project-card:focus-within .project-card-open {
-  opacity: 1;
-  transform: none;
-}
-.project-card.is-finished .project-card-link {
-  filter: saturate(0.4);
-  color: rgb(255 255 255 / 0.8);
+.project-card-status {
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
 }
 .project-card-menu {
   position: absolute;
-  top: var(--space-2);
   right: var(--space-2);
-  color: #fff;
-  /* Menus sit above the link; hover-capable devices show them on hover/focus only. */
+  bottom: var(--space-2);
 }
 .project-card-menu .btn {
-  background: rgb(0 0 0 / 0.35);
-  color: #fff;
-}
-@media (hover: hover) {
-  /* Dimmed but always visible, so the menu can be discovered without hovering. */
-  .project-card-menu {
-    opacity: 0.65;
-    transition: opacity var(--dur-fast) var(--ease-standard);
-  }
-  .project-card:hover .project-card-menu,
-  .project-card:focus-within .project-card-menu {
-    opacity: 1;
-  }
+  color: var(--text-muted);
 }
 
 .project-create {
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

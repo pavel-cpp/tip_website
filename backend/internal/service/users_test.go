@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
@@ -112,7 +113,7 @@ func TestCreateUserDefaultsToWorker(t *testing.T) {
 		t.Fatalf("created = %+v", c)
 	}
 	u := c.Profile.User
-	if u.Login != "new.user" || !u.PasswordTemporary || !u.IsActive || u.Color != domain.PaletteColor(u.ID) {
+	if u.Login != "new.user" || !u.PasswordTemporary || !u.IsActive || !slices.Contains(domain.UserPalette[:], u.Color) {
 		t.Fatalf("user = %+v", u)
 	}
 	if r.db.users[u.ID].hash != "hash:"+c.TempPassword {

@@ -2,8 +2,10 @@ import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } fr
 import { useI18n } from '../../i18n'
 import { prefersReducedMotion } from '../../lib/motion'
 import {
+  fontSpec,
   PLACEHOLDER_KEYS,
   type PlaceholderKey,
+  type TicketPlaceholder,
   type TicketPlaceholders,
   type TicketValues,
   useTicketCanvas,
@@ -35,6 +37,34 @@ const BADGE: Record<PlaceholderKey, string> = {
   number: 'var(--user-2)',
   name: 'var(--user-4)',
   phone: 'var(--user-3)',
+}
+
+/** Below this stage width only the selected field's handle is shown, so the picture stays readable. */
+const NARROW_STAGE = 460
+const DOT = 22
+const GAP = 14
+
+let measurer: CanvasRenderingContext2D | null | undefined
+
+function textWidth(p: TicketPlaceholder, text: string): number {
+  if (measurer === undefined) {
+    measurer = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d')
+  }
+  if (!measurer) return text.length * p.size * 0.6
+  measurer.font = fontSpec(p)
+  return measurer.measureText(text).width + p.stroke * 2
+}
+
+/**
+ * Where a handle sits, in stage pixels (its right-middle point). The handle goes to the left of the
+ * text so it never covers a glyph; when the text starts too close to the left edge it goes just
+ * above the first glyph instead.
+ */
+export function chipAnchor(p: TicketPlaceholder, text: string, scale: number): Point {
+  const left = (p.x - textWidth(p, text) / 2) * scale
+  if (left >= DOT + GAP) return { x: left - GAP, y: p.y * scale }
+  const above = p.y * scale - (p.size * scale) / 2 - DOT / 2 - 4
+  return { x: Math.max(left, 0) + DOT, y: Math.max(above, DOT / 2) }
 }
 
 interface Session {
@@ -78,6 +108,16 @@ export function PlaceholderPreview({
     const ro = new ResizeObserver(() => setShown(el.clientWidth))
     ro.observe(el)
     return () => ro.disconnect()
+  }, [])
+
+  // Handle positions depend on the measured text width, which changes once a web font has loaded.
+  const [, setFontTick] = useState(0)
+  useEffect(() => {
+    const fonts = typeof document === 'undefined' ? undefined : document.fonts
+    if (!fonts?.addEventListener) return
+    const bump = () => setFontTick((n) => n + 1)
+    fonts.addEventListener('loadingdone', bump)
+    return () => fonts.removeEventListener('loadingdone', bump)
   }, [])
 
   const scale = size.w > 0 ? shown / size.w : 0
@@ -152,6 +192,7 @@ export function PlaceholderPreview({
       className="ph-stage"
       style={{ aspectRatio: `${size.w} / ${size.h}` }}
       data-disabled={disabled || undefined}
+      data-narrow={shown > 0 && shown < NARROW_STAGE ? '' : undefined}
     >
       <canvas ref={canvas} className="ph-canvas" role="img" aria-label={t('settings.preview.label')} />
       {xGuides.map((x) => (
@@ -172,6 +213,7 @@ export function PlaceholderPreview({
       ))}
       {PLACEHOLDER_KEYS.map((key, i) => {
         const p = placeholders[key]
+        const at = chipAnchor(p, values[key] || labelOf(key), scale)
         return (
           <button
             key={key}
@@ -182,19 +224,19 @@ export function PlaceholderPreview({
             className="ph-chip"
             aria-pressed={active === key}
             aria-label={t('settings.drag', { label: labelOf(key) })}
-            style={{
-              transform: `translate(${p.x * scale}px, ${p.y * scale}px) translate(-50%, calc(-100% - ${(p.size * scale) / 2 + 6}px))`,
-            }}
+            style={{ transform: `translate(${at.x}px, ${at.y}px) translate(-100%, -50%)` }}
             onPointerDown={onDown(key)}
             onPointerMove={onPointerMove}
             onPointerUp={finish}
             onPointerCancel={finish}
             onKeyDown={onKey(key)}
           >
+            <span className="ph-chip-label" aria-hidden="true">
+              {labelOf(key)}
+            </span>
             <span className="ph-chip-badge" aria-hidden="true" style={{ background: BADGE[key] }}>
               {i + 1}
             </span>
-            {labelOf(key)}
           </button>
         )
       })}

@@ -31,6 +31,8 @@ type AuditEntry struct {
 type AuditFilter struct {
 	ProjectID string
 	ActorID   string
+	// Action restricts the listing to one dotted action name.
+	Action string
 	// Before restricts the result to entries with an id lower than this value.
 	Before int64
 	// Limit is the page size the repository must honour exactly.

@@ -377,7 +377,7 @@ type AuditEntry struct {
 	Id         int64               `json:"id"`
 	Ip         *string             `json:"ip"`
 
-	// Meta Ids and numbers only, never names or phones.
+	// Meta Ids and numbers only, plus the target `login` of account actions; never display names or phones.
 	Meta      map[string]interface{} `json:"meta"`
 	ProjectId *openapi_types.UUID    `json:"projectId"`
 }
@@ -1018,6 +1018,9 @@ type ListAuditParams struct {
 
 	// Actor Restrict to actions of one user (user id).
 	Actor *openapi_types.UUID `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// Action Restrict to one dotted action name, for example `user.create`.
+	Action *string `form:"action,omitempty" json:"action,omitempty"`
 }
 
 // ListProjectsParams defines parameters for ListProjects.
@@ -1755,6 +1758,19 @@ func (siw *ServerInterfaceWrapper) ListAudit(w http.ResponseWriter, r *http.Requ
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "actor"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "action" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "action", r.URL.Query(), &params.Action, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "action"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "action", Err: err})
 		}
 		return
 	}
