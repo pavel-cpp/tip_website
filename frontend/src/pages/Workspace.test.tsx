@@ -39,12 +39,12 @@ const ph = {
   x: 10,
   y: 10,
 }
-const project = (status: 'active' | 'finished' = 'active') => ({
+const project = (status: 'active' | 'finished' = 'active', withImage = false) => ({
   id: 'p1',
   title: 'Tashkent City',
   status,
   version: 1,
-  image: null,
+  image: withImage ? { url: '/api/v1/projects/p1/image', w: 700, h: 400 } : null,
   placeholders: { number: ph, name: ph, phone: ph },
   contributors: [{ id: 'u2', displayName: 'Azam Tursunov', color: '#ffb84d', avatarUrl: null }],
   participantCount: ROWS.length,
@@ -55,6 +55,7 @@ interface Server {
   rows: Participant[]
   status: 'active' | 'finished'
   perms: readonly string[]
+  withImage?: boolean
   patch?: (id: string, body: Record<string, unknown>) => Response
   etag: string
 }
@@ -70,7 +71,7 @@ function start(over: Partial<Server> = {}) {
     const { method, path, body } = req
     if (path === '/auth/refresh') return jsonRes(200, { accessToken: 't', expiresIn: 900 })
     if (path === '/me') return jsonRes(200, { user: makeUser({ permissions: [...server.perms] as never }) })
-    if (path === '/projects/p1') return jsonRes(200, { project: project(server.status) })
+    if (path === '/projects/p1') return jsonRes(200, { project: project(server.status, server.withImage) })
     if (path === '/projects/p1/participants' && method === 'GET') {
       const inm = req.headers.get('If-None-Match')
       listHeaders.push(inm)
@@ -203,7 +204,7 @@ describe('workspace table', () => {
     expect(callLog(mock).some((c) => c.startsWith('PATCH'))).toBe(false)
   })
 
-  it('navigates with arrows and Tab and starts typing-to-edit', async () => {
+  it('navigates with arrows and starts typing-to-edit', async () => {
     start()
     renderPage()
     await screen.findByText('Timur Rahimov')
@@ -211,7 +212,7 @@ describe('workspace table', () => {
     const grid = screen.getByRole('grid')
     await user.click(cell('Timur Rahimov'))
     expect(grid).toHaveAttribute('aria-activedescendant', 'cell-id1-1')
-    await user.keyboard('{ArrowDown}{Tab}')
+    await user.keyboard('{ArrowDown}{ArrowRight}')
     expect(grid).toHaveAttribute('aria-activedescendant', 'cell-id2-2')
     await user.keyboard('{ArrowLeft}x')
     expect(screen.getByRole('textbox', { name: 'Имя' })).toHaveValue('x')
@@ -479,6 +480,15 @@ describe('empty and error states', () => {
     start({ rows: [] })
     renderPage()
     expect(await screen.findByText('Участников пока нет')).toBeInTheDocument()
+    const empty = document.querySelector('.pt-empty') as HTMLElement
+    expect(within(empty).getByRole('button', { name: 'Добавить строки' })).toBeInTheDocument()
+  })
+
+  it('keeps printing unavailable until the project has a picture', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    expect(screen.getByRole('button', { name: 'Печать (1)' })).toHaveAttribute('aria-disabled', 'true')
   })
 })
 
@@ -519,7 +529,7 @@ describe('U1 workspace fixes', () => {
   })
 
   it('highlights a suspicious phone and warns before printing', async () => {
-    start({ rows: [...ROWS, person(4, 'Bad Phone', 'abc')] })
+    start({ rows: [...ROWS, person(4, 'Bad Phone', 'abc')], withImage: true })
     renderPage()
     await screen.findByText('Bad Phone')
     expect(within(cell('abc')).getByTitle(/Похоже на неверный номер/)).toBeInTheDocument()

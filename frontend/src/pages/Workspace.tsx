@@ -686,6 +686,7 @@ function WorkspaceView({ project }: { project: Project }) {
           <BulkBar
             count={selectedRows.length}
             canPrint={canPrint}
+            printBlocked={project.image ? undefined : t('workspace.noImageReason')}
             canDelete={canDelete}
             copyReady={!!source && selectedRows.length === 1}
             saveReady={!!source}
@@ -719,7 +720,7 @@ function WorkspaceView({ project }: { project: Project }) {
                 variant="primary"
                 label={printLabel}
                 text={printLabel}
-                disabled={!current}
+                disabled={!current || !project.image}
                 disabledReason={noPrintReason}
                 onClick={onPrint}
               />

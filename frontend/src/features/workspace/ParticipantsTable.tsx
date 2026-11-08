@@ -619,14 +619,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       goTo({ row: Math.min(visible.length - 1, Math.max(0, cell.row + delta)), col: cell.col })
       return
     }
-    if (e.key === 'Tab') {
-      const target = moveCell(cell, e.shiftKey ? 'prev' : 'next', visible.length)
-      // At the first/last cell Tab leaves the grid as usual.
-      if (target.row === cell.row && target.col === cell.col) return
-      e.preventDefault()
-      goTo(target)
-      return
-    }
+    // Tab is deliberately not handled here: outside edit mode it leaves the grid (WCAG 2.1.2, ARIA grid
+    // pattern), so a keyboard user is never stuck tabbing through thousands of cells. Arrows move between
+    // cells; while editing, Tab commits and moves on (see above).
     if (e.key === 'Enter' || e.key === 'F2') {
       e.preventDefault()
       startEdit(cell)
@@ -729,6 +724,14 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       <div className="pt-empty" role="status">
         <p>{rows.length === 0 ? t('workspace.empty.title') : t('workspace.search.none')}</p>
         {rows.length === 0 && canEdit && <p className="muted">{t('workspace.empty.hint')}</p>}
+        {rows.length === 0 && canEdit && !error && (
+          <div className="pt-empty-action">
+            <Button variant="primary" onClick={onAddRows}>
+              <Icon name="plus" size={16} />
+              {t('workspace.addRows')}
+            </Button>
+          </div>
+        )}
       </div>
     ) : null
 
@@ -926,7 +929,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           <div
             ref={scroller}
             className="pt-scroll"
-            tabIndex={0}
+            tabIndex={-1}
             role={emptyOrLoading ? undefined : 'rowgroup'}
           >
             {emptyOrLoading ?? (

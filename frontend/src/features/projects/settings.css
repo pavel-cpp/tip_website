@@ -241,6 +241,17 @@
   background: none;
   cursor: pointer;
 }
+@media (pointer: coarse) {
+  /* Bigger swatch inside the 44 px field on touch screens. */
+  .input .color-swatch {
+    width: 36px;
+    height: 36px;
+  }
+  /* The handle's hit area grows to a finger-sized target around the visible 22 px dot. */
+  .ph-chip::after {
+    inset: -11px;
+  }
+}
 .style-toggles {
   display: inline-flex;
   border: 1px solid var(--border-strong);
@@ -300,6 +311,13 @@
   gap: var(--space-2);
   min-width: 0;
   justify-items: start;
+}
+/* A long translated label wraps instead of pushing the page wider than a 320 px screen. */
+.image-info .btn {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  text-align: center;
 }
 .image-meta {
   font-size: var(--fs-sm);

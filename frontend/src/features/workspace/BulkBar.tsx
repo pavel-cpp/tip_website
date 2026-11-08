@@ -10,6 +10,8 @@ export interface BulkBarProps {
   canDelete: boolean
   /** Print/copy/save are offered only when the user may print. */
   canPrint: boolean
+  /** Why printing is unavailable regardless of the selection (for example, no picture yet). */
+  printBlocked?: string
   /** Exactly one row is selected and the ticket image is ready, so copying makes sense. */
   copyReady: boolean
   /** The ticket image is ready, so tickets can be saved (several rows are saved as one ZIP). */
@@ -61,7 +63,13 @@ export function BulkBar(p: BulkBarProps) {
         <span className="sr-only">{t('workspace.selectedCount', { count: p.count })}</span>
       </span>
       {p.canPrint && (
-        <Button variant="primary" className="ws-main" disabled={none} onClick={p.onPrint}>
+        <Button
+          variant="primary"
+          className="ws-main"
+          disabled={none || !!p.printBlocked}
+          disabledReason={p.printBlocked}
+          onClick={p.onPrint}
+        >
           <WsIcon name="print" />
           <span className="ws-main-text">
             {none ? t('workspace.print') : t('workspace.print.withCount', { count: p.count })}

@@ -221,6 +221,31 @@ describe('Toast', () => {
     await waitFor(() => expect(screen.queryByText('Deleted 3')).not.toBeInTheDocument())
   })
 
+  it('marks only error toasts as alerts', async () => {
+    function Both() {
+      const toast = useToast()
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            toast.show({ message: 'Saved' })
+            toast.show({ message: 'Failed', tone: 'error' })
+          }}
+        >
+          show
+        </button>
+      )
+    }
+    render(
+      <ToastProvider>
+        <Both />
+      </ToastProvider>,
+    )
+    await userEvent.click(screen.getByText('show'))
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed')
+    expect(screen.getByText('Saved').closest('.toast')).not.toHaveAttribute('role')
+  })
+
   it('auto-dismisses after its duration and pauses while hovered', () => {
     vi.useFakeTimers()
     render(

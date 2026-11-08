@@ -366,6 +366,11 @@
   padding: var(--space-8) var(--space-4);
   text-align: center;
 }
+.pt-empty-action {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-2);
+}
 .pt-skeleton {
   display: grid;
   gap: 18px;
@@ -836,9 +841,9 @@
 .tk-viewport {
   flex-direction: column;
 }
+/* The next step of the first run, so it looks like a button, not like body text. */
 .tk-empty-link {
-  color: var(--accent-text);
-  text-decoration: underline;
+  margin-top: var(--space-3);
 }
 
 /* Toasts from earlier actions stay out of the way of the import dialog. */

@@ -118,7 +118,7 @@ export function TicketPanel({
           {settingsTo ? t('workspace.ticket.noImageAdmin') : t('workspace.ticket.noImageHint')}
         </p>
         {settingsTo && (
-          <AppLink to={settingsTo} className="tk-empty-link">
+          <AppLink to={settingsTo} className="btn btn-primary tk-empty-link">
             {t('workspace.ticket.openSettings')}
           </AppLink>
         )}
