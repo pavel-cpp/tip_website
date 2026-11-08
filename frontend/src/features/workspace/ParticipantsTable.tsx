@@ -18,7 +18,6 @@ import { Icon } from '../../components/Icon'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
 import type { Participant, ParticipantInput } from './api'
-import { BulkBar } from './BulkBar'
 import { WsIcon } from './icons'
 import { CARD_ESTIMATE, type CardHandlers, ParticipantCard } from './ParticipantCards'
 import {
@@ -93,13 +92,12 @@ export interface ParticipantsTableProps {
   cards?: boolean
   /** Short messages (e.g. "row is being edited by X") shown as a toast by the page. */
   onNotify?: (message: string) => void
-  /** Bulk ticket actions of the card layout's selection bar; hidden when `canPrint` is false. */
-  canPrint?: boolean
-  /** The ticket image is ready and exactly one row is selected, so copying makes sense. */
-  copyReady?: boolean
-  onBulkPrint?: () => void
-  onBulkCopy?: () => void
-  onBulkSave?: () => void
+  /**
+   * Card layout: selection mode (taps select instead of open). The page owns it because its bulk bar
+   * replaces the bottom toolbar; without these props the table keeps the mode itself.
+   */
+  selectMode?: boolean
+  onSelectModeChange?: (on: boolean) => void
   /** Ticket preview for the sheet; receives the draft values of the row being edited. */
   sheetPreview?: (row: Participant) => ReactNode
 }
@@ -135,11 +133,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     onQueryChange,
     cards = false,
     onNotify,
-    canPrint = false,
-    copyReady = false,
-    onBulkPrint,
-    onBulkCopy,
-    onBulkSave,
+    selectMode: selectModeProp,
+    onSelectModeChange,
     sheetPreview,
   } = props
   const { t } = useI18n()
@@ -160,7 +155,15 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const [tipId, setTipId] = useState<string | null>(null)
   // Card layout: the row open in the bottom sheet and whether taps select instead of open.
   const [sheetId, setSheetId] = useState<string | null>(null)
-  const [selectMode, setSelectMode] = useState(false)
+  const [ownSelectMode, setOwnSelectMode] = useState(false)
+  const selectMode = selectModeProp ?? ownSelectMode
+  const setSelectMode = useCallback(
+    (on: boolean) => {
+      setOwnSelectMode(on)
+      onSelectModeChange?.(on)
+    },
+    [onSelectModeChange],
+  )
   const lastPointer = useRef<string>('mouse')
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
 
@@ -205,7 +208,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       setSelectMode(false)
       setSheetId(null)
     }
-  }, [cards, rowVirtualizer])
+  }, [cards, rowVirtualizer, setSelectMode])
 
   useEffect(() => {
     if (!revealId) return
@@ -490,13 +493,13 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       onSelectedChange(new Set([...selected, id]))
       navigator.vibrate?.(10)
     },
-    [pickCard, selected, onSelectedChange],
+    [pickCard, selected, onSelectedChange, setSelectMode],
   )
 
   const exitSelectMode = useCallback(() => {
     setSelectMode(false)
     onSelectedChange(new Set())
-  }, [onSelectedChange])
+  }, [onSelectedChange, setSelectMode])
 
   const cardHandlers: CardHandlers = useMemo(
     () => ({
@@ -670,6 +673,11 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   const activeRow = active ? visible[active.row] : undefined
   const everySelected = allVisibleSelected(ids, selected)
+  const allBox = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    // A mixed selection shows the dash state of the "select all" box.
+    if (allBox.current) allBox.current.indeterminate = selectedVisible.length > 0 && !everySelected
+  }, [selectedVisible.length, everySelected, selectMode])
   const items = rowVirtualizer.getVirtualItems()
   const activeDescendant = activeRow && active ? cellId(activeRow.id, active.col) : undefined
 
@@ -770,25 +778,55 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           </Button>
         )}
         {addButton}
-        {/* Kept in the layout (but hidden) while nothing is selected so selecting never moves the table. */}
-        {!cards && canDelete && (
+        {/* Out of the layout while nothing is selected so it never squeezes the search field. */}
+        {!cards && canDelete && selectedVisible.length > 0 && (
           <Button
             size="sm"
             variant="danger"
             className="pt-delete"
-            data-idle={selectedVisible.length === 0 || undefined}
-            aria-hidden={selectedVisible.length === 0 || undefined}
-            inert={selectedVisible.length === 0}
+            aria-label={t('workspace.deleteSelected', { count: selectedVisible.length })}
             onClick={() => onDelete(selectedVisible)}
           >
             <Icon name="trash" size={16} />
-            {t('workspace.deleteSelected', { count: selectedVisible.length })}
+            <span className="pt-btn-text">
+              {t('workspace.deleteSelected', { count: selectedVisible.length })}
+            </span>
           </Button>
         )}
       </div>
 
       {cards ? (
         <div className="pc">
+          <div className="pc-head" data-select={selectMode || undefined}>
+            {selectMode ? (
+              <>
+                <label className="pc-all">
+                  <input
+                    ref={allBox}
+                    type="checkbox"
+                    checked={everySelected}
+                    disabled={visible.length === 0}
+                    onChange={() => {
+                      if (everySelected) onSelectedChange(new Set())
+                      else {
+                        const all = selectAllVisible(ids)
+                        onSelectedChange(all.selected)
+                        setAnchor(all.anchor)
+                      }
+                    }}
+                  />
+                  {t('workspace.select.all')}
+                </label>
+                <span className="pc-head-count" aria-live="polite">
+                  {t('workspace.bulk.selectedOf', { count: selectedVisible.length, total: visible.length })}
+                </span>
+              </>
+            ) : (
+              <span className="pc-head-count" aria-live="polite">
+                {t('workspace.rowCount', { count: visible.length, total: rows.length })}
+              </span>
+            )}
+          </div>
           {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
           <div ref={scroller} className="pt-scroll pc-scroll" tabIndex={0}>
             {emptyOrLoading ?? (
@@ -829,28 +867,6 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
               </div>
             )}
           </div>
-          {selectMode && (
-            <BulkBar
-              count={selectedVisible.length}
-              allSelected={everySelected}
-              canDelete={canDelete}
-              canPrint={canPrint}
-              copyReady={copyReady}
-              onPrint={() => onBulkPrint?.()}
-              onCopy={() => onBulkCopy?.()}
-              onSave={() => onBulkSave?.()}
-              onDelete={() => {
-                onDelete(selectedVisible)
-                setSelectMode(false)
-              }}
-              onSelectAll={() => {
-                const all = selectAllVisible(ids)
-                onSelectedChange(all.selected)
-                setAnchor(all.anchor)
-              }}
-              onDone={exitSelectMode}
-            />
-          )}
         </div>
       ) : (
         /* The grid is the single tab stop; cells are addressed through aria-activedescendant. */
@@ -944,11 +960,13 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         </div>
       )}
 
-      <div className="pt-foot" aria-live="polite">
-        {t('workspace.rowCount', { count: visible.length, total: rows.length })}
-        {selectedVisible.length > 0 &&
-          ` · ${t('workspace.selectedCount', { count: selectedVisible.length })}`}
-      </div>
+      {!cards && (
+        <div className="pt-foot" aria-live="polite">
+          {t('workspace.rowCount', { count: visible.length, total: rows.length })}
+          {selectedVisible.length > 0 &&
+            ` · ${t('workspace.selectedCount', { count: selectedVisible.length })}`}
+        </div>
+      )}
 
       {cards && (
         <RowSheet

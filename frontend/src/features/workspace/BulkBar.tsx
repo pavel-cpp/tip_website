@@ -1,69 +1,97 @@
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
+import { Menu, type MenuItem } from '../../components/Menu'
 import { useI18n } from '../../i18n'
 import { WsIcon } from './icons'
 
 export interface BulkBarProps {
   /** Rows currently selected (and visible). */
   count: number
-  allSelected: boolean
   canDelete: boolean
   /** Print/copy/save are offered only when the user may print. */
   canPrint: boolean
+  /** Exactly one row is selected and the ticket image is ready, so copying makes sense. */
   copyReady: boolean
+  /** The ticket image is ready, so tickets can be saved (several rows are saved as one ZIP). */
+  saveReady: boolean
   onPrint: () => void
   onCopy: () => void
   onSave: () => void
   onDelete: () => void
-  onSelectAll: () => void
   onDone: () => void
 }
 
 /**
- * Bulk actions for selection mode on touch screens. It is positioned over the bottom of the list
- * (the list keeps a fixed bottom padding), so showing it never moves the rows the user is tapping.
+ * Bulk actions of selection mode on touch screens. It takes the place of the bottom toolbar (same slot,
+ * same height), so it never covers the list: close and count, the primary "Print (N)", delete and a menu.
  */
 export function BulkBar(p: BulkBarProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const none = p.count === 0
+  const items: MenuItem[] = []
+  if (p.canPrint) {
+    items.push(
+      {
+        id: 'copy',
+        label: p.copyReady || p.count <= 1 ? t('workspace.copy') : t('workspace.bulk.copyOne'),
+        disabled: !p.copyReady,
+        disabledReason: none ? t('workspace.noRowsReason') : t('workspace.bulk.copyOneReason'),
+        onSelect: p.onCopy,
+      },
+      {
+        id: 'save',
+        label: p.count > 1 ? t('workspace.bulk.saveMany', { count: p.count }) : t('workspace.save'),
+        disabled: none || !p.saveReady,
+        disabledReason: none ? t('workspace.noRowsReason') : t('workspace.toast.notReady'),
+        onSelect: p.onSave,
+      },
+    )
+  }
   return (
     <div className="pc-bar" role="toolbar" aria-label={t('workspace.bulk.label')}>
-      <div className="pc-bar-head">
-        <Button variant="ghost" size="sm" onClick={p.onDone} data-testid="select-done">
-          <Icon name="x" size={16} />
-          {t('workspace.select.exit')}
+      <Button
+        variant="ghost"
+        iconOnly
+        aria-label={t('workspace.select.exit')}
+        onClick={p.onDone}
+        data-testid="select-done"
+      >
+        <Icon name="x" />
+      </Button>
+      <span className="pc-bar-count" role="status">
+        <span aria-hidden="true">{formatNumber(p.count)}</span>
+        <span className="sr-only">{t('workspace.selectedCount', { count: p.count })}</span>
+      </span>
+      {p.canPrint && (
+        <Button variant="primary" className="ws-main" disabled={none} onClick={p.onPrint}>
+          <WsIcon name="print" />
+          <span className="ws-main-text">
+            {none ? t('workspace.print') : t('workspace.print.withCount', { count: p.count })}
+          </span>
         </Button>
-        <span className="pc-bar-count" role="status">
-          {t('workspace.selectedCount', { count: p.count })}
-        </span>
-        <Button variant="ghost" size="sm" disabled={p.allSelected} onClick={p.onSelectAll}>
-          {t('workspace.select.all')}
+      )}
+      {p.canDelete && (
+        <Button
+          variant="danger"
+          iconOnly
+          disabled={none}
+          aria-label={t('workspace.bulk.delete', { count: p.count })}
+          onClick={p.onDelete}
+        >
+          <Icon name="trash" />
         </Button>
-      </div>
-      <div className="pc-bar-actions">
-        {p.canPrint && (
-          <>
-            <Button className="pc-bar-btn" disabled={none} onClick={p.onPrint}>
-              <WsIcon name="print" size={20} />
-              <span>{t('workspace.bulk.print')}</span>
+      )}
+      {items.length > 0 && (
+        <Menu
+          label={t('workspace.more.label')}
+          items={items}
+          trigger={(props) => (
+            <Button {...props} iconOnly aria-label={t('workspace.more')}>
+              <WsIcon name="more" />
             </Button>
-            <Button className="pc-bar-btn" disabled={none || !p.copyReady} onClick={p.onCopy}>
-              <WsIcon name="copy" size={20} />
-              <span>{t('workspace.bulk.copy')}</span>
-            </Button>
-            <Button className="pc-bar-btn" disabled={none || !p.copyReady} onClick={p.onSave}>
-              <WsIcon name="save" size={20} />
-              <span>{t('workspace.bulk.save')}</span>
-            </Button>
-          </>
-        )}
-        {p.canDelete && (
-          <Button className="pc-bar-btn" variant="danger" disabled={none} onClick={p.onDelete}>
-            <Icon name="trash" size={20} />
-            <span>{t('workspace.bulk.delete', { count: p.count })}</span>
-          </Button>
-        )}
-      </div>
+          )}
+        />
+      )}
     </div>
   )
 }

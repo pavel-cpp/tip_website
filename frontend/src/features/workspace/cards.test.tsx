@@ -88,6 +88,7 @@ describe('phone cards', () => {
     await user.click(within(card('Timur')).getByRole('button'))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Строка № 1')).toBeInTheDocument()
+    expect(within(dialog).getByText('В списке: 1 из 3')).toBeInTheDocument()
     const name = within(dialog).getByLabelText('Имя')
     expect(name).toHaveFocus()
     await user.clear(name)
@@ -144,11 +145,12 @@ describe('phone cards', () => {
     expect(onCommit).toHaveBeenLastCalledWith(expect.anything(), { name: 'Timur K' })
   })
 
-  it('enters selection mode on long press with a bar of bulk actions', async () => {
+  it('enters selection mode on long press: the checkbox replaces the number and the header selects all', async () => {
     vi.useFakeTimers()
-    const onDelete = vi.fn()
-    render(<Harness onDelete={onDelete} canPrint copyReady />)
+    const onMode = vi.fn()
+    render(<Harness onSelectModeChange={onMode} />)
     const main = within(card('Timur')).getByRole('button')
+    expect(within(card('Timur')).getByText('1')).toBeInTheDocument()
     fireEvent.pointerDown(main)
     act(() => {
       vi.advanceTimersByTime(600)
@@ -156,15 +158,33 @@ describe('phone cards', () => {
     // The click that follows the long press must not open the sheet.
     fireEvent.click(main)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    const bar = screen.getByRole('toolbar', { name: 'Действия с выбранными строками' })
-    expect(within(bar).getByRole('status')).toHaveTextContent('выбрана 1')
-    expect(within(bar).getByRole('button', { name: 'Печать' })).toBeEnabled()
+    expect(onMode).toHaveBeenCalledWith(true)
+    expect(card('Timur')).toHaveAttribute('data-selected', 'true')
+    // The number is gone from the card (the box stands in its place) but stays in the accessible name.
+    expect(card('Timur').querySelector('.pc-num')).toBeNull()
+    expect(main).toHaveAccessibleName(/^№ 1, Timur/)
+    expect(screen.getByText('Выбрано: 1 из 3')).toBeInTheDocument()
 
     fireEvent.click(within(card('Nadezhda')).getByRole('button'))
-    expect(within(bar).getByRole('status')).toHaveTextContent('выбрано 2')
-    fireEvent.click(within(bar).getByRole('button', { name: 'Удалить (2)' }))
-    expect(onDelete).toHaveBeenCalledWith(['id1', 'id2'])
-    expect(screen.queryByRole('toolbar', { name: 'Действия с выбранными строками' })).not.toBeInTheDocument()
+    expect(screen.getByText('Выбрано: 2 из 3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }))
+    expect(screen.getByText('Выбрано: 3 из 3')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Выбрать все' }))
+    expect(screen.getByText('Выбрано: 0 из 3')).toBeInTheDocument()
+  })
+
+  it('gives every card one readable accessible name with its state', () => {
+    render(<Harness unsentIds={new Set(['id1'])} />)
+    expect(within(card('Timur')).getByRole('button')).toHaveAccessibleName(
+      '№ 1, Timur, +998901234567, не отправлено',
+    )
+    expect(within(card(LONG)).getByRole('button')).toHaveAccessibleName(`№ 3, ${LONG}, +998 90 108 33 44`)
+  })
+
+  it('shows the row count in the list header, not in a footer', () => {
+    render(<Harness />)
+    expect(screen.getByText('Строк: 3 из 3')).toBeInTheDocument()
+    expect(document.querySelector('.pt-foot')).toBeNull()
   })
 
   it('a press that moves is a scroll and does not select', () => {

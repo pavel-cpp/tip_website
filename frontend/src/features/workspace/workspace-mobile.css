@@ -55,17 +55,29 @@
     height: 22px;
   }
 }
-/* Kept in the layout while nothing is selected so selecting a row never moves the table. */
-.pt-delete[data-idle] {
-  visibility: hidden;
-}
-/* One row: the (hidden) delete button must not wrap onto a row of its own and leave a gap. */
+/* One row: the search field takes what the buttons leave; in a narrow panel the buttons turn into icons. */
 .pt-tools {
   flex-wrap: nowrap;
+  container: pt-tools / inline-size;
 }
 .pt-search {
   flex: 1 1 200px;
-  min-width: 120px;
+  min-width: 160px;
+}
+@container pt-tools (max-width: 620px) {
+  .pt-tools .pt-btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .pt-tools .btn {
+    padding: 0;
+    width: var(--control-h-sm);
+  }
 }
 
 /* Project title: at most two lines, the full text is in the title attribute. */
@@ -92,16 +104,11 @@
     display: none;
   }
   .pt-tools {
-    flex-wrap: nowrap;
     padding: var(--space-3);
   }
   .pt-search {
     flex: 1 1 0;
     min-width: 0;
-  }
-  .pt-tools .btn {
-    padding: 0;
-    width: var(--touch-target);
   }
   .pt-btn-text {
     position: absolute;
@@ -112,26 +119,109 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .ws-toolbar .btn {
-    min-width: var(--touch-target);
+  .pt-tools .btn {
+    padding: 0;
+    width: var(--touch-target);
   }
-  /* One row of icon buttons: the print label would push the toolbar onto a second row and eat list space. */
-  .ws-toolbar {
-    flex-wrap: nowrap;
-    gap: var(--space-1);
+
+  /* Bottom bar: the toolbar and the selection bar share this slot, so one replaces the other in place. */
+  .ws-toolbar-phone,
+  .pc-bar {
+    order: 99;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    box-sizing: border-box;
+    height: calc(56px + var(--safe-bottom));
+    padding: 6px 0 var(--safe-bottom);
+    border-top: 1px solid var(--border);
+    background: var(--bg);
   }
-  .ws-toolbar .ws-sep {
-    display: none;
+  .pc-bar {
+    animation: pc-bar-in var(--dur-fast) var(--ease-standard) both;
   }
-  .ws-toolbar .btn-primary .ws-tool-text {
-    display: none;
-  }
-  .ws-toolbar .btn-primary {
-    min-width: var(--touch-target);
-    padding: 0 var(--space-3);
-  }
-  .pc-bar-btn {
+  .ws-main {
+    flex: 1 1 0;
+    min-width: 0;
     min-height: 48px;
+  }
+  .ws-main .btn-content {
+    min-width: 0;
+  }
+  .ws-main-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--fw-semibold);
+  }
+  .pc-bar-count {
+    min-width: 28px;
+    text-align: center;
+    font-size: var(--fs-md);
+    font-weight: var(--fw-semibold);
+    font-variant-numeric: tabular-nums;
+  }
+}
+@keyframes pc-bar-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Landscape phone: tabs share the header row and the bar becomes a rail on the right, so the list keeps the height. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .ws {
+    --ws-pad: var(--space-2);
+    padding-right: 72px;
+    gap: var(--space-2);
+  }
+  .ws-head {
+    min-height: var(--touch-target);
+    padding-right: 220px;
+  }
+  .ws-people {
+    display: none;
+  }
+  .ws > .tabs {
+    position: absolute;
+    top: 0;
+    right: 72px;
+    border-bottom: 0;
+  }
+  .ws-toolbar-phone,
+  .pc-bar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 64px;
+    height: auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--space-1);
+    padding: 0 0 0 var(--space-2);
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+  .ws-main {
+    flex: none;
+    width: 56px;
+    min-height: 56px;
+    padding: 0 2px;
+  }
+  .ws-main .btn-content {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .ws-main-text {
+    font-size: var(--fs-xs);
+    white-space: normal;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .pc-head {
+    display: none;
   }
 }
 
@@ -144,9 +234,42 @@
   flex-direction: column;
   border-top: 1px solid var(--border);
 }
-/* Constant bottom space: the selection bar overlays it, so showing the bar never moves the cards. */
+.pc-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.pc-head-count {
+  font-variant-numeric: tabular-nums;
+}
+.pc-head[data-select] .pc-head-count {
+  color: var(--text);
+}
+/* "Select all": the whole row is the target, the box itself stays a readable 24 px. */
+.pc-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  margin-left: -10px;
+  padding-left: 10px;
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+}
+.pc-all input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--accent);
+}
 .pc-scroll {
-  padding: var(--space-2) 0 168px;
+  padding: 0 0 var(--space-2);
 }
 .pc-item {
   position: absolute;
@@ -231,13 +354,17 @@
   display: grid;
   place-items: center;
   width: 52px;
-  min-height: var(--touch-target);
+  min-height: 64px;
   cursor: pointer;
 }
 .pc-check input {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   accent-color: var(--accent);
+}
+/* The checkbox stands where the number was, so the name keeps its width. */
+.pc-check + .pc-main {
+  padding-left: 0;
 }
 .pc-item[data-selected] .pc-card {
   border-color: var(--accent);
@@ -322,57 +449,6 @@
   margin: 0;
 }
 
-/* Selection bar: overlays the bottom of the list, it never takes part in the layout. */
-.pc-bar {
-  position: absolute;
-  left: var(--space-3);
-  right: var(--space-3);
-  bottom: var(--space-3);
-  z-index: 5;
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elev);
-  box-shadow: var(--shadow-pop);
-  animation: pc-bar-in var(--dur-base) var(--ease-standard) both;
-}
-@keyframes pc-bar-in {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-}
-.pc-bar-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.pc-bar-count {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  text-align: center;
-}
-.pc-bar-actions {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  gap: var(--space-2);
-}
-.pc-bar-btn {
-  min-height: 56px;
-  padding: 0 4px;
-  white-space: normal;
-  text-align: center;
-}
-.pc-bar-btn .btn-content {
-  flex-direction: column;
-  gap: 2px;
-  font-size: var(--fs-xs);
-}
-
 /* ---------- bottom sheet (phone row editor) ---------- */
 .sheet-overlay {
   position: fixed;
@@ -435,15 +511,19 @@
   gap: var(--space-1);
   padding: 2px var(--space-2) 2px var(--space-4);
 }
-.sheet-title {
+.sheet-heading {
   flex: 1;
   min-width: 0;
+  display: grid;
+  padding: 4px 0;
+}
+.sheet-title {
   font-size: var(--fs-lg);
+  line-height: 1.2;
 }
 .sheet-pos {
-  font-size: var(--fs-sm);
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 .sheet-body {
   flex: 1;
@@ -481,6 +561,15 @@
 }
 .sheet-phone {
   font-family: var(--font-mono);
+}
+/* The name grows with its text (height is set from script), so a long name is never cut. */
+.sheet-name {
+  display: block;
+  padding-block: 12px;
+  line-height: 1.35;
+  resize: none;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .sheet-warn {
   display: flex;

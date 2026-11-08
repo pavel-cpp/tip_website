@@ -82,6 +82,20 @@ function ParticipantCardImpl({
   if (lockedBy) lastOwner.current = lockedBy
   const { name, phone } = shownValues(row, failed)
   const suspicious = !failed && isSuspiciousPhone(row.phone)
+  // One readable sentence for screen readers instead of the glued "5Name+998..." of the child spans.
+  const label = [
+    t('workspace.card.label', {
+      number: row.number,
+      name: name || t('workspace.card.noName'),
+      phone: phone || t('workspace.card.noPhone'),
+    }),
+    suspicious && t('workspace.card.state.suspicious'),
+    failed && t('workspace.card.state.failed'),
+    unsent && !failed && t('workspace.card.state.unsent'),
+    lockedBy && t('workspace.card.state.locked', { name: lockedBy.displayName }),
+  ]
+    .filter(Boolean)
+    .join(', ')
 
   // Long press enters selection mode; a press that moves is a scroll and never fires.
   const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null)
@@ -139,6 +153,7 @@ function ParticipantCardImpl({
         <button
           type="button"
           className="pc-main"
+          aria-label={label}
           aria-haspopup={selectMode ? undefined : 'dialog'}
           aria-pressed={selectMode ? selected : undefined}
           onPointerDown={(e) => {
@@ -171,7 +186,8 @@ function ParticipantCardImpl({
             else handlers.onOpen(row.id)
           }}
         >
-          <span className="pc-num">{row.number}</span>
+          {/* In selection mode the checkbox takes the number's place, so names keep their width. */}
+          {!selectMode && <span className="pc-num">{row.number}</span>}
           <span className="pc-body">
             <span className="pc-name" data-empty={name === '' || undefined}>
               {name || t('workspace.conflict.empty')}
