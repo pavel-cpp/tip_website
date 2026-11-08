@@ -116,7 +116,9 @@ test('skip link is the first tab stop and moves focus to the main content', asyn
 
 test('the document title follows the page and the language', async ({ admin, signedIn }) => {
   const project = await seeded(admin)
-  const page = await signedIn(adminCreds())
+  // Switching the language is saved on the account, so use a private user, never the shared admin.
+  const user = await admin.createReadyUser({ roleIds: [await admin.roleId('admin')], locale: 'ru' })
+  const page = await signedIn(user)
   await page.goto('/profile')
   await expect(page).toHaveTitle(`${tr('ru')('profile.title')} · TIP`)
   await page.goto(`/projects/${project.id}`)
