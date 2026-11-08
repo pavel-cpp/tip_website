@@ -50,6 +50,15 @@ const paths = {
       <path d="M3 10h18M9 10v10" />
     </>
   ),
+  chevronUp: <path d="M6 15l6-6 6 6" />,
+  chevronDown: <path d="M6 9l6 6 6-6" />,
+  // Selection mode: a checked box next to list lines.
+  selectMode: (
+    <>
+      <rect x="3" y="4" width="6" height="6" rx="1.500" />
+      <path d="M4.500 7l1.200 1.200L8 5.800M13 7h8M3 15h6v5H3zM13 17.500h8" />
+    </>
+  ),
   maximize: <path d="M5 9V5h4M19 9V5h-4M5 15v4h4M19 15v4h-4" />,
   restore: <path d="M9 5v4H5M15 5v4h4M9 19v-4H5M15 19v-4h4" />,
   zoomIn: (

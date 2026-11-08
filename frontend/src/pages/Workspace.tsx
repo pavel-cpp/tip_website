@@ -1,14 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { isApiError } from '../api/errors'
 import { useAuth } from '../auth/AuthProvider'
@@ -49,6 +40,7 @@ import { useRowPresence } from '../features/workspace/presence'
 import { TicketPanel } from '../features/workspace/TicketPanel'
 import { countSuspiciousPhones, filterRows, planPaste, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
+import { useNarrow } from '../features/workspace/useNarrow'
 import { useTicketActions } from '../features/workspace/useTicketActions'
 import { useUndoableDelete } from '../features/workspace/useUndoableDelete'
 import { useI18n } from '../i18n'
@@ -56,6 +48,7 @@ import { errorText } from '../i18n/apiError'
 import { readStorage, writeStorage } from '../lib/storage'
 import { imageSize, TICKET_ASPECT, type TicketPlaceholders, useImageElement } from '../lib/ticket'
 import '../features/workspace/workspace.css'
+import '../features/workspace/workspace-mobile.css'
 
 type PanelId = 'picture' | 'db'
 interface Layout {
@@ -66,19 +59,6 @@ const LAYOUT_KEY = 'tip.workspace.layout'
 const DEFAULT_LAYOUT: Layout = { max: null, closed: { picture: false, db: false } }
 const FRESH_MS = 1400
 const NO_IDS: ReadonlySet<string> = new Set()
-
-const NARROW = '(max-width: 699px)'
-function useNarrow(): boolean {
-  return useSyncExternalStore(
-    (cb) => {
-      const mq = window.matchMedia(NARROW)
-      mq.addEventListener('change', cb)
-      return () => mq.removeEventListener('change', cb)
-    },
-    () => window.matchMedia(NARROW).matches,
-    () => false,
-  )
-}
 
 function loadLayout(): Layout {
   try {
@@ -487,6 +467,23 @@ function WorkspaceView({ project }: { project: Project }) {
           unsentIds={down ? pending : NO_IDS}
           query={query}
           onQueryChange={setQuery}
+          cards={narrow}
+          onNotify={(message) => toast.show({ message })}
+          canPrint={canPrint}
+          copyReady={!!source && selectedRows.length === 1}
+          onBulkPrint={onPrint}
+          onBulkCopy={actions.copy}
+          onBulkSave={() => void actions.save()}
+          sheetPreview={(row) => (
+            <TicketPanel
+              compact
+              image={imageEl}
+              imageLoading={!!project.image && !imageEl}
+              hasProjectImage={!!project.image}
+              placeholders={project.image ? (project.placeholders as TicketPlaceholders) : null}
+              participant={row}
+            />
+          )}
         />
       ) : (
         <p className="muted pt-state">{t('errors.FORBIDDEN')}</p>
@@ -535,7 +532,9 @@ function WorkspaceView({ project }: { project: Project }) {
           <span className="muted" aria-hidden="true">
             /
           </span>
-          <h1 className="breadcrumb-current">{project.title}</h1>
+          <h1 className="breadcrumb-current ws-title" title={project.title}>
+            {project.title}
+          </h1>
         </nav>
         <div className="ws-people">
           {hasOnline && (

@@ -18,6 +18,9 @@ import { Icon } from '../../components/Icon'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
 import type { Participant, ParticipantInput } from './api'
+import { BulkBar } from './BulkBar'
+import { WsIcon } from './icons'
+import { CARD_ESTIMATE, type CardHandlers, ParticipantCard } from './ParticipantCards'
 import {
   type ConflictState,
   cellId,
@@ -26,9 +29,11 @@ import {
   ParticipantRow,
   ROW_HEIGHT,
   type RowHandlers,
+  type RowPatch,
 } from './ParticipantRow'
 import { hasCommandKey } from './platform'
 import { type RowLockOwner, type RowPresence, useRowCollab } from './presence'
+import { RowSheet, type SheetSaveResult } from './RowSheet'
 import {
   allVisibleSelected,
   applyClick,
@@ -84,6 +89,19 @@ export interface ParticipantsTableProps {
   unsentIds?: ReadonlySet<string>
   query: string
   onQueryChange: (q: string) => void
+  /** Phone layout: cards plus a bottom-sheet editor instead of the spreadsheet grid. */
+  cards?: boolean
+  /** Short messages (e.g. "row is being edited by X") shown as a toast by the page. */
+  onNotify?: (message: string) => void
+  /** Bulk ticket actions of the card layout's selection bar; hidden when `canPrint` is false. */
+  canPrint?: boolean
+  /** The ticket image is ready and exactly one row is selected, so copying makes sense. */
+  copyReady?: boolean
+  onBulkPrint?: () => void
+  onBulkCopy?: () => void
+  onBulkSave?: () => void
+  /** Ticket preview for the sheet; receives the draft values of the row being edited. */
+  sheetPreview?: (row: Participant) => ReactNode
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
@@ -115,6 +133,14 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     unsentIds = EMPTY_SET,
     query,
     onQueryChange,
+    cards = false,
+    onNotify,
+    canPrint = false,
+    copyReady = false,
+    onBulkPrint,
+    onBulkCopy,
+    onBulkSave,
+    sheetPreview,
   } = props
   const { t } = useI18n()
   const showSkeleton = useSkeleton(loading)
@@ -132,6 +158,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const [failed, setFailed] = useState<ReadonlyMap<string, FailedState>>(new Map())
   const [shakes, setShakes] = useState<ReadonlyMap<string, number>>(new Map())
   const [tipId, setTipId] = useState<string | null>(null)
+  // Card layout: the row open in the bottom sheet and whether taps select instead of open.
+  const [sheetId, setSheetId] = useState<string | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
   const lastPointer = useRef<string>('mouse')
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
 
@@ -165,10 +194,18 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const rowVirtualizer = useVirtualizer({
     count: visible.length,
     getScrollElement: () => scroller.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
+    estimateSize: () => (cards ? CARD_ESTIMATE : ROW_HEIGHT),
+    overscan: cards ? 6 : 8,
     getItemKey: (i) => visible[i]?.id ?? i,
   })
+  // Cards have measured, variable heights; switching layout must drop the cached sizes.
+  useEffect(() => {
+    rowVirtualizer.measure()
+    if (!cards) {
+      setSelectMode(false)
+      setSheetId(null)
+    }
+  }, [cards, rowVirtualizer])
 
   useEffect(() => {
     if (!revealId) return
@@ -236,13 +273,15 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     [visible, canEdit, lockFor, shake, failed],
   )
 
-  const commit = useCallback(
-    async (state: EditState, patchOverride?: string) => {
-      const row = rows.find((r) => r.id === state.id)
-      const value = patchOverride ?? state.value
-      if (!row || value === state.original) return
-      const field = COLUMNS[state.col] === 'phone' ? 'phone' : 'name'
-      const res = await onCommit(row, { [field]: value })
+  /** Sends a patch (one cell from the grid, or both fields from the sheet) and records the outcome per row. */
+  const commitPatch = useCallback(
+    async (rowId: string, patch: RowPatch, col: number): Promise<CommitResult> => {
+      const row = rows.find((r) => r.id === rowId)
+      if (!row) return { status: 'error' }
+      const field = patch.name !== undefined ? 'name' : 'phone'
+      const value = patch[field] ?? ''
+      const both = patch.name !== undefined && patch.phone !== undefined ? patch : undefined
+      const res = await onCommit(row, patch)
       if (res.status === 'ok') {
         setFailed((m) => {
           if (!m.has(row.id)) return m
@@ -252,9 +291,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         })
       } else if (res.status === 'error') {
         // Keep what the user typed (marked as unsaved) so a transient error never throws their work away.
-        setFailed((m) => new Map(m).set(row.id, { col: state.col, value }))
+        setFailed((m) => new Map(m).set(row.id, { col, value, patch: both }))
       } else if (res.status === 'conflict') {
-        setConflicts((m) => new Map(m).set(row.id, { field, mine: value, current: res.current }))
+        setConflicts((m) => new Map(m).set(row.id, { field, mine: value, current: res.current, patch: both }))
       } else if (res.status === 'locked') {
         const owner = res.by ? people?.get(res.by) : undefined
         const entry: RowLockOwner = owner ?? {
@@ -275,8 +314,32 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         )
         shake(row.id)
       }
+      return res
     },
     [rows, onCommit, people, later, shake, t],
+  )
+
+  const commit = useCallback(
+    async (state: EditState, patchOverride?: string) => {
+      const row = rows.find((r) => r.id === state.id)
+      const value = patchOverride ?? state.value
+      if (!row || value === state.original) return
+      const field = COLUMNS[state.col] === 'phone' ? 'phone' : 'name'
+      await commitPatch(row.id, { [field]: value }, state.col)
+    },
+    [rows, commitPatch],
+  )
+
+  const saveSheet = useCallback(
+    async (id: string, patch: RowPatch): Promise<SheetSaveResult> => {
+      const res = await commitPatch(id, patch, patch.name !== undefined ? 1 : 2)
+      if (res.status === 'ok') return 'ok'
+      if (res.status === 'error') return 'error'
+      // A conflict or a lock is resolved on the card, so the sheet gets out of the way (only if still on that row).
+      setSheetId((cur) => (cur === id ? null : cur))
+      return 'closed'
+    },
+    [commitPatch],
   )
 
   const finishEdit = useCallback(
@@ -345,7 +408,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         return next
       })
       // Retry on top of the server's current version; a second conflict re-opens the prompt.
-      const res = await onCommit(c.current, { [c.field]: c.mine })
+      const res = await onCommit(c.current, c.patch ?? { [c.field]: c.mine })
       if (res.status === 'conflict') {
         setConflicts((m) => new Map(m).set(id, { ...c, current: res.current }))
       }
@@ -356,11 +419,10 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const retry = useCallback(
     (id: string) => {
       const f = failed.get(id)
-      const row = rows.find((r) => r.id === id)
-      if (!f || !row) return
-      void commit({ id, col: f.col, value: f.value, original: columnValue(row, f.col) })
+      if (!f) return
+      void commitPatch(id, f.patch ?? { [COLUMNS[f.col] === 'phone' ? 'phone' : 'name']: f.value }, f.col)
     },
-    [failed, rows, commit],
+    [failed, commitPatch],
   )
 
   const handlers: RowHandlers = useMemo(
@@ -377,6 +439,93 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     }),
     [retry, pasteRows, cancelEdit, resolveTheirs, resolveMine],
   )
+
+  // ---- cards and bottom sheet
+
+  const pickCard = useCallback(
+    (id: string) => {
+      const index = ids.indexOf(id)
+      if (index < 0) return -1
+      setActive({ row: index, col: 1 })
+      setAnchor(index)
+      onCurrentChange(id)
+      return index
+    },
+    [ids, onCurrentChange],
+  )
+
+  const openCard = useCallback(
+    (id: string) => {
+      if (pickCard(id) < 0) return
+      const owner = lockFor(id)
+      if (owner) {
+        // A row someone else is editing never opens; say who holds it instead of failing silently.
+        shake(id)
+        const row = rows.find((r) => r.id === id)
+        onNotify?.(t('workspace.card.blocked', { number: row?.number ?? '', name: owner.displayName }))
+        return
+      }
+      setSheetId(id)
+    },
+    [pickCard, lockFor, shake, rows, onNotify, t],
+  )
+
+  const toggleCard = useCallback(
+    (id: string) => {
+      if (pickCard(id) < 0) return
+      const next = new Set(selected)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      onSelectedChange(next)
+      // Copy and the ticket preview follow the single selected row.
+      if (next.size === 1) onCurrentChange([...next][0] as string)
+    },
+    [pickCard, selected, onSelectedChange, onCurrentChange],
+  )
+
+  const longPressCard = useCallback(
+    (id: string) => {
+      if (pickCard(id) < 0) return
+      setSelectMode(true)
+      onSelectedChange(new Set([...selected, id]))
+      navigator.vibrate?.(10)
+    },
+    [pickCard, selected, onSelectedChange],
+  )
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false)
+    onSelectedChange(new Set())
+  }, [onSelectedChange])
+
+  const cardHandlers: CardHandlers = useMemo(
+    () => ({
+      onOpen: openCard,
+      onToggle: toggleCard,
+      onLongPress: longPressCard,
+      onRetry: retry,
+      onResolveTheirs: resolveTheirs,
+      onResolveMine: (id) => void resolveMine(id),
+    }),
+    [openCard, toggleCard, longPressCard, retry, resolveTheirs, resolveMine],
+  )
+
+  // Paging skips rows a colleague is editing.
+  const sheetIndex = sheetId ? ids.indexOf(sheetId) : -1
+  const stepFrom = (from: number, dir: 1 | -1): string | null => {
+    for (let i = from + dir; i >= 0 && i < ids.length; i += dir) {
+      const id = ids[i] as string
+      if (!lockFor(id)) return id
+    }
+    return null
+  }
+  const prevId = sheetIndex >= 0 ? stepFrom(sheetIndex, -1) : null
+  const nextId = sheetIndex >= 0 ? stepFrom(sheetIndex, 1) : null
+  const sheetRow = sheetIndex >= 0 ? visible[sheetIndex] : undefined
+  // The sheet closes when its row disappears (deleted by a colleague, filtered out).
+  useEffect(() => {
+    if (sheetId && !visible.some((r) => r.id === sheetId)) setSheetId(null)
+  }, [sheetId, visible])
 
   // ---- pointer
 
@@ -526,7 +675,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   // ---- realtime: row lock lifecycle, cursor and denied locks
   const { editStarted, editEnded, cursor, denied } = useRowCollab()
-  const editRowId = edit?.id ?? null
+  // The sheet edits a whole row, so it holds the row lock for as long as it is open.
+  const editRowId = edit?.id ?? (canEdit ? sheetId : null)
   useEffect(() => {
     if (!editRowId) return
     editStarted(editRowId)
@@ -544,14 +694,48 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     seenDenied.current = denied.seq
     // Someone else holds the row: drop the edit and show the same shake and tooltip as a locked row.
     setEdit((e) => (e && e.id === denied.rowId ? null : e))
+    setSheetId((cur) => (cur === denied.rowId ? null : cur))
     shake(denied.rowId)
     requestAnimationFrame(focusGrid)
   }, [denied, shake, focusGrid])
 
   if (error) return <div className="pt-state">{error}</div>
 
+  const addButton = canEdit && (
+    <Button size="sm" onClick={onAddRows} aria-label={t('workspace.addRows')}>
+      <Icon name="plus" size={16} />
+      <span className="pt-btn-text">{t('workspace.addRows')}</span>
+    </Button>
+  )
+
+  const emptyOrLoading =
+    loading && rows.length === 0 ? (
+      showSkeleton ? (
+        <div className="pt-skeleton" role="status" aria-label={t('state.loading')}>
+          {Array.from({ length: 8 }, (_, i) => (
+            <Skeleton key={i} height={22} />
+          ))}
+        </div>
+      ) : null
+    ) : visible.length === 0 ? (
+      <div className="pt-empty" role="status">
+        <p>{rows.length === 0 ? t('workspace.empty.title') : t('workspace.search.none')}</p>
+        {rows.length === 0 && canEdit && <p className="muted">{t('workspace.empty.hint')}</p>}
+      </div>
+    ) : null
+
   return (
-    <div className="pt">
+    // biome-ignore lint/a11y/noStaticElementInteractions: Esc leaves selection mode from anywhere in the list
+    <div
+      className="pt"
+      data-cards={cards || undefined}
+      onKeyDown={(e) => {
+        if (cards && selectMode && e.key === 'Escape') {
+          e.stopPropagation()
+          exitSelectMode()
+        }
+      }}
+    >
       <div className="pt-tools">
         <div className="input pt-search">
           <Icon name="search" />
@@ -574,126 +758,215 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
             }}
           />
         </div>
-        {canEdit && (
-          <Button size="sm" onClick={onAddRows}>
-            <Icon name="plus" size={16} />
-            {t('workspace.addRows')}
+        {cards && (
+          <Button
+            size="sm"
+            aria-pressed={selectMode}
+            aria-label={t('workspace.select.enter')}
+            disabled={visible.length === 0}
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+          >
+            <WsIcon name="selectMode" size={18} />
           </Button>
         )}
-        {canDelete && selectedVisible.length > 0 && (
-          <Button size="sm" variant="danger" onClick={() => onDelete(selectedVisible)}>
+        {addButton}
+        {/* Kept in the layout (but hidden) while nothing is selected so selecting never moves the table. */}
+        {!cards && canDelete && (
+          <Button
+            size="sm"
+            variant="danger"
+            className="pt-delete"
+            data-idle={selectedVisible.length === 0 || undefined}
+            tabIndex={selectedVisible.length === 0 ? -1 : undefined}
+            onClick={() => onDelete(selectedVisible)}
+          >
             <Icon name="trash" size={16} />
             {t('workspace.deleteSelected', { count: selectedVisible.length })}
           </Button>
         )}
       </div>
 
-      {/* The grid is the single tab stop; cells are addressed through aria-activedescendant. */}
-      <div
-        ref={grid}
-        className="pt-grid"
-        role="grid"
-        tabIndex={0}
-        aria-label={t('workspace.table.label')}
-        aria-rowcount={visible.length + 1}
-        aria-colcount={COLUMNS.length}
-        aria-multiselectable="true"
-        aria-activedescendant={activeDescendant}
-        onKeyDown={onKeyDown}
-        onPaste={onPaste}
-        onBlur={(e) => {
-          if (edit && !e.currentTarget.contains(e.relatedTarget as Node | null)) finishEdit(null, false)
-        }}
-        onClick={onClick}
-        onDoubleClick={onDoubleClick}
-        onPointerDown={(e) => {
-          lastPointer.current = e.pointerType
-        }}
-      >
-        <div className="pt-head" role="row" aria-rowindex={1}>
-          <div className="pt-hcell pt-hcell-num" role="columnheader">
-            <input
-              type="checkbox"
-              className="pt-check"
-              checked={everySelected}
-              aria-label={t('workspace.selectVisible')}
-              title={t('workspace.selectVisible')}
-              disabled={visible.length === 0}
-              onClick={(e) => e.stopPropagation()}
-              onChange={() => {
-                if (everySelected) onSelectedChange(new Set())
-                else {
-                  const all = selectAllVisible(ids)
-                  onSelectedChange(all.selected)
-                  setAnchor(all.anchor)
-                }
-              }}
-            />
-            {t('workspace.col.number')}
-          </div>
-          <div className="pt-hcell" role="columnheader">
-            {t('workspace.col.name')}
-          </div>
-          <div className="pt-hcell" role="columnheader">
-            {t('workspace.col.phone')}
-          </div>
-        </div>
-
-        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
-        <div ref={scroller} className="pt-scroll" tabIndex={0}>
-          {loading && rows.length === 0 ? (
-            showSkeleton ? (
-              <div className="pt-skeleton" role="status" aria-label={t('state.loading')}>
-                {Array.from({ length: 8 }, (_, i) => (
-                  <Skeleton key={i} height={22} />
-                ))}
+      {cards ? (
+        <div className="pc">
+          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
+          <div ref={scroller} className="pt-scroll pc-scroll" tabIndex={0}>
+            {emptyOrLoading ?? (
+              <div
+                className="pt-sizer pc-list"
+                role="list"
+                aria-label={t('workspace.table.label')}
+                style={{ height: rowVirtualizer.getTotalSize() }}
+              >
+                {items.map((item) => {
+                  const row = visible[item.index]
+                  if (!row) return null
+                  return (
+                    <ParticipantCard
+                      key={row.id}
+                      row={row}
+                      index={item.index}
+                      top={item.start}
+                      measure={rowVirtualizer.measureElement}
+                      selected={selected.has(row.id)}
+                      selectMode={selectMode}
+                      current={currentId === row.id}
+                      editing={sheetId === row.id}
+                      lockedBy={lockFor(row.id)}
+                      cursors={presence.cursors.get(row.id)}
+                      leaving={leaving.has(row.id)}
+                      fresh={freshIds.has(row.id)}
+                      freshColor={freshColor}
+                      shake={shakes.get(row.id) ?? 0}
+                      tipOpen={tipId === row.id}
+                      conflict={conflicts.get(row.id) ?? null}
+                      failed={failed.get(row.id) ?? null}
+                      unsent={unsentIds.has(row.id)}
+                      handlers={cardHandlers}
+                    />
+                  )
+                })}
               </div>
-            ) : null
-          ) : visible.length === 0 ? (
-            <div className="pt-empty" role="status">
-              <p>{rows.length === 0 ? t('workspace.empty.title') : t('workspace.search.none')}</p>
-              {rows.length === 0 && canEdit && <p className="muted">{t('workspace.empty.hint')}</p>}
-            </div>
-          ) : (
-            <div className="pt-sizer" role="rowgroup" style={{ height: rowVirtualizer.getTotalSize() }}>
-              {items.map((item) => {
-                const row = visible[item.index]
-                if (!row) return null
-                return (
-                  <ParticipantRow
-                    key={row.id}
-                    row={row}
-                    index={item.index}
-                    top={item.start}
-                    selected={selected.has(row.id)}
-                    current={currentId === row.id}
-                    activeCol={active?.row === item.index ? active.col : null}
-                    editing={edit?.id === row.id ? edit : null}
-                    lockedBy={lockFor(row.id)}
-                    cursors={presence.cursors.get(row.id)}
-                    leaving={leaving.has(row.id)}
-                    fresh={freshIds.has(row.id)}
-                    freshColor={freshColor}
-                    shake={shakes.get(row.id) ?? 0}
-                    tipOpen={tipId === row.id}
-                    conflict={conflicts.get(row.id) ?? null}
-                    failed={failed.get(row.id) ?? null}
-                    unsent={unsentIds.has(row.id)}
-                    rowCount={visible.length}
-                    handlers={handlers}
-                  />
-                )
-              })}
-            </div>
+            )}
+          </div>
+          {selectMode && (
+            <BulkBar
+              count={selectedVisible.length}
+              allSelected={everySelected}
+              canDelete={canDelete}
+              canPrint={canPrint}
+              copyReady={copyReady}
+              onPrint={() => onBulkPrint?.()}
+              onCopy={() => onBulkCopy?.()}
+              onSave={() => onBulkSave?.()}
+              onDelete={() => {
+                onDelete(selectedVisible)
+                setSelectMode(false)
+              }}
+              onSelectAll={() => {
+                const all = selectAllVisible(ids)
+                onSelectedChange(all.selected)
+                setAnchor(all.anchor)
+              }}
+              onDone={exitSelectMode}
+            />
           )}
         </div>
-      </div>
+      ) : (
+        /* The grid is the single tab stop; cells are addressed through aria-activedescendant. */
+        <div
+          ref={grid}
+          className="pt-grid"
+          role="grid"
+          tabIndex={0}
+          aria-label={t('workspace.table.label')}
+          aria-rowcount={visible.length + 1}
+          aria-colcount={COLUMNS.length}
+          aria-multiselectable="true"
+          aria-activedescendant={activeDescendant}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          onBlur={(e) => {
+            if (edit && !e.currentTarget.contains(e.relatedTarget as Node | null)) finishEdit(null, false)
+          }}
+          onClick={onClick}
+          onDoubleClick={onDoubleClick}
+          onPointerDown={(e) => {
+            lastPointer.current = e.pointerType
+          }}
+        >
+          <div className="pt-head" role="row" aria-rowindex={1}>
+            <div className="pt-hcell pt-hcell-num" role="columnheader">
+              <label className="pt-check-hit">
+                <input
+                  type="checkbox"
+                  className="pt-check"
+                  checked={everySelected}
+                  aria-label={t('workspace.selectVisible')}
+                  title={t('workspace.selectVisible')}
+                  disabled={visible.length === 0}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => {
+                    if (everySelected) onSelectedChange(new Set())
+                    else {
+                      const all = selectAllVisible(ids)
+                      onSelectedChange(all.selected)
+                      setAnchor(all.anchor)
+                    }
+                  }}
+                />
+              </label>
+              {t('workspace.col.number')}
+            </div>
+            <div className="pt-hcell" role="columnheader">
+              {t('workspace.col.name')}
+            </div>
+            <div className="pt-hcell" role="columnheader">
+              {t('workspace.col.phone')}
+            </div>
+          </div>
+
+          {/* biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable list must be reachable by keyboard */}
+          <div ref={scroller} className="pt-scroll" tabIndex={0}>
+            {emptyOrLoading ?? (
+              <div className="pt-sizer" role="rowgroup" style={{ height: rowVirtualizer.getTotalSize() }}>
+                {items.map((item) => {
+                  const row = visible[item.index]
+                  if (!row) return null
+                  return (
+                    <ParticipantRow
+                      key={row.id}
+                      row={row}
+                      index={item.index}
+                      top={item.start}
+                      selected={selected.has(row.id)}
+                      current={currentId === row.id}
+                      activeCol={active?.row === item.index ? active.col : null}
+                      editing={edit?.id === row.id ? edit : null}
+                      lockedBy={lockFor(row.id)}
+                      cursors={presence.cursors.get(row.id)}
+                      leaving={leaving.has(row.id)}
+                      fresh={freshIds.has(row.id)}
+                      freshColor={freshColor}
+                      shake={shakes.get(row.id) ?? 0}
+                      tipOpen={tipId === row.id}
+                      conflict={conflicts.get(row.id) ?? null}
+                      failed={failed.get(row.id) ?? null}
+                      unsent={unsentIds.has(row.id)}
+                      rowCount={visible.length}
+                      handlers={handlers}
+                    />
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="pt-foot" aria-live="polite">
         {t('workspace.rowCount', { count: visible.length, total: rows.length })}
         {selectedVisible.length > 0 &&
           ` · ${t('workspace.selectedCount', { count: selectedVisible.length })}`}
       </div>
+
+      {cards && (
+        <RowSheet
+          row={sheetRow ?? null}
+          position={sheetIndex + 1}
+          total={ids.length}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          hasPrev={prevId !== null}
+          hasNext={nextId !== null}
+          onPrev={() => prevId && pickCard(prevId) >= 0 && setSheetId(prevId)}
+          onNext={() => nextId && pickCard(nextId) >= 0 && setSheetId(nextId)}
+          onSave={saveSheet}
+          onDelete={(id) => onDelete([id])}
+          onClose={() => setSheetId(null)}
+          retained={sheetRow ? (failed.get(sheetRow.id) ?? null) : null}
+          preview={sheetPreview}
+        />
+      )}
     </div>
   )
 }

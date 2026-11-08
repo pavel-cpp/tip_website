@@ -1,0 +1,485 @@
+/* Workspace on touch screens: control sizes, tablet layout, phone cards and the row bottom sheet.
+   Loaded after workspace.css. Motion uses transform/opacity only. */
+
+.ws,
+.sheet {
+  --control-h-sm: 40px;
+}
+/* Touch and tablet sizes: every control is at least 44 px. */
+@media (max-width: 1099px), (pointer: coarse) {
+  .ws,
+  .sheet {
+    --control-h: var(--touch-target);
+    --control-h-sm: var(--touch-target);
+  }
+  .tk-zoom-value {
+    min-width: var(--touch-target);
+  }
+  .pt-head {
+    height: var(--touch-target);
+  }
+}
+.tk-zoom-value {
+  min-height: var(--control-h-sm);
+}
+.tk-zoom[hidden] {
+  display: none;
+}
+.pt-check-hit {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: -12px 0 -12px -12px;
+  cursor: pointer;
+}
+@media (max-width: 1099px), (pointer: coarse) {
+  .pt-check-hit {
+    width: var(--touch-target);
+    height: var(--touch-target);
+    margin: 0 0 0 -12px;
+  }
+  .pt-check {
+    width: 22px;
+    height: 22px;
+  }
+}
+/* Kept in the layout while nothing is selected so selecting a row never moves the table. */
+.pt-delete[data-idle] {
+  visibility: hidden;
+}
+@media (max-width: 1099px) {
+  .pt-search {
+    flex-basis: 200px;
+    min-width: 160px;
+  }
+}
+
+/* Project title: at most two lines, the full text is in the title attribute. */
+.ws-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ws-head .breadcrumb {
+  min-width: 0;
+}
+
+/* Phone layout (keep the query in sync with NARROW_QUERY in useNarrow.ts). */
+@media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
+  .ws-title {
+    font-size: var(--fs-lg);
+  }
+  /* The tabs already name the panel; the panel header only costs list space. */
+  .ws-panel > .panel-head {
+    display: none;
+  }
+  .pt-tools {
+    flex-wrap: nowrap;
+    padding: var(--space-3);
+  }
+  .pt-search {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .pt-tools .btn {
+    padding: 0;
+    width: var(--touch-target);
+  }
+  .pt-btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .ws-toolbar .btn {
+    min-width: var(--touch-target);
+  }
+}
+
+/* ---------- participant cards ---------- */
+.pc {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+/* Constant bottom space: the selection bar overlays it, so showing the bar never moves the cards. */
+.pc-scroll {
+  padding: var(--space-2) 0 168px;
+}
+.pc-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0 var(--space-3) 8px;
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.pc-card {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+.pc-main {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pc-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.pc-num {
+  flex: none;
+  min-width: 34px;
+  padding-top: 1px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+}
+.pc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pc-name {
+  font-weight: var(--fw-semibold);
+  /* Names are never cut: long ones wrap onto further lines. */
+  overflow-wrap: anywhere;
+}
+.pc-phone {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.pc-name[data-empty] {
+  color: var(--text-faint);
+}
+.pc-phone[data-suspicious] {
+  text-decoration: underline wavy var(--danger);
+  text-underline-offset: 3px;
+}
+.pc-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: var(--touch-target);
+  cursor: pointer;
+}
+.pc-check input {
+  width: 26px;
+  height: 26px;
+  accent-color: var(--accent);
+}
+.pc-item[data-selected] .pc-card {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.pc-item[data-current] .pc-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.pc-item[data-editing] .pc-card {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.pc-item[data-conflict] .pc-card {
+  box-shadow: inset 0 0 0 2px var(--danger);
+}
+.pc-item[data-failed] .pc-card {
+  border-color: var(--danger);
+}
+.pc-item[data-locked] .pc-main {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.pc-item[data-locked] .pt-lock-ring {
+  opacity: 1;
+  transform: none;
+}
+.pc-item[data-fresh] .pc-card {
+  animation: pt-in var(--dur-base) var(--ease-standard) both;
+}
+.pc-item[data-leaving] .pc-card {
+  animation: pt-out var(--dur-base) var(--ease-out) both;
+  pointer-events: none;
+}
+.pc-status,
+.pc-lock-tip {
+  flex: 0 0 100%;
+}
+.pc-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 14px 10px;
+}
+.pc-retry {
+  min-height: var(--touch-target);
+  margin: 0;
+  padding: 0 14px;
+}
+.pc-unsent {
+  padding: 2px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.pc-lock-tip {
+  position: static;
+  width: fit-content;
+  flex-basis: auto;
+  margin: 0 14px 10px;
+  opacity: 1;
+  transform: none;
+  white-space: normal;
+}
+.pc-conflict {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: 6px;
+  padding: var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  font-size: var(--fs-sm);
+}
+.pc-conflict p {
+  margin: 0;
+}
+
+/* Selection bar: overlays the bottom of the list, it never takes part in the layout. */
+.pc-bar {
+  position: absolute;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: 5;
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  animation: pc-bar-in var(--dur-base) var(--ease-standard) both;
+}
+@keyframes pc-bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+.pc-bar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.pc-bar-count {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+.pc-bar-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-2);
+}
+.pc-bar-btn {
+  min-height: 56px;
+  padding: 0 4px;
+  white-space: normal;
+  text-align: center;
+}
+.pc-bar-btn .btn-content {
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--fs-xs);
+}
+
+/* ---------- bottom sheet (phone row editor) ---------- */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+}
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-overlay);
+  animation: fade-in var(--dur-base) var(--ease-standard) both;
+}
+.sheet-overlay[data-state="closed"] .sheet-backdrop {
+  animation: fade-out var(--dur-fast) var(--ease-out) both;
+}
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  /* --sheet-kb / --sheet-vh follow the visual viewport so the keyboard never covers the sheet. */
+  bottom: var(--sheet-kb, 0px);
+  width: min(100%, 560px);
+  margin-inline: auto;
+  max-height: calc(var(--sheet-vh, 100dvh) - 12px);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: max(0px, calc(var(--safe-bottom) - var(--sheet-kb, 0px)));
+  border: 1px solid var(--border-strong);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-pop);
+  animation: sheet-in var(--dur-base) var(--ease-standard) both;
+}
+.sheet-overlay[data-state="closed"] .sheet {
+  animation: sheet-out var(--dur-fast) var(--ease-out) both;
+}
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translateY(100%);
+  }
+}
+.sheet-grab {
+  flex: none;
+  width: 36px;
+  height: 4px;
+  margin: 8px auto 0;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+.sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2) 2px var(--space-4);
+}
+.sheet-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-lg);
+}
+.sheet-pos {
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-3);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.sheet-form {
+  display: grid;
+  gap: var(--space-3);
+}
+.sheet-input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  /* 16 px keeps iOS from zooming the page when a field is focused. */
+  font-size: 16px;
+}
+.sheet-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sheet-input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.sheet-phone {
+  font-family: var(--font-mono);
+}
+.sheet-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.sheet-preview {
+  display: flex;
+  height: clamp(150px, 52vw, 240px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.sheet-preview .tk {
+  flex: 1;
+  min-width: 0;
+}
+.sheet-preview .tk-viewport {
+  padding: var(--space-2);
+}
+.sheet-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+@media (max-height: 520px) {
+  .sheet-preview {
+    height: 140px;
+  }
+}

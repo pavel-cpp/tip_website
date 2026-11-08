@@ -139,7 +139,8 @@
   gap: var(--space-1);
 }
 
-@media (max-width: 1099px) {
+/* Stacked panels below 1100 px, except wide landscape tablets where table and ticket sit side by side. */
+@media (max-width: 1099px) and (not ((min-width: 860px) and (orientation: landscape))) {
   .ws-grid {
     --cols: 1fr;
     --rows: 1fr 1fr;
@@ -162,13 +163,15 @@
   }
 }
 
-@media (max-width: 699px) {
+/* Phone layout: narrow screens and landscape phones (keep in sync with NARROW_QUERY in useNarrow.ts). */
+@media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
   .ws {
     --ws-pad: var(--space-4);
     height: calc(100dvh - var(--topbar-h) - 2 * var(--ws-pad));
   }
   .ws-grid {
     --rows: 1fr;
+    grid-template-columns: 1fr;
     grid-template-rows: 1fr;
     gap: 0;
     transition: none;
@@ -707,7 +710,7 @@
 .ws-tool-text {
   font-weight: var(--fw-semibold);
 }
-@media (max-width: 699px) {
+@media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
   .ws-people-label {
     display: none;
   }
