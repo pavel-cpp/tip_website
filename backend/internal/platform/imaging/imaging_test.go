@@ -71,6 +71,32 @@ func TestProcessDownscales(t *testing.T) {
 	}
 }
 
+func TestThumbnail(t *testing.T) {
+	p := New(0, 0)
+	for name, tc := range map[string]struct {
+		data         []byte
+		wantW, wantH int
+	}{
+		"large png":   {makePNG(t, 1200, 600), 480, 240},
+		"tall jpeg":   {makeJPEG(t, 300, 1500), 96, 480},
+		"small image": {makePNG(t, 100, 50), 100, 50},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, err := p.Thumbnail(tc.data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, format, err := image.DecodeConfig(bytes.NewReader(out))
+			if err != nil || format != "jpeg" || cfg.Width != tc.wantW || cfg.Height != tc.wantH {
+				t.Fatalf("got %v %s %dx%d, want jpeg %dx%d", err, format, cfg.Width, cfg.Height, tc.wantW, tc.wantH)
+			}
+		})
+	}
+	if _, err := p.Thumbnail([]byte("not an image")); !errors.Is(err, domain.ErrUnsupportedMedia) {
+		t.Fatalf("garbage: %v", err)
+	}
+}
+
 func TestFitSide(t *testing.T) {
 	if w, h := fitSide(8192, 4096, 4096); w != 4096 || h != 2048 {
 		t.Fatalf("got %dx%d", w, h)

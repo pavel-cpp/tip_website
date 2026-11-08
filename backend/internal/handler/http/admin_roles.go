@@ -40,7 +40,11 @@ func (a *AuthAPI) ListPermissions(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]gen.Permission, len(cat))
 	for i, p := range cat {
-		out[i] = gen.Permission{Code: gen.PermissionCode(p.Code), Group: p.Group, Description: p.Description}
+		req := make([]gen.PermissionCode, 0, len(p.Code.Requires()))
+		for _, d := range p.Code.Requires() {
+			req = append(req, gen.PermissionCode(d))
+		}
+		out[i] = gen.Permission{Code: gen.PermissionCode(p.Code), Group: p.Group, Description: p.Description, Requires: req}
 	}
 	writeJSON(w, http.StatusOK, out)
 }

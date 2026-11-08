@@ -27,7 +27,7 @@ const project = (over: Partial<Project> = {}): Project => ({
   title: 'Tashkent City',
   status: 'active',
   version: 4,
-  image: { url: '/api/v1/projects/p1/image?v=1', name: 'bmw.jpg', w: 1024, h: 768, bytes: 2_202_009 },
+  image: { url: '/api/v1/projects/p1/image?v=1', thumbUrl: '/api/v1/projects/p1/image?size=thumb&v=1', name: 'bmw.jpg', w: 1024, h: 768, bytes: 2_202_009 },
   placeholders: { number: ph(120), name: ph(340), phone: ph(600) },
   contributors: [],
   participantCount: 0,
@@ -100,7 +100,7 @@ describe('ProjectSettings', () => {
   })
 
   it('shows no ratio hint for a 7:4 image', async () => {
-    mockApi({ project: project({ image: { url: '/x', name: 'a.png', w: 1400, h: 800, bytes: 1000 } }) })
+    mockApi({ project: project({ image: { url: '/x', thumbUrl: '/x?size=thumb', name: 'a.png', w: 1400, h: 800, bytes: 1000 } }) })
     renderPage()
     await screen.findByDisplayValue('Tashkent City')
     expect(screen.queryByText(/соотношение сторон/)).not.toBeInTheDocument()

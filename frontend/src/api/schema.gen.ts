@@ -481,8 +481,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Download the original ticket image
-         * @description Served with `ETag` equal to the SHA-256 of the content and `Cache-Control: immutable`.
+         * Download the ticket image
+         * @description Served with a strong `ETag` and `Cache-Control: immutable`. Without `size` the original image is
+         *     returned (`ETag` is the SHA-256 of the content). With `size=thumb` a JPEG whose long side is at most
+         *     480 px is returned (`ETag` is `<sha>-thumb`); it is generated at upload time, and a project whose
+         *     thumbnail is missing gets the original instead.
          */
         get: operations["getProjectImage"];
         /**
@@ -893,6 +896,8 @@ export interface components {
              */
             group: string;
             description: string;
+            /** @description Permissions this one directly depends on (the server adds them to a role automatically). */
+            requires: components["schemas"]["PermissionCode"][];
         };
         Role: {
             /** Format: uuid */
@@ -985,6 +990,13 @@ export interface components {
                  */
                 total: number;
             };
+            uploads: {
+                /**
+                 * Format: int64
+                 * @description Total size of the stored project images (cached for a minute).
+                 */
+                sizeBytes: number;
+            };
             retention: {
                 obsDays: number;
                 auditDays: number;
@@ -1035,6 +1047,11 @@ export interface components {
         ProjectImage: {
             /** @example /api/v1/projects/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/image?v=ab12 */
             url: string;
+            /**
+             * @description Small preview (JPEG, at most 480 px on the long side) for lists and cards.
+             * @example /api/v1/projects/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/image?size=thumb&v=ab12
+             */
+            thumbUrl: string;
             /** @description Original file name. */
             name: string;
             w: number;
@@ -1043,6 +1060,8 @@ export interface components {
         };
         CardImage: {
             url: string;
+            /** @description Small preview to show on the card instead of the full original. */
+            thumbUrl: string;
         };
         Project: {
             /** Format: uuid */
@@ -2444,7 +2463,10 @@ export interface operations {
     };
     getProjectImage: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `thumb` selects the small preview used by project cards. */
+                size?: "thumb";
+            };
             header?: {
                 /** @description ETag previously received; a match yields `304 Not Modified`. */
                 "If-None-Match"?: components["parameters"]["IfNoneMatch"];

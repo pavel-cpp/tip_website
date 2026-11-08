@@ -146,6 +146,11 @@ func (fakeImages) Normalize(data []byte) ([]byte, string, int, int, error) {
 	return data, "image/png", w, h, nil
 }
 
+// Thumbnail derives a preview whose content is recognizable in assertions.
+func (fakeImages) Thumbnail(data []byte) ([]byte, error) {
+	return append([]byte("thumb:"), data...), nil
+}
+
 type fakeAudit struct {
 	entries []ProjectAuditEntry
 	err     error
@@ -239,7 +244,7 @@ func TestPermissionDenied(t *testing.T) {
 		"reopen": func() error { _, err := e.svc.Reopen(ctx, viewer, v.ID); return err },
 		"delete": func() error { return e.svc.Delete(ctx, viewer, v.ID) },
 		"put":    func() error { _, err := e.svc.PutImage(ctx, viewer, v.ID, "a.png", []byte("1x1:")); return err },
-		"image":  func() error { _, err := e.svc.Image(ctx, none, v.ID, ""); return err },
+		"image":  func() error { _, err := e.svc.Image(ctx, none, v.ID, "", false); return err },
 	}
 	for name, f := range tests {
 		if err := f(); !errors.Is(err, domain.ErrForbidden) {
@@ -556,14 +561,14 @@ func TestImageDownload(t *testing.T) {
 	e := newEnv()
 	ctx := context.Background()
 	v := mustCreate(t, e, "P")
-	if _, err := e.svc.Image(ctx, admin, v.ID, ""); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := e.svc.Image(ctx, admin, v.ID, "", false); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("no image: %v", err)
 	}
 	up, err := e.svc.PutImage(ctx, admin, v.ID, "a.png", []byte("10x10:pixels"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, err := e.svc.Image(ctx, viewer, v.ID, "")
+	f, err := e.svc.Image(ctx, viewer, v.ID, "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,20 +578,57 @@ func TestImageDownload(t *testing.T) {
 		t.Fatalf("body %q etag %s", body, f.ETag())
 	}
 	for _, inm := range []string{f.ETag(), "W/" + f.ETag(), `"zzz", ` + f.ETag(), "*"} {
-		g, err := e.svc.Image(ctx, viewer, v.ID, inm)
+		g, err := e.svc.Image(ctx, viewer, v.ID, inm, false)
 		if err != nil || !g.NotModified || g.Body != nil {
 			t.Fatalf("If-None-Match %q: %+v %v", inm, g, err)
 		}
 	}
-	if g, _ := e.svc.Image(ctx, viewer, v.ID, `"other"`); g.NotModified {
+	if g, _ := e.svc.Image(ctx, viewer, v.ID, `"other"`, false); g.NotModified {
 		t.Fatal("non-matching etag treated as match")
 	}
 	if _, err := e.svc.Finish(ctx, admin, v.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Image(ctx, viewer, v.ID, ""); !errors.Is(err, domain.ErrNotFound) {
+	if _, err := e.svc.Image(ctx, viewer, v.ID, "", false); !errors.Is(err, domain.ErrNotFound) {
 		t.Fatalf("hidden: %v", err)
 	}
+}
+
+func TestImageThumbnail(t *testing.T) {
+	e := newEnv()
+	ctx := context.Background()
+	v := mustCreate(t, e, "P")
+	up, err := e.svc.PutImage(ctx, admin, v.ID, "a.png", []byte("10x10:pixels"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(e.blobs.files[domain.ThumbKey(up.Image.SHA256)]) != "thumb:10x10:pixels" {
+		t.Fatalf("preview not stored next to the original: %v", e.blobs.files)
+	}
+	f, err := e.svc.Image(ctx, viewer, v.ID, "", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(f.Body)
+	_ = f.Body.Close()
+	if string(body) != "thumb:10x10:pixels" || !f.Thumb || f.Meta.Mime != domain.MimeThumb ||
+		f.ETag() != `"`+up.Image.SHA256+`-thumb"` {
+		t.Fatalf("thumb: %q %+v etag %s", body, f.Meta, f.ETag())
+	}
+	if g, err := e.svc.Image(ctx, viewer, v.ID, f.ETag(), true); err != nil || !g.NotModified || g.Body != nil {
+		t.Fatalf("thumb 304: %+v %v", g, err)
+	}
+	// The original's tag does not match the preview.
+	if g, _ := e.svc.Image(ctx, viewer, v.ID, `"`+up.Image.SHA256+`"`, true); g.NotModified {
+		t.Fatal("original etag accepted for the preview")
+	}
+	// An image stored before previews existed falls back to the original.
+	delete(e.blobs.files, domain.ThumbKey(up.Image.SHA256))
+	g, err := e.svc.Image(ctx, viewer, v.ID, "", true)
+	if err != nil || g.Thumb || g.Body == nil {
+		t.Fatalf("fallback: %+v %v", g, err)
+	}
+	_ = g.Body.Close()
 }
 
 func TestDeleteAndGC(t *testing.T) {

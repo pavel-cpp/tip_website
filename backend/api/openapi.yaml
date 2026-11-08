@@ -1085,12 +1085,23 @@ paths:
     get:
       tags: [Projects]
       operationId: getProjectImage
-      summary: Download the original ticket image
-      description: "Served with `ETag` equal to the SHA-256 of the content and `Cache-Control: immutable`."
+      summary: Download the ticket image
+      description: |
+        Served with a strong `ETag` and `Cache-Control: immutable`. Without `size` the original image is
+        returned (`ETag` is the SHA-256 of the content). With `size=thumb` a JPEG whose long side is at most
+        480 px is returned (`ETag` is `<sha>-thumb`); it is generated at upload time, and a project whose
+        thumbnail is missing gets the original instead.
       x-required-permissions: [project.view]
       parameters:
         - $ref: "#/components/parameters/ProjectId"
         - $ref: "#/components/parameters/IfNoneMatch"
+        - name: size
+          in: query
+          required: false
+          description: "`thumb` selects the small preview used by project cards."
+          schema:
+            type: string
+            enum: [thumb]
       responses:
         "200":
           description: The original image.
@@ -2112,7 +2123,7 @@ components:
 
     Permission:
       type: object
-      required: [code, group, description]
+      required: [code, group, description, requires]
       properties:
         code:
           $ref: "#/components/schemas/PermissionCode"
@@ -2122,6 +2133,11 @@ components:
           example: Participants
         description:
           type: string
+        requires:
+          type: array
+          description: Permissions this one directly depends on (the server adds them to a role automatically).
+          items:
+            $ref: "#/components/schemas/PermissionCode"
     Role:
       type: object
       required: [id, name, description, isSystem, permissions, userCount]
@@ -2253,7 +2269,7 @@ components:
           type: string
     SystemStatus:
       type: object
-      required: [version, uptime, db, disk, retention, checks]
+      required: [version, uptime, db, disk, uploads, retention, checks]
       properties:
         version:
           type: string
@@ -2292,6 +2308,14 @@ components:
               type: integer
               format: int64
               description: Total bytes.
+        uploads:
+          type: object
+          required: [sizeBytes]
+          properties:
+            sizeBytes:
+              type: integer
+              format: int64
+              description: Total size of the stored project images (cached for a minute).
         retention:
           type: object
           required: [obsDays, auditDays]
@@ -2367,11 +2391,15 @@ components:
           $ref: "#/components/schemas/Placeholder"
     ProjectImage:
       type: object
-      required: [url, name, w, h, bytes]
+      required: [url, thumbUrl, name, w, h, bytes]
       properties:
         url:
           type: string
           example: /api/v1/projects/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/image?v=ab12
+        thumbUrl:
+          type: string
+          description: Small preview (JPEG, at most 480 px on the long side) for lists and cards.
+          example: /api/v1/projects/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/image?size=thumb&v=ab12
         name:
           type: string
           description: Original file name.
@@ -2387,10 +2415,13 @@ components:
           minimum: 1
     CardImage:
       type: object
-      required: [url]
+      required: [url, thumbUrl]
       properties:
         url:
           type: string
+        thumbUrl:
+          type: string
+          description: Small preview to show on the card instead of the full original.
     Project:
       type: object
       required: [id, title, status, version, image, placeholders, contributors, participantCount, createdAt]

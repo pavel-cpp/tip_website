@@ -40,6 +40,7 @@ type fakeProjects struct {
 	image    service.ImageFile
 	deleted  string
 	inm      string
+	thumb    bool
 	listOut  []service.ProjectView
 	gotActor domain.Actor
 }
@@ -73,8 +74,8 @@ func (f *fakeProjects) PutImage(_ context.Context, _ domain.Actor, _, name strin
 	f.putName, f.putData = name, data
 	return f.view, f.err
 }
-func (f *fakeProjects) Image(_ context.Context, _ domain.Actor, _, inm string) (service.ImageFile, error) {
-	f.inm = inm
+func (f *fakeProjects) Image(_ context.Context, _ domain.Actor, _, inm string, thumb bool) (service.ImageFile, error) {
+	f.inm, f.thumb = inm, thumb
 	return f.image, f.err
 }
 
@@ -396,6 +397,19 @@ func TestProjectsGetImage(t *testing.T) {
 	rec = call(h, "GET", "/projects/"+testProjectID+"/image", nil, map[string]string{"If-None-Match": etag})
 	if rec.Code != 304 || rec.Body.Len() != 0 || fake.inm != etag || rec.Header().Get("ETag") != etag {
 		t.Fatalf("304: %d %q inm=%q", rec.Code, rec.Body, fake.inm)
+	}
+
+	fake.image = service.ImageFile{
+		Meta: domain.ImageMeta{SHA256: testSHA, Mime: domain.MimeThumb}, Thumb: true,
+		Body: nopCloser{strings.NewReader("small")},
+	}
+	rec = call(h, "GET", "/projects/"+testProjectID+"/image?size=thumb", nil, nil)
+	if rec.Code != 200 || rec.Body.String() != "small" || !fake.thumb || rec.Header().Get("Content-Type") != "image/jpeg" ||
+		rec.Header().Get("ETag") != `"`+testSHA+`-thumb"` {
+		t.Fatalf("thumb: %d %q %v", rec.Code, rec.Body, rec.Header())
+	}
+	if rec := call(h, "GET", "/projects/"+testProjectID+"/image?size=huge", nil, nil); rec.Code != 400 {
+		t.Fatalf("bad size: %d", rec.Code)
 	}
 
 	fake.err = domain.ErrNotFound

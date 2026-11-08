@@ -43,7 +43,8 @@ type ProjectRepository interface {
 
 // BlobStore is the file store port (implemented by repository/blobfs).
 type BlobStore interface {
-	// Put stores data under sha; domain.ErrDiskLow when limits are exceeded.
+	// Put stores data under sha (or under domain.ThumbKey(sha) for a preview); domain.ErrDiskLow
+	// when limits are exceeded.
 	Put(ctx context.Context, sha string, data []byte) error
 	// Open returns a reader or domain.ErrNotFound.
 	Open(ctx context.Context, sha string) (io.ReadSeekCloser, error)
@@ -57,6 +58,8 @@ type BlobStore interface {
 // It returns domain.ErrUnsupportedMedia, domain.ErrTooLarge or domain.ErrImageInvalid.
 type ImageProcessor interface {
 	Normalize(data []byte) (out []byte, mime string, width, height int, err error)
+	// Thumbnail returns a JPEG preview of the (already normalized) image, see domain.ThumbSide.
+	Thumbnail(data []byte) ([]byte, error)
 }
 
 // ProjectAuditEntry is one auditable project action.

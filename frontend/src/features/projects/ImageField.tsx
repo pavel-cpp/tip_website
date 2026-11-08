@@ -24,7 +24,7 @@ export function ImageField({ image, progress, disabled, onFile, onReject }: Prop
   const { t, locale } = useI18n()
   const input = useRef<HTMLInputElement>(null)
   const [over, setOver] = useState(false)
-  const thumb = useAuthedImage(image?.url)
+  const thumb = useAuthedImage(image?.thumbUrl)
   const busy = progress !== null
 
   const take = (file: File | undefined) => {

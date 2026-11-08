@@ -108,6 +108,20 @@ type ImageMeta struct {
 	Bytes  int
 }
 
+// Thumbnail constants. The preview of an image is stored next to it under the key
+// ThumbKey(sha) and lives and dies with the original.
+const (
+	// BlobThumbSuffix is appended to an image hash to address its preview in the file store.
+	BlobThumbSuffix = ".thumb"
+	// ThumbSide is the longest side of a preview in pixels.
+	ThumbSide = 480
+	// MimeThumb is the media type of every preview.
+	MimeThumb = "image/jpeg"
+)
+
+// ThumbKey returns the file store key of the preview of the image with the given hash.
+func ThumbKey(sha string) string { return sha + BlobThumbSuffix }
+
 // allowedImageMimes lists the accepted source image types.
 var allowedImageMimes = []string{"image/png", "image/jpeg"}
 

@@ -342,6 +342,21 @@ func (e Theme) Valid() bool {
 	}
 }
 
+// Defines values for GetProjectImageParamsSize.
+const (
+	Thumb GetProjectImageParamsSize = "thumb"
+)
+
+// Valid indicates whether the value is a known member of the GetProjectImageParamsSize enum.
+func (e GetProjectImageParamsSize) Valid() bool {
+	switch e {
+	case Thumb:
+		return true
+	default:
+		return false
+	}
+}
+
 // AdminUser defines model for AdminUser.
 type AdminUser struct {
 	IsActive    bool       `json:"isActive"`
@@ -383,7 +398,9 @@ type AvatarUpload struct {
 
 // CardImage defines model for CardImage.
 type CardImage struct {
-	Url string `json:"url"`
+	// ThumbUrl Small preview to show on the card instead of the full original.
+	ThumbUrl string `json:"thumbUrl"`
+	Url      string `json:"url"`
 }
 
 // ChangePasswordRequest defines model for ChangePasswordRequest.
@@ -629,6 +646,9 @@ type Permission struct {
 
 	// Group Display group of the permission.
 	Group string `json:"group"`
+
+	// Requires Permissions this one directly depends on (the server adds them to a role automatically).
+	Requires []PermissionCode `json:"requires"`
 }
 
 // PermissionCode Permission from the catalog (`docs/02-architecture.md`, section 5.1).
@@ -710,8 +730,11 @@ type ProjectImage struct {
 
 	// Name Original file name.
 	Name string `json:"name"`
-	Url  string `json:"url"`
-	W    int    `json:"w"`
+
+	// ThumbUrl Small preview (JPEG, at most 480 px on the long side) for lists and cards.
+	ThumbUrl string `json:"thumbUrl"`
+	Url      string `json:"url"`
+	W        int    `json:"w"`
 }
 
 // ProjectResponse defines model for ProjectResponse.
@@ -800,6 +823,10 @@ type SystemStatus struct {
 		AuditDays int `json:"auditDays"`
 		ObsDays   int `json:"obsDays"`
 	} `json:"retention"`
+	Uploads struct {
+		// SizeBytes Total size of the stored project images (cached for a minute).
+		SizeBytes int64 `json:"sizeBytes"`
+	} `json:"uploads"`
 
 	// Uptime Process uptime in seconds.
 	Uptime  int    `json:"uptime"`
@@ -995,9 +1022,15 @@ type ListProjectsParams struct {
 
 // GetProjectImageParams defines parameters for GetProjectImage.
 type GetProjectImageParams struct {
+	// Size `thumb` selects the small preview used by project cards.
+	Size *GetProjectImageParamsSize `form:"size,omitempty" json:"size,omitempty"`
+
 	// IfNoneMatch ETag previously received; a match yields `304 Not Modified`.
 	IfNoneMatch *IfNoneMatch `json:"If-None-Match,omitempty"`
 }
+
+// GetProjectImageParamsSize defines parameters for GetProjectImage.
+type GetProjectImageParamsSize string
 
 // ListParticipantsParams defines parameters for ListParticipants.
 type ListParticipantsParams struct {
@@ -1350,7 +1383,7 @@ type ServerInterface interface {
 	// FinishProject Finish a project
 	// (POST /projects/{id}/finish)
 	FinishProject(w http.ResponseWriter, r *http.Request, id ProjectId)
-	// GetProjectImage Download the original ticket image
+	// GetProjectImage Download the ticket image
 	// (GET /projects/{id}/image)
 	GetProjectImage(w http.ResponseWriter, r *http.Request, id ProjectId, params GetProjectImageParams)
 	// PutProjectImage Upload the ticket image
@@ -1581,7 +1614,7 @@ func (_ Unimplemented) FinishProject(w http.ResponseWriter, r *http.Request, id 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// GetProjectImage Download the original ticket image
+// GetProjectImage Download the ticket image
 // (GET /projects/{id}/image)
 func (_ Unimplemented) GetProjectImage(w http.ResponseWriter, r *http.Request, id ProjectId, params GetProjectImageParams) {
 	w.WriteHeader(http.StatusNotImplemented)
@@ -2367,6 +2400,19 @@ func (siw *ServerInterfaceWrapper) GetProjectImage(w http.ResponseWriter, r *htt
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetProjectImageParams
+
+	// ------------- Optional query parameter "size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "size", r.URL.Query(), &params.Size, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "size", Err: err})
+		}
+		return
+	}
 
 	headers := r.Header
 

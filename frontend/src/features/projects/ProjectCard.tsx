@@ -52,7 +52,7 @@ interface ProjectCardProps {
 export function ProjectCard({ project, index, actions, onAction }: ProjectCardProps) {
   const { t } = useI18n()
   const [ref, seen] = useSeen()
-  const image = useAuthedImage(project.image?.url, seen)
+  const image = useAuthedImage(project.image?.thumbUrl, seen)
   const finished = project.status === 'finished'
 
   const items: MenuItem[] = actions.map((action, i) => ({

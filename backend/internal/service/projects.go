@@ -66,13 +66,21 @@ type UpdateProjectInput struct {
 // ImageFile is the result of an image download.
 type ImageFile struct {
 	Meta domain.ImageMeta
+	// Thumb is set when Body is the small preview rather than the original; Meta.Mime then
+	// describes the preview.
+	Thumb bool
 	// NotModified is set when the caller's ETag matched; Body is nil then.
 	NotModified bool
 	Body        io.ReadSeekCloser
 }
 
 // ETag returns the strong entity tag of the image (the content hash, quoted).
-func (f ImageFile) ETag() string { return `"` + f.Meta.SHA256 + `"` }
+func (f ImageFile) ETag() string {
+	if f.Thumb {
+		return `"` + f.Meta.SHA256 + `-thumb"`
+	}
+	return `"` + f.Meta.SHA256 + `"`
+}
 
 // hidden maps a finished project the actor may not see onto NOT_FOUND so its existence is not
 // disclosed.
@@ -386,7 +394,9 @@ func (s *ProjectService) dropBlobIfOrphan(ctx context.Context, sha string) {
 	if err != nil || n > 0 {
 		return
 	}
-	_ = s.d.Blobs.Delete(ctx, sha) // best effort: the GC removes what is left behind
+	// Best effort: the GC removes what is left behind.
+	_ = s.d.Blobs.Delete(ctx, domain.ThumbKey(sha))
+	_ = s.d.Blobs.Delete(ctx, sha)
 }
 
 // PutImage validates, normalizes and stores a replacement ticket image.
@@ -422,7 +432,14 @@ func (s *ProjectService) PutImage(ctx context.Context, a domain.Actor, id, filen
 	if err := meta.Validate(); err != nil {
 		return ProjectView{}, err
 	}
+	thumb, err := s.d.Images.Thumbnail(out)
+	if err != nil {
+		return ProjectView{}, err
+	}
 	if err := s.d.Blobs.Put(ctx, meta.SHA256, out); err != nil {
+		return ProjectView{}, err
+	}
+	if err := s.d.Blobs.Put(ctx, domain.ThumbKey(meta.SHA256), thumb); err != nil {
 		return ProjectView{}, err
 	}
 
@@ -503,9 +520,10 @@ func cleanFileName(name, mime string) string {
 	return name
 }
 
-// Image returns the original image of a project for download. When etag (the If-None-Match
-// value) matches the content hash, Body is nil and NotModified is set.
-func (s *ProjectService) Image(ctx context.Context, a domain.Actor, id, ifNoneMatch string) (ImageFile, error) {
+// Image returns the image of a project for download: the original, or the small preview when
+// thumb is set (the original again when the preview file is missing). When ifNoneMatch matches
+// the entity tag, Body is nil and NotModified is set.
+func (s *ProjectService) Image(ctx context.Context, a domain.Actor, id, ifNoneMatch string, thumb bool) (ImageFile, error) {
 	if err := a.Require(domain.PermProjectView); err != nil {
 		return ImageFile{}, err
 	}
@@ -520,8 +538,24 @@ func (s *ProjectService) Image(ctx context.Context, a domain.Actor, id, ifNoneMa
 		return ImageFile{}, domain.ErrNotFound
 	}
 	f := ImageFile{Meta: *p.Image}
+	if thumb {
+		// A missing preview (an image stored before previews existed) is served as the original.
+		if body, err := s.d.Blobs.Open(ctx, domain.ThumbKey(p.Image.SHA256)); err == nil {
+			f.Thumb, f.Body = true, body
+			f.Meta.Mime = domain.MimeThumb
+		} else if !errors.Is(err, domain.ErrNotFound) {
+			return ImageFile{}, err
+		}
+	}
 	if etagMatches(ifNoneMatch, f.ETag()) {
 		f.NotModified = true
+		if f.Body != nil {
+			_ = f.Body.Close()
+			f.Body = nil
+		}
+		return f, nil
+	}
+	if f.Body != nil {
 		return f, nil
 	}
 	body, err := s.d.Blobs.Open(ctx, p.Image.SHA256)

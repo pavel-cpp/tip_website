@@ -106,6 +106,7 @@ describe('permission cascade', () => {
           ? 'Participants'
           : 'Administration',
     description: code,
+    requires: [],
   }))
 
   function Harness() {
