@@ -88,8 +88,13 @@ services:
       UPLOADS_MAX_TOTAL_MB: ${UPLOADS_MAX_TOTAL_MB:-800}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
       AUDIT_MAX_ROWS: ${AUDIT_MAX_ROWS:-100000}
+      OBS_RETENTION_DAYS: ${OBS_RETENTION_DAYS:-3}
+      # The admin status page reads the backup metrics file and probes Loki.
+      BACKUP_METRICS_PATH: /backups/metrics/backup.prom
+      LOKI_URL: http://loki:3100
     volumes:
       - uploads:/data
+      - backups:/backups:ro
     networks: [internal]
     depends_on:
       postgres:
@@ -98,7 +103,6 @@ services:
         condition: service_healthy
     # Distroless has no shell or wget, so the probe is a subcommand of the
     # binary itself (GET /readyz on localhost).
-    # VERIFY: `tipd healthcheck` must be implemented by the backend stream.
     healthcheck:
       test: ["CMD", "/tipd", "healthcheck"]
       interval: 15s

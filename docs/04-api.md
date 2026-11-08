@@ -83,7 +83,7 @@
 
 | Метод и путь | Тело → ответ |
 |---|---|
-| `GET /admin/permissions` | → каталог прав `[{code, group, description}]` (для матрицы чекбоксов в админ-панели) |
+| `GET /admin/permissions` | → каталог прав `[{code, group, description, requires:[…]}]` (для матрицы чекбоксов; `requires` — прямые зависимости) |
 | `GET /admin/roles` | → `[Role]` (с числом пользователей) |
 | `POST /admin/roles` | `{name, description, permissions:[…]}` → `201 {role}`; сервер добавляет зависимые права (`participant.edit` ⇒ `participant.view` …) |
 | `GET /admin/roles/{id}` | → `{role}` + список пользователей роли |
@@ -103,7 +103,7 @@
 | Метод и путь | Тело → ответ |
 |---|---|
 | `GET /admin/audit?limit=50&before=<id>&projectId=&actor=` | (`audit.view`) → `{items:[…], next}` (в т.ч. `role.create/update/delete`, `user.roles.set` с добавленными/снятыми правами) |
-| `GET /admin/system` | (`system.view`) → `{version, uptime, db:{sizeBytes, pool}, disk:{free, total}, retention:{obsDays, auditDays}, checks:[{name, status, detail}]}` — «Состояние»: Postgres, Redis, диск, Loki, время последнего локального и внешнего бэкапа; проблемы показываются красной плашкой в админ-панели |
+| `GET /admin/system` | (`system.view`) → `{version, uptime, db:{sizeBytes, pool}, disk:{free, total}, retention:{obsDays, auditDays}, uploads:{sizeBytes}, checks:[{name, status, detail}]}` — «Состояние»: Postgres, Redis, диск, Loki, время последнего локального и внешнего бэкапа; проблемы показываются красной плашкой в админ-панели |
 
 ## 4. Проекты
 
@@ -114,7 +114,7 @@
 | `GET /projects/{id}` | `project.view` | → `{project}`; также регистрирует пользователя в `contributors` |
 | `PATCH /projects/{id}` | `project.update` | `{title?, placeholders?}` + `version` → `{project}` |
 | `PUT /projects/{id}/image` | `project.update` | `multipart` `file` → `{project}`; 413/415/422/507 при ошибках |
-| `GET /projects/{id}/image` | `project.view` | → оригинал, `ETag=sha256`, `immutable` |
+| `GET /projects/{id}/image` | `project.view` | → оригинал, `ETag=sha256`, `immutable`; `?size=thumb` — миниатюра 480 px JPEG (создаётся при загрузке, лежит рядом как `<sha>.thumb`); в JSON проекта поле `image.thumbUrl` — для карточек списка, чтобы не качать оригиналы |
 | `POST /projects/{id}/finish` · `/reopen` | `project.finish` | → `{project}` |
 | `DELETE /projects/{id}` | `project.delete` | → `204` (необратимо; аудит) |
 

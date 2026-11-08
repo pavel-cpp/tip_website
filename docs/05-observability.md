@@ -187,3 +187,9 @@ flowchart LR
 - [ ] Выход, деактивация и смена пароля делают токен недействительным немедленно (e2e-тест с Redis); поведение при остановке Redis соответствует `REDIS_FAIL_MODE` (login/refresh/logout — всегда 503); пересоздание Redis с пустыми данными разлогинивает всех один раз и ничего не ломает.
 - [ ] Контейнеры укладываются в лимиты памяти из раздела 6.0 (≈ 1,4 ГБ с ОС из 2 ГБ) под нагрузочным тестом, без свопинга.
 - [ ] Ранбук: «диск заполняется», «WS-клиенты отваливаются», «медленные запросы», «забыт пароль админа» (`tipd admin reset-password`).
+
+## 9. Статус реализации метрик
+
+Реализованы: `tip_http_*` (запросы, длительность, in-flight), `tip_db_*` (пул), `tip_build_info`, `tip_log_dropped_total`, `tip_ws_*` (соединения, комнаты, сообщения, медленные клиенты, конфликты локов), `tip_redis_up`, `tip_blacklist_checks_total`, `tip_token_refresh_total{result=ok|invalid|error}`, `tip_logins_total`.
+
+Ещё не реализованы (из раздела 3): `blacklist_check_duration_seconds`, `ws_locks_active`, `db_query_duration_seconds`, `http_response_bytes`, `participants_written_total`, `tickets_printed_total`, `uploads_total`, `rate_limited_total`, `uploads_bytes`, `data_dir_free_bytes`, `db_size_bytes`; у `token_refresh_total` пока нет меток `reuse_detected` и `idempotent_replay`. Дашборды и алерты в `deploy/grafana/` ссылаются на часть из них — они покажут «нет данных», пока метрики не добавлены (задача Фазы 6).
