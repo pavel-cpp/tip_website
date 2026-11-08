@@ -48,7 +48,8 @@ export function TempPasswordDialog({ password, userName, reset = false, onClose 
   return (
     <Modal
       open={password !== null}
-      onClose={onClose}
+      // Esc and a backdrop press must not lose the one-time secret: only the explicit button closes it.
+      onClose={() => undefined}
       title={t(reset ? 'admin.users.resetDoneTitle' : 'admin.users.createdTitle')}
       actions={
         <Button variant="primary" onClick={onClose}>

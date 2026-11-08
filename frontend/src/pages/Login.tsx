@@ -81,7 +81,8 @@ export default function Login() {
             spellCheck={false}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            data-autofocus
+            // biome-ignore lint/a11y/noAutofocus: the login field is the only thing to do on this screen
+            autoFocus
           />
           <PasswordInput
             label={t('auth.login.password')}
@@ -92,11 +93,14 @@ export default function Login() {
           />
         </div>
 
-        {error && (
-          <p className="form-error login-error" role="alert">
-            {error}
-          </p>
-        )}
+        {/* The slot keeps its height so showing an error does not shift the card. */}
+        <div className="login-error-slot">
+          {error && (
+            <p className="form-error login-error" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
 
         <Button
           type="submit"

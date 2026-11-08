@@ -80,8 +80,12 @@
   gap: var(--space-4);
   margin-top: var(--space-2);
 }
-.login-error {
+.login-error-slot {
+  min-height: 1.5em;
   margin-top: calc(-1 * var(--space-2));
+}
+.login-error {
+  margin: 0;
 }
 .login-submit {
   width: 100%;
