@@ -50,6 +50,10 @@ const paths = {
       <path d="M3 10h18M9 10v10" />
     </>
   ),
+  // Clear a row: an eraser.
+  eraser: (
+    <path d="M20 20H9l-5-5 9.500-9.500a2 2 0 012.800 0l4.200 4.200a2 2 0 010 2.800L13 20M7.500 11.500l6 6" />
+  ),
   chevronUp: <path d="M6 15l6-6 6 6" />,
   chevronDown: <path d="M6 9l6 6 6-6" />,
   // Selection mode: a checked box next to list lines.

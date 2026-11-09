@@ -38,10 +38,10 @@ test('N7: the search field keeps its width and the placeholder is not cut', asyn
   await ws.open(project.id)
   expect((await box(ws.search)).width).toBeGreaterThanOrEqual(180)
   expect(await ws.search.evaluate((el: HTMLInputElement) => el.scrollWidth <= el.clientWidth)).toBe(true)
-  // Selecting a row brings the delete button without squeezing the field below a usable width.
+  // Selecting a row brings the clear button without squeezing the field below a usable width.
   await ws.cell(ws.rows.first(), 'name').click()
   await ws.cell(ws.rows.nth(1), 'name').click({ modifiers: ['Shift'] })
-  await expect(ws.button('workspace.deleteSelected', { count: 2 })).toBeVisible()
+  await expect(ws.button('workspace.clearSelected', { count: 2 })).toBeVisible()
   expect((await box(ws.search)).width).toBeGreaterThanOrEqual(150)
   await page.setViewportSize({ width: 1440, height: 900 })
   await ws.cell(ws.rows.first(), 'name').click()

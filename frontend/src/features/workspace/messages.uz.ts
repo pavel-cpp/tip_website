@@ -40,9 +40,9 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.empty.hint': 'Boʻsh qatorlar qoʻshing yoki Excel jadvalini joylashtiring (Ctrl+V / Cmd+V)',
   'workspace.addRows': 'Qatorlar qoʻshish',
   'workspace.selectVisible': 'Koʻrinadigan barchasini tanlash',
-  'workspace.deleteSelected': {
-    one: '{count} ta qatorni oʻchirish',
-    other: '{count} ta qatorni oʻchirish',
+  'workspace.clearSelected': {
+    one: '{count} ta qatorni tozalash',
+    other: '{count} ta qatorni tozalash',
   },
   'workspace.rowCount': 'Qatorlar: {count} / {total}',
   'workspace.selectedCount': {
@@ -138,13 +138,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.row.failed': 'Saqlanmadi',
   'workspace.row.retry': 'Takrorlash',
   'workspace.row.retryLabel': '№ {number} qatorni saqlashni takrorlash',
-  'workspace.phone.suspicious':
-    'Telefon raqami notoʻgʻri koʻrinadi: faqat raqamlar, boʻshliq va + ( ) - mumkin',
-  'workspace.printWarn.title': 'Telefon raqamlarini tekshiring',
-  'workspace.printWarn.body':
-    'Tanlangan {total} ta chiptadan {count} tasida telefon raqami notoʻgʻri koʻrinadi. Baribir chop etilsinmi?',
-  'workspace.printWarn.continue': 'Baribir chop etish',
-  'workspace.printWarn.cancel': 'Qaytib tuzatish',
   'workspace.people.online': 'Hozir onlayn',
   'workspace.people.contributors': 'Loyiha hamkasblari',
   'workspace.import.confirmEmpty': 'Import qilish',
@@ -169,14 +162,14 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.sheet.next': 'Keyingi qator',
   'workspace.sheet.close': 'Yopish',
   'workspace.sheet.save': 'Saqlash',
-  'workspace.sheet.delete': 'Oʻchirish',
+  'workspace.sheet.clear': 'Qatorni tozalash',
   'workspace.sheet.saveFailed': 'Saqlab boʻlmadi. Kiritilgan maʼlumot formada qoldi, qayta urining.',
   'workspace.sheet.preview': 'Chiptani oldindan koʻrish',
   'workspace.bulk.label': 'Tanlangan qatorlar bilan amallar',
   'workspace.bulk.print': 'Chop etish',
   'workspace.bulk.copy': 'Nusxalash',
   'workspace.bulk.save': 'Saqlash',
-  'workspace.bulk.delete': 'Oʻchirish ({count})',
+  'workspace.bulk.clear': 'Tozalash ({count})',
 
   'workspace.more': 'Yana',
   'workspace.more.label': 'Boshqa amallar',
@@ -187,6 +180,19 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
     one: '{count} ta qator joylandi, № {number} dan boshlab',
     other: '{count} ta qator joylandi, № {number} dan boshlab',
   },
+  'workspace.toast.cleared': {
+    one: '{count} ta qator tozalandi',
+    other: '{count} ta qator tozalandi',
+  },
+  'workspace.toast.nothingToClear': 'Tanlangan qatorlar allaqachon boʻsh yoki hamkasblar band qilgan',
+  'workspace.toast.restoreSkipped': {
+    one: '{count} ta qatorni hamkasblar oʻzgartirgan, u tiklanmadi',
+    other: '{count} ta qatorni hamkasblar oʻzgartirgan, ular tiklanmadi',
+  },
+  'workspace.toast.pasteConflicts': {
+    one: '{count} ta qatorni hamkasblar oʻzgartirib ulgurgan, u ustiga yozilmadi',
+    other: '{count} ta qatorni hamkasblar oʻzgartirib ulgurgan, ular ustiga yozilmadi',
+  },
   'workspace.bulk.selectedOf': 'Tanlandi: {count} / {total}',
   'workspace.bulk.copyOne': 'Chiptadan nusxa olish (faqat bitta)',
   'workspace.bulk.saveMany': {
@@ -196,7 +202,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.card.label': '{number} {name} {phone}',
   'workspace.card.noName': 'ism kiritilmagan',
   'workspace.card.noPhone': 'telefon kiritilmagan',
-  'workspace.card.state.suspicious': 'raqam notoʻgʻri koʻrinadi',
   'workspace.card.state.failed': 'saqlanmadi',
   'workspace.card.state.unsent': 'yuborilmagan',
   'workspace.card.state.locked': '{name} tahrirlayapti',

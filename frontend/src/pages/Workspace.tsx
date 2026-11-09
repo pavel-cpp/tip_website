@@ -26,7 +26,6 @@ import {
   type ParticipantInput,
   participantKeys,
   useCreateParticipants,
-  useDeleteParticipants,
   useParticipants,
   useUpdateParticipant,
 } from '../features/workspace/api'
@@ -41,11 +40,11 @@ import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
 import { TicketPanel } from '../features/workspace/TicketPanel'
-import { countSuspiciousPhones, filterRows, planPaste, safeFilePart } from '../features/workspace/tableLogic'
+import { filterRows, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
 import { useNarrow } from '../features/workspace/useNarrow'
+import { useParticipantOps } from '../features/workspace/useParticipantOps'
 import { useTicketActions } from '../features/workspace/useTicketActions'
-import { useUndoableDelete } from '../features/workspace/useUndoableDelete'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
 import { readStorage, writeStorage } from '../lib/storage'
@@ -153,13 +152,11 @@ function WorkspaceView({ project }: { project: Project }) {
   const finished = project.status === 'finished'
   const canView = useCan('participant.view')
   const canEditPerm = useCan('participant.edit')
-  const canDeletePerm = useCan('participant.delete')
   const canPrint = useCan('participant.print')
   const canExport = useCan('participant.export')
   const canImportPerm = useCan('participant.import')
   const canSettings = useCan('project.update')
   const canEdit = canEditPerm && !finished
-  const canDelete = canDeletePerm && !finished
   const canImport = canImportPerm && !finished
 
   const narrow = useNarrow()
@@ -177,15 +174,7 @@ function WorkspaceView({ project }: { project: Project }) {
   // ---- data
   const list = useParticipants(project.id, canView)
   const allRows = list.data?.items
-  const del = useDeleteParticipants(project.id)
-  const undoable = useUndoableDelete({
-    commit: (ids) => del.mutateAsync(ids),
-    onFailed: (_ids, e) => toast.show({ message: errorText(e), tone: 'error' }),
-  })
-  const rows = useMemo(
-    () => (allRows ?? []).filter((r) => !undoable.hidden.has(r.id)),
-    [allRows, undoable.hidden],
-  )
+  const rows = useMemo(() => allRows ?? [], [allRows])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [currentId, setCurrentId] = useState<string | null>(null)
@@ -202,10 +191,6 @@ function WorkspaceView({ project }: { project: Project }) {
   const hasOnline = (rtSnapshot?.peers ?? []).some((p) => p.id !== rtSnapshot?.you)
   const remoteLeaving = useRealtime()?.leaving
   const remoteFresh = useRealtime()?.remoteFresh
-  const leavingAll = useMemo(
-    () => (remoteLeaving?.size ? new Set([...undoable.leaving, ...remoteLeaving]) : undoable.leaving),
-    [undoable.leaving, remoteLeaving],
-  )
   const people = useMemo(() => {
     const m = new Map<string, RowLockOwner>()
     for (const c of project.contributors) m.set(c.id, c)
@@ -393,47 +378,8 @@ function WorkspaceView({ project }: { project: Project }) {
     [create, toast, t, follow],
   )
 
-  // Pasted rows fill blank rows first (starting at the current one) and only the rest is appended.
-  const pasteRows = useCallback(
-    async (items: ParticipantInput[]) => {
-      const plan = planPaste(rows, items, currentId)
-      if (plan.fills.length === 0) {
-        void addRows({ items })
-        return
-      }
-      const results = await Promise.all(
-        plan.fills.map((f) => commit(f.row, { name: f.item.name, phone: f.item.phone })),
-      )
-      const ok = plan.fills.filter((_, i) => results[i]?.status === 'ok')
-      const first = ok[0]?.row
-      const filled = first ? { count: ok.length, firstId: first.id, firstNumber: first.number } : undefined
-      if (plan.rest.length > 0) {
-        await addRows({ items: plan.rest }, filled)
-        if (filled) follow(filled.firstId)
-      } else if (filled) {
-        follow(filled.firstId)
-        toast.show({
-          message: t('workspace.toast.pasted', { count: filled.count, number: filled.firstNumber }),
-          action: { label: t('workspace.toast.show'), onAction: () => follow(filled.firstId) },
-        })
-      }
-    },
-    [rows, currentId, addRows, commit, toast, t, follow],
-  )
-
-  const onDelete = useCallback(
-    (ids: string[]) => {
-      if (ids.length === 0 || !canDelete) return
-      const token = undoable.request(ids)
-      toast.show({
-        message: t('toast.rowsDeleted', { count: ids.length }),
-        action: { label: t('action.undo'), onAction: () => undoable.undo(token) },
-        duration: 5000,
-      })
-      setSelected(new Set())
-    },
-    [canDelete, undoable, toast, t],
-  )
+  // Clearing rows and pasting blocks of text: one batched request each, with Undo.
+  const ops = useParticipantOps({ projectId: project.id, follow })
 
   // ---- dialogs and layout
   const [addOpen, setAddOpen] = useState(false)
@@ -472,18 +418,13 @@ function WorkspaceView({ project }: { project: Project }) {
   }
 
   const printTargets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
-  const [printWarn, setPrintWarn] = useState<{ bad: number; total: number } | null>(null)
   const [printBig, setPrintBig] = useState<number | null>(null)
   // A huge batch takes minutes to render, so say so before the page turns into a progress bar.
   const startPrint = () => {
     if (printTargets.length > BIG_PRINT_THRESHOLD) setPrintBig(printTargets.length)
     else actions.print()
   }
-  const onPrint = () => {
-    const bad = countSuspiciousPhones(printTargets)
-    if (bad > 0) setPrintWarn({ bad, total: printTargets.length })
-    else startPrint()
-  }
+  const onPrint = startPrint
 
   const shortcut = copyShortcutLabel()
   const printLabel =
@@ -571,21 +512,20 @@ function WorkspaceView({ project }: { project: Project }) {
             ) : undefined
           }
           canEdit={canEdit}
-          canDelete={canDelete}
           selected={selected}
           onSelectedChange={setSelected}
           currentId={current?.id ?? null}
           onCurrentChange={setCurrentId}
-          leaving={leavingAll}
+          leaving={remoteLeaving}
           freshIds={freshAll}
           freshColor={remoteFresh?.size ? undefined : user?.color}
           presence={presence}
           people={people}
           onCommit={commit}
           onAdopt={adopt}
-          onDelete={onDelete}
+          onClear={(ids) => void ops.clear(ids)}
           onAddRows={() => setAddOpen(true)}
-          onPasteRows={(items) => void pasteRows(items)}
+          onPaste={(plan) => void ops.paste(plan)}
           revealId={reveal}
           focusNonce={focusNonce}
           unsentIds={down ? pending : NO_IDS}
@@ -687,14 +627,14 @@ function WorkspaceView({ project }: { project: Project }) {
             count={selectedRows.length}
             canPrint={canPrint}
             printBlocked={project.image ? undefined : t('workspace.noImageReason')}
-            canDelete={canDelete}
+            canClear={canEdit}
             copyReady={!!source && selectedRows.length === 1}
             saveReady={!!source}
             onPrint={onPrint}
             onCopy={actions.copy}
             onSave={() => void actions.save()}
-            onDelete={() => {
-              onDelete(selectedRows.map((r) => r.id))
+            onClear={() => {
+              void ops.clear(selectedRows.map((r) => r.id))
               setSelectMode(false)
             }}
             onDone={() => {
@@ -875,29 +815,6 @@ function WorkspaceView({ project }: { project: Project }) {
           void qc.invalidateQueries({ queryKey: ['projects', 'detail', project.id] })
         }}
       />
-      <Modal
-        open={printWarn !== null}
-        onClose={() => setPrintWarn(null)}
-        title={t('workspace.printWarn.title')}
-        actions={
-          <>
-            <Button variant="ghost" data-autofocus onClick={() => setPrintWarn(null)}>
-              {t('workspace.printWarn.cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setPrintWarn(null)
-                startPrint()
-              }}
-            >
-              {t('workspace.printWarn.continue')}
-            </Button>
-          </>
-        }
-      >
-        <p>{t('workspace.printWarn.body', { count: printWarn?.bad ?? 0, total: printWarn?.total ?? 0 })}</p>
-      </Modal>
       <Modal
         open={printBig !== null}
         onClose={() => setPrintBig(null)}

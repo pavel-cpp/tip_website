@@ -64,9 +64,9 @@
   flex: 1 1 200px;
   min-width: 160px;
 }
-/* The delete label is long ("Delete 12 rows"): it turns into an icon first, the add button keeps its text longer. */
+/* The clear label is long ("Clear 12 rows"): it turns into an icon first, the add button keeps its text longer. */
 @container pt-tools (max-width: 720px) {
-  .pt-tools .pt-delete .pt-btn-text {
+  .pt-tools .pt-clear .pt-btn-text {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -75,7 +75,7 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .pt-tools .pt-delete {
+  .pt-tools .pt-clear {
     padding: 0;
     width: var(--control-h-sm);
   }
@@ -410,10 +410,6 @@
 .pc-name[data-empty] {
   color: var(--text-faint);
 }
-.pc-phone[data-suspicious] {
-  text-decoration: underline wavy var(--danger);
-  text-underline-offset: 3px;
-}
 .pc-check {
   flex: none;
   display: grid;
@@ -621,9 +617,6 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.sheet-input[aria-invalid="true"] {
-  border-color: var(--danger);
-}
 .sheet-phone {
   font-family: var(--font-mono);
 }
@@ -635,11 +628,6 @@
   resize: none;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-.sheet-warn {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
 }
 .sheet-preview {
   display: flex;

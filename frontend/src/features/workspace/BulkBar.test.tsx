@@ -11,14 +11,14 @@ beforeAll(async () => {
 function setup(over: Partial<BulkBarProps> = {}) {
   const props: BulkBarProps = {
     count: 3,
-    canDelete: true,
+    canClear: true,
     canPrint: true,
     copyReady: false,
     saveReady: true,
     onPrint: vi.fn(),
     onCopy: vi.fn(),
     onSave: vi.fn(),
-    onDelete: vi.fn(),
+    onClear: vi.fn(),
     onDone: vi.fn(),
     ...over,
   }
@@ -27,14 +27,14 @@ function setup(over: Partial<BulkBarProps> = {}) {
 }
 
 describe('bulk bar', () => {
-  it('is one row: close, count, Print (N), delete and a menu', async () => {
+  it('is one row: close, count, Print (N), clear and a menu', async () => {
     const p = setup()
     const bar = screen.getByRole('toolbar', { name: 'Действия с выбранными строками' })
     expect(within(bar).getByRole('status')).toHaveTextContent('выбрано 3')
     await userEvent.setup().click(within(bar).getByRole('button', { name: 'Печать (3)' }))
     expect(p.onPrint).toHaveBeenCalled()
-    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Удалить (3)' }))
-    expect(p.onDelete).toHaveBeenCalled()
+    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Очистить (3)' }))
+    expect(p.onClear).toHaveBeenCalled()
     await userEvent.setup().click(within(bar).getByRole('button', { name: 'Готово' }))
     expect(p.onDone).toHaveBeenCalled()
   })
@@ -48,10 +48,10 @@ describe('bulk bar', () => {
     expect(p.onSave).toHaveBeenCalled()
   })
 
-  it('disables Print and Delete while nothing is selected', () => {
+  it('disables Print and Clear while nothing is selected', () => {
     setup({ count: 0 })
     expect(screen.getByRole('button', { name: 'Печать' })).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByRole('button', { name: 'Удалить (0)' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: 'Очистить (0)' })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('hides ticket actions without the print permission', () => {

@@ -97,7 +97,27 @@ function start(over: Partial<Server> = {}) {
       const base = server.rows.find((r) => r.id === id) as Participant
       return jsonRes(200, { item: { ...base, ...(body as object), version: base.version + 1 } })
     }
-    if (path === '/projects/p1/participants/delete') return jsonRes(200, { deleted: 1 })
+    if (path === '/projects/p1/participants/clear') {
+      const ids = (body as { ids: string[] }).ids
+      const items = server.rows
+        .filter((r) => ids.includes(r.id))
+        .map((r) => ({ ...r, name: '', phone: '', version: r.version + 1 }))
+      return jsonRes(200, { items })
+    }
+    if (path === '/projects/p1/participants/batch') {
+      const sent = (body as { items: Array<{ id: string; version: number; name?: string; phone?: string }> })
+        .items
+      const items = sent.map((it) => {
+        const base = server.rows.find((r) => r.id === it.id) as Participant
+        return {
+          ...base,
+          ...(it.name !== undefined && { name: it.name }),
+          ...(it.phone !== undefined && { phone: it.phone }),
+          version: it.version + 1,
+        }
+      })
+      return jsonRes(200, { items, conflicts: [] })
+    }
     return undefined
   })
 }
@@ -243,25 +263,53 @@ describe('workspace table', () => {
     expect(screen.getAllByRole('row', { selected: true })).toHaveLength(3)
   })
 
-  it('creates rows from a spreadsheet paste (name and phone, dropping the No. column)', async () => {
+  it('pastes a block over the rows below the cursor in one batch and creates rows only past the end', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    const user = userEvent.setup()
+    await user.click(cell('Nadezhda Sokolova'))
+    await user.paste('4\tAnn Lee\t+1 111\r\n5\tBob Roy\t+2 222\r\n7\tCy Fox\t+3 333\r\n')
+    await waitFor(() => expect(callLog(mock)).toContain('POST /projects/p1/participants'))
+    const post = (suffix: string) =>
+      mock.mock.calls.find(
+        ([url, init]) => String(url).endsWith(suffix) && (init as RequestInit)?.method === 'POST',
+      )
+    // Rows 2 and 3 are overwritten by one batched request; the third line becomes a new row.
+    expect(JSON.parse(bodyOf(post('/projects/p1/participants/batch')))).toEqual({
+      items: [
+        { id: 'id2', version: 1, name: 'Ann Lee', phone: '+1 111' },
+        { id: 'id3', version: 1, name: 'Bob Roy', phone: '+2 222' },
+      ],
+    })
+    expect(JSON.parse(bodyOf(post('/projects/p1/participants')))).toEqual({
+      items: [{ name: 'Cy Fox', phone: '+3 333' }],
+    })
+    expect(await screen.findByText('Ann Lee')).toBeInTheDocument()
+    expect(await screen.findByText('Cy Fox')).toBeInTheDocument()
+    expect(await screen.findByText('Вставлено 3 строки, начиная с № 2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Показать' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Отменить' })).toBeInTheDocument()
+  })
+
+  it('fills the first selected cells top to bottom, and one value fills every selected row', async () => {
     start()
     renderPage()
     await screen.findByText('Timur Rahimov')
     const user = userEvent.setup()
     await user.click(cell('Timur Rahimov'))
-    await user.paste('4\tAnn Lee\t+1 111\r\n5\tBob Roy\t+2 222\r\n')
-    await waitFor(() => expect(callLog(mock)).toContain('POST /projects/p1/participants'))
-    const call = mock.mock.calls.find(
-      ([url, init]) =>
-        String(url).endsWith('/projects/p1/participants') && (init as RequestInit)?.method === 'POST',
-    )
-    expect(JSON.parse(bodyOf(call))).toEqual({
-      items: [
-        { name: 'Ann Lee', phone: '+1 111' },
-        { name: 'Bob Roy', phone: '+2 222' },
-      ],
-    })
-    expect(await screen.findByText('Ann Lee')).toBeInTheDocument()
+    await user.keyboard('{Shift>}')
+    await user.click(cell('Otabek Karimov'))
+    await user.keyboard('{/Shift}')
+    await user.paste('Same')
+    await waitFor(() => expect(callLog(mock)).toContain('POST /projects/p1/participants/batch'))
+    const batch = mock.mock.calls.find(([url]) => String(url).endsWith('/participants/batch'))
+    expect(JSON.parse(bodyOf(batch)).items.map((i: { name: string }) => i.name)).toEqual([
+      'Same',
+      'Same',
+      'Same',
+    ])
+    expect(callLog(mock)).not.toContain('POST /projects/p1/participants')
   })
 
   it('adds N empty rows from the dialog', async () => {
@@ -354,45 +402,62 @@ describe('conflicts and locks', () => {
   })
 })
 
-describe('delete with undo', () => {
-  it('defers the request, cancels it on Undo, and sends it otherwise', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
+describe('clear with undo', () => {
+  it('empties the selected row at once, keeps the row and undoes through the batch endpoint', async () => {
     start()
     renderPage()
     await screen.findByText('Timur Rahimov')
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
 
     await user.click(cell('Nadezhda Sokolova'))
     await user.keyboard('{Delete}')
-    expect(await screen.findByText('Удалена 1 запись')).toBeInTheDocument()
-    await act(async () => void vi.advanceTimersByTime(400))
+    expect(await screen.findByText('Очищена 1 строка')).toBeInTheDocument()
     expect(screen.queryByText('Nadezhda Sokolova')).not.toBeInTheDocument()
-    expect(callLog(mock).some((c) => c.endsWith('/delete'))).toBe(false)
+    // The row and its number stay.
+    expect(document.querySelector('[data-row-id="id2"]')).not.toBeNull()
+    const clear = mock.mock.calls.find(([url]) => String(url).endsWith('/participants/clear'))
+    expect(JSON.parse(bodyOf(clear))).toEqual({ ids: ['id2'] })
+    expect(callLog(mock).some((c) => c.endsWith('/participants/delete'))).toBe(false)
 
     await user.click(screen.getByRole('button', { name: 'Отменить' }))
     expect(await screen.findByText('Nadezhda Sokolova')).toBeInTheDocument()
-    await act(async () => void vi.advanceTimersByTime(10_000))
-    expect(callLog(mock).some((c) => c.endsWith('/delete'))).toBe(false)
-
-    await user.click(cell('Otabek Karimov'))
-    await user.keyboard('{Delete}')
-    await act(async () => void vi.advanceTimersByTime(4000))
-    expect(callLog(mock).some((c) => c.endsWith('/delete'))).toBe(false)
-    await act(async () => void vi.advanceTimersByTime(2000))
-    await waitFor(() => expect(callLog(mock)).toContain('POST /projects/p1/participants/delete'))
-    const del = mock.mock.calls.find(([url]) => String(url).endsWith('/delete'))
-    expect(JSON.parse(bodyOf(del))).toEqual({ ids: ['id3'] })
+    const batch = mock.mock.calls.find(([url]) => String(url).endsWith('/participants/batch'))
+    expect(JSON.parse(bodyOf(batch))).toEqual({
+      items: [{ id: 'id2', version: 2, name: 'Nadezhda Sokolova', phone: '+7 903 771-08-56' }],
+    })
   })
 
-  it('does not delete without participant.delete', async () => {
-    start({ perms: ALL_PERMISSIONS.filter((p) => p !== 'participant.delete') })
+  it('clears every selected row from the toolbar button with one request', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('checkbox', { name: 'Выбрать все видимые' }))
+    await user.click(screen.getByRole('button', { name: 'Очистить 3 строки' }))
+    await waitFor(() => expect(screen.queryByText('Timur Rahimov')).not.toBeInTheDocument())
+    expect(screen.queryByText('Otabek Karimov')).not.toBeInTheDocument()
+    expect(callLog(mock).filter((c) => c.endsWith('/participants/clear'))).toHaveLength(1)
+    expect(document.querySelectorAll('[data-row-id]')).toHaveLength(3)
+  })
+
+  it('does not clear without participant.edit', async () => {
+    start({ perms: ALL_PERMISSIONS.filter((p) => p !== 'participant.edit') })
     renderPage()
     await screen.findByText('Timur Rahimov')
     const user = userEvent.setup()
     await user.click(cell('Timur Rahimov'))
     await user.keyboard('{Delete}')
     expect(screen.getByText('Timur Rahimov')).toBeInTheDocument()
-    expect(screen.queryByText('Удалена 1 запись')).not.toBeInTheDocument()
+    expect(callLog(mock).some((c) => c.endsWith('/participants/clear'))).toBe(false)
+  })
+
+  it('offers no way to delete a row', async () => {
+    start()
+    renderPage()
+    await screen.findByText('Timur Rahimov')
+    const user = userEvent.setup()
+    await user.click(cell('Timur Rahimov'))
+    expect(screen.queryByRole('button', { name: /Удалить/ })).not.toBeInTheDocument()
   })
 })
 
@@ -493,16 +558,16 @@ describe('empty and error states', () => {
 })
 
 describe('U1 workspace fixes', () => {
-  it('drops rows hidden by the search from the selection and the delete button', async () => {
+  it('drops rows hidden by the search from the selection and the clear button', async () => {
     start()
     renderPage()
     await screen.findByText('Timur Rahimov')
     const user = userEvent.setup()
     await user.click(cell('Timur Rahimov'))
-    expect(screen.getByRole('button', { name: /^Удалить/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Очистить/ })).toBeInTheDocument()
     await user.type(screen.getByRole('searchbox', { name: 'Поиск по участникам' }), 'zzz-no-match')
     expect(await screen.findByText('Ничего не найдено')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Удалить/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Очистить/ })).not.toBeInTheDocument()
   })
 
   it('keeps the typed value after a failed save and offers a retry', async () => {
@@ -528,18 +593,15 @@ describe('U1 workspace fixes', () => {
     expect(screen.getByText('Typed Name')).toBeInTheDocument()
   })
 
-  it('highlights a suspicious phone and warns before printing', async () => {
+  it('treats the phone as free text: no warning in the table and none before printing', async () => {
     start({ rows: [...ROWS, person(4, 'Bad Phone', 'abc')], withImage: true })
     renderPage()
     await screen.findByText('Bad Phone')
-    expect(within(cell('abc')).getByTitle(/Похоже на неверный номер/)).toBeInTheDocument()
+    expect(within(cell('abc')).queryByTitle(/неверный номер/)).not.toBeInTheDocument()
     const user = userEvent.setup()
     await user.click(cell('Bad Phone'))
     await user.click(screen.getByRole('button', { name: 'Печать (1)' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Проверьте номера телефонов' })
-    expect(within(dialog).getByText(/У 1 из 1 выбранных/)).toBeInTheDocument()
-    await user.click(within(dialog).getByRole('button', { name: 'Вернуться и исправить' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: 'Проверьте номера телефонов' })).not.toBeInTheDocument()
   })
 
   it('shows the selected count on the print button', async () => {

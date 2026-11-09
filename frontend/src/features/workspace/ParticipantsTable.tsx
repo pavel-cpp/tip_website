@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -17,7 +18,7 @@ import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
-import type { Participant, ParticipantInput } from './api'
+import type { Participant } from './api'
 import { WsIcon } from './icons'
 import { CARD_ESTIMATE, type CardHandlers, ParticipantCard } from './ParticipantCards'
 import {
@@ -41,13 +42,15 @@ import {
   columnValue,
   filterRows,
   isEditableCol,
-  isTabular,
+  isMultiCell,
   type Move,
   moveCell,
-  parsePaste,
+  type PastePlan,
+  planPaste,
   pruneSelection,
   selectAllVisible,
 } from './tableLogic'
+import { useDragSelect } from './useDragSelect'
 
 export type CommitResult =
   | { status: 'ok' }
@@ -61,7 +64,6 @@ export interface ParticipantsTableProps {
   /** Shown instead of the grid when loading failed. */
   error?: ReactNode
   canEdit: boolean
-  canDelete: boolean
   selected: ReadonlySet<string>
   onSelectedChange: (next: ReadonlySet<string>) => void
   currentId: string | null
@@ -77,9 +79,11 @@ export interface ParticipantsTableProps {
   onCommit: (row: Participant, patch: { name?: string; phone?: string }) => Promise<CommitResult>
   /** Replaces a row with the server's current copy ("take theirs"). */
   onAdopt: (row: Participant) => void
-  onDelete: (ids: string[]) => void
+  /** Empties name and phone of these rows (rows are never deleted). */
+  onClear: (ids: string[]) => void
   onAddRows: () => void
-  onPasteRows: (items: ParticipantInput[]) => void
+  /** A planned bulk paste over the selected cells; the page applies it with one batched request. */
+  onPaste: (plan: PastePlan) => void
   /** Scrolls this row into view when it changes (e.g. after adding rows at the end). */
   revealId?: string | null
   /** Bumped when the cursor should move to `revealId` and the grid take keyboard focus. */
@@ -111,7 +115,6 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     loading,
     error,
     canEdit,
-    canDelete,
     selected,
     onSelectedChange,
     currentId,
@@ -123,9 +126,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     people,
     onCommit,
     onAdopt,
-    onDelete,
+    onClear,
     onAddRows,
-    onPasteRows,
+    onPaste: applyPaste,
     revealId,
     focusNonce = 0,
     unsentIds = EMPTY_SET,
@@ -181,7 +184,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     }
   }, [])
 
-  // Keep the cursor inside the list when rows disappear (filter, deletion).
+  // Keep the cursor inside the list when rows disappear (a narrower search).
   useEffect(() => {
     setActive((a) =>
       a && visible.length > 0 && a.row >= visible.length ? { ...a, row: visible.length - 1 } : a,
@@ -377,14 +380,19 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     requestAnimationFrame(focusGrid)
   }, [edit, focusGrid])
 
+  /**
+   * Pastes a block of text over the selected cells. A single value into one cell is left to the caller
+   * (it is a plain cell edit); `fromEditor` pastes into an open input never take over a single value.
+   */
   const pasteRows = useCallback(
-    (text: string): boolean => {
-      if (!canEdit || !isTabular(text)) return false
-      const items = parsePaste(text)
-      if (items.length > 0) onPasteRows(items)
+    (text: string, fromEditor = false): boolean => {
+      if (!canEdit) return false
+      const several = !fromEditor && selectedVisible.length > 1
+      if (!isMultiCell(text) && !several) return false
+      applyPaste(planPaste(visible, selected, active?.row ?? null, active?.col ?? 1, text))
       return true
     },
-    [canEdit, onPasteRows],
+    [canEdit, applyPaste, visible, selected, active, selectedVisible.length],
   )
 
   const resolveTheirs = useCallback(
@@ -433,7 +441,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       onRetry: retry,
       onEditChange: (value) => setEdit((e) => (e ? { ...e, value } : e)),
       onEditPaste: (text) => {
-        if (!pasteRows(text)) return false
+        if (!pasteRows(text, true)) return false
         cancelEdit()
         return true
       },
@@ -538,7 +546,38 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     return { row: Number(el.dataset.row), col: Number(el.dataset.col) }
   }
 
+  // Mouse selection (click, Shift/Ctrl click, drag) is handled on pointerdown so a drag can extend it.
+  const drag = useDragSelect({ scroller, ids, rowHeight: ROW_HEIGHT, onSelect: onSelectedChange })
+
+  const onPointerDown = (e: PointerEvent) => {
+    lastPointer.current = e.pointerType
+    if (e.pointerType === 'touch' || e.button !== 0 || cards) return
+    const cell = cellFromEvent(e)
+    if (!cell || (e.target as HTMLElement).closest('.pt-input, .pt-conflict, .pt-retry')) return
+    const id = ids[cell.row]
+    if (id === undefined) return
+    const toggle = hasCommandKey(e) || e.metaKey || e.ctrlKey
+    if (edit && !(edit.id === id && edit.col === cell.col)) finishEdit(null, false)
+    const next = applyClick({ selected, anchor }, ids, cell.row, { shift: e.shiftKey, toggle })
+    onSelectedChange(next.selected)
+    setAnchor(next.anchor)
+    setActive(cell)
+    onCurrentChange(id)
+    const from = e.shiftKey && anchor !== null ? anchor : cell.row
+    drag.begin(e, from, toggle ? next.selected : new Set())
+  }
+
+  // Keeps the keyboard focus on the grid (not on the scroller that would take it) and stops the
+  // browser from starting a text selection while the user drags over cells.
+  const onMouseDown = (e: MouseEvent) => {
+    if (lastPointer.current === 'touch' || e.button !== 0 || !cellFromEvent(e)) return
+    if ((e.target as HTMLElement).closest('.pt-input, .pt-conflict, .pt-retry')) return
+    e.preventDefault()
+    focusGrid()
+  }
+
   const onClick = (e: MouseEvent) => {
+    if (drag.consumed()) return
     const cell = cellFromEvent(e)
     if (!cell || (e.target as HTMLElement).closest('.pt-input, .pt-conflict')) return
     const id = ids[cell.row]
@@ -632,9 +671,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         onSelectedChange(new Set(ids[cell.row] ? [ids[cell.row] as string] : []))
       return
     }
-    if (e.key === 'Delete' && canDelete && selectedVisible.length > 0) {
+    if (e.key === 'Delete' && canEdit && selectedVisible.length > 0) {
       e.preventDefault()
-      onDelete(selectedVisible)
+      onClear(selectedVisible)
       return
     }
     if (e.key === 'Backspace') {
@@ -783,17 +822,16 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
         )}
         {addButton}
         {/* Out of the layout while nothing is selected so it never squeezes the search field. */}
-        {!cards && canDelete && selectedVisible.length > 0 && (
+        {!cards && canEdit && selectedVisible.length > 0 && (
           <Button
             size="sm"
-            variant="danger"
-            className="pt-delete"
-            aria-label={t('workspace.deleteSelected', { count: selectedVisible.length })}
-            onClick={() => onDelete(selectedVisible)}
+            className="pt-clear"
+            aria-label={t('workspace.clearSelected', { count: selectedVisible.length })}
+            onClick={() => onClear(selectedVisible)}
           >
-            <Icon name="trash" size={16} />
+            <WsIcon name="eraser" size={16} />
             <span className="pt-btn-text">
-              {t('workspace.deleteSelected', { count: selectedVisible.length })}
+              {t('workspace.clearSelected', { count: selectedVisible.length })}
             </span>
           </Button>
         )}
@@ -891,9 +929,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           }}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
-          onPointerDown={(e) => {
-            lastPointer.current = e.pointerType
-          }}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
         >
           <div className="pt-head" role="row" aria-rowindex={1}>
             <div className="pt-hcell pt-hcell-num" role="columnheader">
@@ -982,13 +1019,13 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           position={sheetIndex + 1}
           total={ids.length}
           canEdit={canEdit}
-          canDelete={canDelete}
+          canClear={canEdit}
           hasPrev={prevId !== null}
           hasNext={nextId !== null}
           onPrev={() => prevId && pickCard(prevId) >= 0 && setSheetId(prevId)}
           onNext={() => nextId && pickCard(nextId) >= 0 && setSheetId(nextId)}
           onSave={saveSheet}
-          onDelete={(id) => onDelete([id])}
+          onClear={(id) => onClear([id])}
           onClose={() => setSheetId(null)}
           retained={sheetRow ? (failed.get(sheetRow.id) ?? null) : null}
           preview={sheetPreview}

@@ -59,24 +59,39 @@ test('paste spreadsheet rows', async ({ admin, signedIn, viewport }) => {
     .toBe(2)
 })
 
-test('delete with Undo restores the row, and a plain delete is committed', async ({ admin, signedIn }) => {
+test('clear with Undo empties the row, keeps its number, and Undo restores the text', async ({
+  admin,
+  signedIn,
+}) => {
   const { project } = await seeded(admin)
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
 
   await ws.selectRow(ws.rowByText('Alisher'))
-  await ws.deleteSelected(1)
-  await expect(ws.rows).toHaveCount(2)
-  await page.getByRole('button', { name: ws.t('action.undo') }).click()
+  await ws.clearSelected(1)
   await expect(ws.rows).toHaveCount(3)
+  await expect(ws.rowByText('Alisher')).toHaveCount(0)
+  await expect
+    .poll(async () => (await admin.participants(project.id)).filter((p) => p.name === '').length)
+    .toBe(1)
+  await page.getByRole('button', { name: ws.t('action.undo') }).click()
+  await expect(ws.rowByText('Alisher')).toHaveCount(1)
+  await expect
+    .poll(async () => (await admin.participants(project.id)).filter((p) => p.name === '').length)
+    .toBe(0)
   expect(await admin.participants(project.id)).toHaveLength(3)
 
+  // A plain clear stays: the row survives with its number and empty cells.
   await ws.selectRow(ws.rowByText('Alisher'))
-  await ws.deleteSelected(1)
-  await expect(ws.rows).toHaveCount(2)
-  // The server delete is sent once the undo window (5 s) has passed.
-  await expect.poll(async () => (await admin.participants(project.id)).length, { timeout: 15_000 }).toBe(2)
+  await ws.clearSelected(1)
+  await expect(ws.rows).toHaveCount(3)
+  await expect
+    .poll(
+      async () =>
+        (await admin.participants(project.id)).filter((p) => p.name === '' && p.phone === '').length,
+    )
+    .toBe(1)
 })
 
 test('export XLSX downloads a spreadsheet', async ({ admin, signedIn, viewport }) => {

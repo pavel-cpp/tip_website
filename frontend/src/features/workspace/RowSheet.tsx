@@ -17,7 +17,6 @@ import type { Participant } from './api'
 import { WsIcon } from './icons'
 import { shownValues } from './ParticipantCards'
 import type { FailedState, RowPatch } from './ParticipantRow'
-import { isSuspiciousPhone } from './tableLogic'
 
 export type SheetSaveResult = 'ok' | 'error' | 'closed'
 
@@ -31,14 +30,15 @@ export interface RowSheetProps {
   position: number
   total: number
   canEdit: boolean
-  canDelete: boolean
+  canClear: boolean
   hasPrev: boolean
   hasNext: boolean
   onPrev: () => void
   onNext: () => void
   /** Saves the changed fields. `closed` means the table already dismissed the sheet (conflict, lock). */
   onSave: (id: string, patch: RowPatch) => Promise<SheetSaveResult>
-  onDelete: (id: string) => void
+  /** Empties the row (name and phone); rows are never deleted. */
+  onClear: (id: string) => void
   onClose: () => void
   /** Ticket preview for the draft values. */
   preview?: (row: Participant) => ReactNode
@@ -152,13 +152,13 @@ function SheetForm({
   position,
   total,
   canEdit,
-  canDelete,
+  canClear,
   hasPrev,
   hasNext,
   onPrev,
   onNext,
   onSave,
-  onDelete,
+  onClear,
   onClose,
   preview,
   retained,
@@ -202,7 +202,6 @@ function SheetForm({
   if (name !== row.name) patch.name = name
   if (phone !== row.phone) patch.phone = phone
   const dirty = Object.keys(patch).length > 0
-  const suspicious = isSuspiciousPhone(phone)
   const draft = useDeferredValue({ ...row, name, phone })
 
   const save = async () => {
@@ -294,7 +293,6 @@ function SheetForm({
               autoComplete="off"
               spellCheck={false}
               enterKeyHint="done"
-              aria-invalid={suspicious || undefined}
               onChange={(e) => setPhone(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -303,12 +301,6 @@ function SheetForm({
                 }
               }}
             />
-            {suspicious && (
-              <span className="field-error sheet-warn">
-                <Icon name="alert" size={16} />
-                {t('workspace.phone.suspicious')}
-              </span>
-            )}
           </label>
           {failed && (
             <p className="field-error" role="alert">
@@ -325,16 +317,15 @@ function SheetForm({
       </div>
 
       <footer className="sheet-foot">
-        {canDelete && (
+        {canClear && (
           <Button
-            variant="danger"
             onClick={() => {
-              onDelete(row.id)
+              onClear(row.id)
               onClose()
             }}
           >
-            <Icon name="trash" size={18} />
-            {t('workspace.sheet.delete')}
+            <WsIcon name="eraser" size={18} />
+            {t('workspace.sheet.clear')}
           </Button>
         )}
         <span className="spacer" />
