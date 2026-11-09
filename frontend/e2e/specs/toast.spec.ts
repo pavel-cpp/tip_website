@@ -35,11 +35,13 @@ for (const locale of ['ru', 'uz'] as const) {
             return { l: r.left, r: r.right, t: r.top, sw: e.scrollWidth, cw: e.clientWidth }
           }),
         )
+        // The visible area: classic scrollbars (WebKit emulation) are not part of what fixed boxes centre on.
+        const room = await page.evaluate(() => window.visualViewport?.width ?? innerWidth)
         const bar = await page.locator('header.topbar').boundingBox()
         for (const b of boxes) {
-          expect(Math.abs((b.l + b.r) / 2 - width / 2)).toBeLessThanOrEqual(1)
+          expect(Math.abs((b.l + b.r) / 2 - room / 2)).toBeLessThanOrEqual(1)
           expect(b.l).toBeGreaterThanOrEqual(0)
-          expect(b.r).toBeLessThanOrEqual(width)
+          expect(b.r).toBeLessThanOrEqual(room)
           expect(b.sw).toBeLessThanOrEqual(b.cw + 1)
           expect(b.t).toBeGreaterThanOrEqual((bar?.y ?? 0) + (bar?.height ?? 0))
         }
