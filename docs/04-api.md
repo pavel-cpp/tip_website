@@ -111,7 +111,8 @@
 |---|---|---|
 | `GET /projects?status=active\|finished&q=` | `project.view` (`finished` — ещё `project.view_finished`) | → `[ProjectCard]`; без `project.view_finished` возвращаются только `active` |
 | `POST /projects` | `project.create` | `{title}` → `201 {project}` (плейсхолдеры по умолчанию) |
-| `GET /projects/{id}` | `project.view` | → `{project}`; также регистрирует пользователя в `contributors` |
+| `GET /projects/{id}` | `project.view` | → `{project}` (в нём `contributors` — кто правил раньше и `online` — кто сейчас подключён к проекту) |
+| `PUT /projects/order` | `project.update` | `{ids:[…]}` — общий для команды порядок проектов (last write wins; чужие и скрытые id игнорируются); запись аудита `project.reorder` |
 | `PATCH /projects/{id}` | `project.update` | `{title?, placeholders?}` + `version` → `{project}` |
 | `PUT /projects/{id}/image` | `project.update` | `multipart` `file` → `{project}`; 413/415/422/507 при ошибках |
 | `GET /projects/{id}/image` | `project.view` | → оригинал, `ETag=sha256`, `immutable`; `?size=thumb` — миниатюра 480 px JPEG (создаётся при загрузке, лежит рядом как `<sha>.thumb`); в JSON проекта поле `image.thumbUrl` — для карточек списка, чтобы не качать оригиналы |
@@ -128,7 +129,7 @@
     "name":   { "…": "…" }, "phone": { "…": "…" } },
   "contributors": [ { "id":"…", "displayName":"Азам Турсунов", "color":"#ffb84d", "avatarUrl":null } ],
   "participantCount": 12, "createdAt":"2026-11-01T09:00:00Z" }
-// ProjectCard = краткое подмножество (id, title, status, image.url, contributors, counts)
+// ProjectCard = краткое подмножество (id, title, status, image.url, online, counts); online — только пользователи, подключённые к проекту прямо сейчас
 ```
 
 ## 5. Участники
