@@ -83,7 +83,91 @@
   .rt-online-item,
   .rt-online-item[data-leaving],
   .rt-conn,
-  .rt-conn-dot {
+  .rt-conn-dot,
+  .rt-chip,
+  .rt-chip[data-following] .rt-chip-dot {
     animation: none;
+  }
+  .rt-online-btn {
+    transition: none;
+  }
+}
+
+/* Avatars in the top bar are buttons: a click jumps to that colleague's row. */
+.rt-online-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+/* The visible avatar stays small; the invisible part makes the target larger on touch screens. */
+.rt-online-btn::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+@media (pointer: coarse) {
+  .rt-online-btn::after {
+    inset: -8px;
+  }
+}
+@media (hover: hover) {
+  .rt-online-btn:hover {
+    transform: translateY(-1px);
+  }
+}
+.rt-online-btn[aria-pressed="true"] .avatar {
+  box-shadow:
+    0 0 0 2px var(--bg-elev),
+    0 0 0 4px var(--peer, var(--accent));
+}
+
+/* What the watched colleague is doing, with the Follow toggle. */
+.rt-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--peer, var(--border-strong));
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  font-size: var(--fs-sm);
+  animation: rt-fade var(--dur-base) var(--ease-standard) both;
+}
+.rt-chip-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--peer, var(--accent));
+}
+.rt-chip[data-following] .rt-chip-dot {
+  animation: rt-pulse 1.6s ease-in-out infinite;
+}
+.rt-chip .btn {
+  flex: none;
+}
+.rt-chip-text {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
+  .rt-chip {
+    align-self: stretch;
+  }
+  .rt-chip-text {
+    flex: 1 1 0;
   }
 }

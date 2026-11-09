@@ -12,6 +12,8 @@ import {
   type TicketValues,
 } from '../../lib/ticket'
 import type { Participant } from './api'
+import { blobToDataUri, buildHtml, buildTextList, type CopyImage, capRows } from './clipboardPayload'
+import type { BatchItem } from './folderSave'
 import { isIOS } from './platform'
 import { safeFilePart } from './tableLogic'
 
@@ -52,6 +54,56 @@ export async function copyTicket(source: TicketSource, participant: Participant)
   } catch {
     return { ok: false, blob }
   }
+}
+
+export type CopyManyResult = { ok: true; count: number; skipped: number } | { ok: false; skipped: number }
+
+/**
+ * Copies several tickets as ONE clipboard item holding text/html (every image inline, in order) and
+ * text/plain ("number name" lines). Browsers accept only a single image file per clipboard write
+ * (Chromium rejects several ClipboardItems), so HTML is the only way to put many images on it. Like
+ * `copyTicket`, the write starts synchronously inside the gesture; the HTML is a promise filled in
+ * while images render one at a time.
+ */
+export function copyTickets(
+  source: TicketSource,
+  rows: readonly Participant[],
+  onProgress?: SaveProgress,
+): Promise<CopyManyResult> {
+  const { rows: kept, skipped } = capRows(rows)
+  const html = (async () => {
+    const images: CopyImage[] = []
+    for (const [i, row] of kept.entries()) {
+      const blob = await renderTicketBlob(source.image, source.placeholders, ticketValues(row))
+      images.push({ number: row.number, name: row.name, dataUri: await blobToDataUri(blob) })
+      onProgress?.(i + 1, kept.length)
+      await nextTurn()
+    }
+    return new Blob([buildHtml(images)], { type: 'text/html' })
+  })()
+  html.catch(() => undefined)
+  const text = new Blob([buildTextList(kept)], { type: 'text/plain' })
+  return (async (): Promise<CopyManyResult> => {
+    try {
+      if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) throw new Error('unsupported')
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': html, 'text/plain': text })])
+      return { ok: true, count: kept.length, skipped }
+    } catch {
+      return { ok: false, skipped }
+    }
+  })()
+}
+
+/** Files of a batch: sanitized names and a lazy render, so only one canvas is alive at a time. */
+export function ticketBatch(
+  source: TicketSource,
+  rows: readonly Participant[],
+  projectTitle: string,
+): BatchItem[] {
+  return rows.map((row) => ({
+    name: ticketFileName(row, projectTitle),
+    render: () => renderTicketBlob(source.image, source.placeholders, ticketValues(row)),
+  }))
 }
 
 // ---------------------------------------------------------------- save

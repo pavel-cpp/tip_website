@@ -254,7 +254,7 @@ test.describe('phone', () => {
     expect(await box(toolbar)).toEqual(before.toolbar)
   })
 
-  test('the bottom toolbar keeps the Print (N) label and puts the rest into a menu (UX audit N5)', async ({
+  test('the bottom toolbar has Copy as the primary action, Save beside it and the rest in a menu (UX audit N5)', async ({
     admin,
     signedIn,
   }) => {
@@ -263,17 +263,13 @@ test.describe('phone', () => {
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
     const toolbar = page.getByRole('toolbar', { name: ws.t('workspace.toolbar') })
-    await expect(
-      toolbar.getByRole('button', { name: ws.t('workspace.print.withCount', { count: 1 }) }),
-    ).toBeVisible()
+    await expect(toolbar.getByRole('button', { name: ws.t('workspace.copy') })).toHaveClass(/btn-primary/)
+    await expect(toolbar.getByRole('button', { name: ws.t('workspace.save') })).toBeVisible()
     await toolbar.getByRole('button', { name: ws.t('workspace.more') }).tap()
-    for (const key of [
-      'workspace.copy',
-      'workspace.save',
-      'workspace.import',
-      'workspace.exportAs.xlsx',
-      'workspace.settings',
-    ] as const) {
+    await expect(
+      page.getByRole('menuitem', { name: ws.t('workspace.print.withCount', { count: 1 }) }),
+    ).toBeVisible()
+    for (const key of ['workspace.import', 'workspace.exportAs.xlsx', 'workspace.settings'] as const) {
       await expect(page.getByRole('menuitem', { name: ws.t(key) })).toBeVisible()
     }
   })

@@ -10,12 +10,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.tabs': 'Ish oʻrni boʻlimlari',
   'workspace.panel.picture': 'Rasm',
   'workspace.panel.db': 'Maʼlumotlar bazasi',
-  'workspace.panel.maximize': 'Panelni kengaytirish',
-  'workspace.panel.restore': 'Oddiy oʻlchamga qaytarish',
-  'workspace.panel.close': 'Panelni yopish',
-  'workspace.showPanel': 'Koʻrsatish: {name}',
-  'workspace.allClosed':
-    'Barcha panellar yopilgan. Kerakli panelni asboblar panelidagi tugma bilan qaytaring.',
 
   'workspace.print': 'Chop etish',
   'workspace.copy': 'Chiptadan nusxa olish',
@@ -25,6 +19,55 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.export.xlsx': 'Excel jadvali (XLSX)',
   'workspace.export.csv': 'CSV fayli',
   'workspace.settings': 'Loyiha sozlamalari',
+
+  'workspace.settings.short': 'Sozlamalar',
+  'workspace.copy.many': {
+    one: '{count} ta chiptadan nusxa olish',
+    other: '{count} ta chiptadan nusxa olish',
+  },
+  'workspace.copy.zip': 'ZIP saqlash',
+  'workspace.save.many': {
+    one: 'Saqlash: {count} ta chipta',
+    other: 'Saqlash: {count} ta chipta',
+  },
+  'workspace.save.hintZip': {
+    one: '{count} ta chipta ZIP arxivga saqlanadi',
+    other: '{count} ta chipta bitta ZIP arxivga saqlanadi',
+  },
+  'workspace.save.hintFolder': {
+    one: '{count} ta chipta tanlangan jildga alohida fayl sifatida yoziladi',
+    other: '{count} ta chipta tanlangan jildga alohida fayllar sifatida yoziladi',
+  },
+  'workspace.save.hintFiles': {
+    one: '{count} ta chipta alohida fayl sifatida yuklanadi',
+    other: '{count} ta chipta alohida fayllar sifatida navbat bilan yuklanadi',
+  },
+  'workspace.save.badgeFiles': 'Fayllar',
+  'workspace.save.options': 'Bir nechta chiptani qanday saqlash',
+  'workspace.save.asZip': 'Bitta ZIP arxivga',
+  'workspace.save.toFolder': 'Alohida, tanlangan jildga',
+  'workspace.save.toFiles': 'Alohida fayllar, navbat bilan',
+  'workspace.toast.copiedMany': {
+    one: '{count} ta chipta nusxalandi',
+    other: '{count} ta chipta nusxalandi',
+  },
+  'workspace.toast.copyCapped':
+    'Faqat dastlabki {cap} tasi nusxalandi, {skipped} tasi qoldirildi. Koʻproq uchun ZIP dan foydalaning.',
+  'workspace.toast.copyManyFailed':
+    'Brauzer bir nechta chiptani nusxalashga ruxsat bermadi. Ularni bitta ZIP arxivga saqlang.',
+  'workspace.toast.saveCancelled': 'Saqlash toʻxtatildi: {saved} / {total} tayyor',
+  'workspace.toast.saveSomeFailed': '{saved} / {total} saqlandi. Saqlanmadi: {names}',
+  'workspace.toast.noFolder':
+    'Bu brauzer jildga yozolmaydi: fayllar navbat bilan yuklanadi. Brauzer soʻrasa, bir nechta yuklashga ruxsat bering.',
+  'workspace.toast.noFolderZip':
+    'Bu brauzer jildga yozolmaydi, shuning uchun chiptalar bitta ZIP arxivga saqlandi.',
+  'workspace.progress.copy': 'Chiptalar vaqtinchalik xotira uchun tayyorlanmoqda',
+  'workspace.split.label': 'Panellar orasidagi chegara',
+  'workspace.split.hide': 'Panelni yashirish: {name}',
+  'workspace.split.show': 'Panelni koʻrsatish: {name}',
+  'workspace.ticket.who': '№ {number}',
+  'workspace.ticket.prev': 'Oldingi ishtirokchi',
+  'workspace.ticket.next': 'Keyingi ishtirokchi',
   'workspace.copyHint': 'Nusxalash —',
   'workspace.noRowsReason': 'Avval ishtirokchini tanlang',
   'workspace.noImageReason': 'Avval chipta rasmini yuklang',
@@ -67,8 +110,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.ticket.noImageHint': 'Administrator uni loyiha sozlamalarida yuklashi mumkin',
   'workspace.ticket.noRows': 'Chiptani koʻrish uchun ishtirokchini tanlang',
   'workspace.ticket.alt': 'Chipta № {number}, {name}',
-  'workspace.ticket.ratio':
-    'Rasm oʻlchami {size}. Chop etish uchun 7:4 nisbat yaxshi, aks holda chipta choʻziladi',
   'workspace.zoom.label': 'Masshtab',
   'workspace.zoom.in': 'Kattalashtirish',
   'workspace.zoom.out': 'Kichiklashtirish',

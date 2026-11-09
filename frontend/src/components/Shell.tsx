@@ -5,6 +5,7 @@ import { cx } from '../lib/cx'
 import { supportsViewTransitions } from '../lib/viewTransition'
 import { Skeleton } from './Skeleton'
 import { Topbar } from './Topbar'
+import { TopbarSlotProvider } from './TopbarSlot'
 
 /**
  * Keeps document.title equal to the page heading (WCAG 2.4.2). Pages render exactly one h1; reading it
@@ -58,19 +59,21 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
       >
         {t('a11y.skipToContent')}
       </a>
-      <Topbar minimal={minimal} />
-      {/* Without View Transitions each page fades in on its own (140-220 ms fallback). */}
-      <main
-        ref={main}
-        id="main"
-        tabIndex={-1}
-        key={pathname}
-        className={cx('page', !supportsViewTransitions() && 'route-enter')}
-      >
-        <Suspense fallback={<RouteFallback label={t('state.loading')} />}>
-          <Outlet />
-        </Suspense>
-      </main>
+      <TopbarSlotProvider>
+        <Topbar minimal={minimal} />
+        {/* Without View Transitions each page fades in on its own (140-220 ms fallback). */}
+        <main
+          ref={main}
+          id="main"
+          tabIndex={-1}
+          key={pathname}
+          className={cx('page', !supportsViewTransitions() && 'route-enter')}
+        >
+          <Suspense fallback={<RouteFallback label={t('state.loading')} />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </TopbarSlotProvider>
     </>
   )
 }

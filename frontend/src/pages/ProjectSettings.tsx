@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router'
+import { useLocation, useNavigate, useParams } from 'react-router'
 import { isApiError } from '../api/errors'
 import { AppLink } from '../components/AppLink'
 import { Button } from '../components/Button'
@@ -10,6 +10,7 @@ import { Panel } from '../components/Panel'
 import { Skeleton, useSkeleton } from '../components/Skeleton'
 import { Tabs } from '../components/Tabs'
 import { useToast } from '../components/Toast'
+import { useTopbarCrumbs } from '../components/TopbarSlot'
 import { type Project, useProject, useReplaceImage, useUpdateProject } from '../features/projects/api'
 import { buildPatch, type Draft, isDirty, normalizePlaceholder, toDraft } from '../features/projects/draft'
 import { ImageField } from '../features/projects/ImageField'
@@ -28,6 +29,17 @@ export default function ProjectSettings() {
   const { t } = useI18n()
   const { can } = usePermissions()
   const project = useProject(id)
+  // Path in the top bar (stream C); the page body below only keeps the heading.
+  const settingsT = t('settings.title')
+  useTopbarCrumbs(
+    project.data
+      ? [
+          { label: t('projects.title'), to: '/' },
+          { label: project.data.title, to: `/projects/${id}` },
+          { label: settingsT },
+        ]
+      : [],
+  )
   const showSkeleton = useSkeleton(project.isPending)
 
   if (!can('project.update')) {
@@ -81,6 +93,8 @@ function SettingsEditor({
   const readOnly = project.status === 'finished'
   const dirty = isDirty(draft, project)
   const guard = useUnsavedGuard(dirty)
+  const location = useLocation()
+  const navigateBack = useNavigate()
 
   const blobUrl = useAuthedImage(project.image?.url)
   const image = useImageElement(blobUrl)
@@ -136,20 +150,17 @@ function SettingsEditor({
   return (
     <>
       <div className="settings-head">
-        <nav className="breadcrumb" aria-label={t('settings.title')}>
-          <AppLink to="/" className="muted">
-            {t('projects.title')}
-          </AppLink>
-          <span className="muted" aria-hidden="true">
-            /
-          </span>
-          <h1 className="breadcrumb-current">{t('settings.title')}</h1>
-        </nav>
+        <h1 className="breadcrumb-current sr-only">{t('settings.title')}</h1>
         <Button
           variant="ghost"
           iconOnly
           aria-label={t('action.close')}
-          onClick={() => guard.requestLeave('/')}
+          onClick={() =>
+            // Back to where the user came from; a direct visit falls back to the workspace (stream C).
+            !dirty && location.key !== 'default'
+              ? void navigateBack(-1)
+              : guard.requestLeave(`/projects/${project.id}`)
+          }
         >
           <Icon name="x" />
         </Button>

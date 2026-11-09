@@ -65,10 +65,10 @@ test.describe('@realtime workspace collaboration', () => {
 
     // Presence: each sees the other's avatar in the header.
     await expect(
-      a.page.locator('.ws-head ul.rt-online').getByRole('img', { name: 'Bob Reviewer' }),
+      a.page.locator('header.topbar ul.rt-online').getByRole('img', { name: 'Bob Reviewer' }),
     ).toBeVisible()
     await expect(
-      b.page.locator('.ws-head ul.rt-online').getByRole('img', { name: 'Alice Editor' }),
+      b.page.locator('header.topbar ul.rt-online').getByRole('img', { name: 'Alice Editor' }),
     ).toBeVisible()
 
     // Alice starts editing row one: Bob sees the lock outline and the tooltip on hover.
