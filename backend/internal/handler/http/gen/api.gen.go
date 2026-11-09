@@ -705,7 +705,10 @@ type Project struct {
 	Id           openapi_types.UUID `json:"id"`
 
 	// Image Ticket image metadata, or null while no image is uploaded.
-	Image            *ProjectImage `json:"image"`
+	Image *ProjectImage `json:"image"`
+
+	// Online Users connected to the project's realtime room right now (one entry per user).
+	Online           []UserRef     `json:"online"`
 	ParticipantCount int           `json:"participantCount"`
 	Placeholders     Placeholders  `json:"placeholders"`
 	Status           ProjectStatus `json:"status"`
@@ -715,12 +718,14 @@ type Project struct {
 
 // ProjectCard Compact project subset for the project list.
 type ProjectCard struct {
-	Contributors     []UserRef          `json:"contributors"`
-	Id               openapi_types.UUID `json:"id"`
-	Image            *CardImage         `json:"image"`
-	ParticipantCount int                `json:"participantCount"`
-	Status           ProjectStatus      `json:"status"`
-	Title            string             `json:"title"`
+	Id    openapi_types.UUID `json:"id"`
+	Image *CardImage         `json:"image"`
+
+	// Online Users connected to the project's realtime room right now (one entry per user).
+	Online           []UserRef     `json:"online"`
+	ParticipantCount int           `json:"participantCount"`
+	Status           ProjectStatus `json:"status"`
+	Title            string        `json:"title"`
 }
 
 // ProjectImage defines model for ProjectImage.
@@ -757,6 +762,11 @@ type ReadinessResponse struct {
 
 // ReadinessResponseStatus defines model for ReadinessResponse.Status.
 type ReadinessResponseStatus string
+
+// ReorderProjectsRequest defines model for ReorderProjectsRequest.
+type ReorderProjectsRequest struct {
+	Ids []openapi_types.UUID `json:"ids"`
+}
 
 // Role defines model for Role.
 type Role struct {
@@ -1101,6 +1111,9 @@ type UpdateParticipantJSONRequestBody = UpdateParticipantRequest
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = CreateProjectRequest
 
+// ReorderProjectsJSONRequestBody defines body for ReorderProjects for application/json ContentType.
+type ReorderProjectsJSONRequestBody = ReorderProjectsRequest
+
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = UpdateProjectRequest
 
@@ -1377,6 +1390,9 @@ type ServerInterface interface {
 	// CreateProject Create a project
 	// (POST /projects)
 	CreateProject(w http.ResponseWriter, r *http.Request)
+	// ReorderProjects Set the team-wide order of projects
+	// (PUT /projects/order)
+	ReorderProjects(w http.ResponseWriter, r *http.Request)
 	// DeleteProject Delete a project
 	// (DELETE /projects/{id})
 	DeleteProject(w http.ResponseWriter, r *http.Request, id ProjectId)
@@ -1587,6 +1603,12 @@ func (_ Unimplemented) ListProjects(w http.ResponseWriter, r *http.Request, para
 // CreateProject Create a project
 // (POST /projects)
 func (_ Unimplemented) CreateProject(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ReorderProjects Set the team-wide order of projects
+// (PUT /projects/order)
+func (_ Unimplemented) ReorderProjects(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2243,6 +2265,20 @@ func (siw *ServerInterfaceWrapper) CreateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateProject(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReorderProjects operation middleware
+func (siw *ServerInterfaceWrapper) ReorderProjects(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReorderProjects(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2986,6 +3022,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects", wrapper.CreateProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/order", wrapper.ReorderProjects)
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/projects/{id}", wrapper.DeleteProject)

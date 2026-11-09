@@ -20,7 +20,7 @@ const card = (id: string, title: string, status: 'active' | 'finished' = 'active
   title,
   status,
   image: null,
-  contributors: [],
+  online: [],
   participantCount: 0,
 })
 

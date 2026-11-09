@@ -23,6 +23,7 @@ var (
 	_ service.ParticipantLocks    = (*memory.Hub)(nil)
 	_ service.ParticipantNotifier = (*memory.Hub)(nil)
 	_ service.ProjectEvents       = (*memory.Hub)(nil)
+	_ service.ProjectPresence     = (*memory.Hub)(nil)
 	_ service.CollabRooms         = (*memory.Hub)(nil)
 	_ service.ProjectReader       = (*postgres.ProjectRepo)(nil)
 	_ service.AuditRecorder       = (*service.Audit)(nil)

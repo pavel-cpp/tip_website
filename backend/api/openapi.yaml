@@ -911,6 +911,36 @@ paths:
           $ref: "#/components/responses/AuthUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
+  /projects/order:
+    put:
+      tags: [Projects]
+      operationId: reorderProjects
+      summary: Set the team-wide order of projects
+      description: |
+        `ids` lists the projects in the wanted order, usually every project the caller can see. The
+        listed projects take over, in that order, the positions they occupy now; unknown, hidden and
+        duplicate ids are ignored, projects not listed keep their place. Last write wins. The list
+        endpoint returns projects in this order and new projects go first.
+      x-required-permissions: [project.update]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderProjectsRequest"
+      responses:
+        "204":
+          description: The order was saved.
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /projects/{id}:
     get:
       tags: [Projects]
@@ -2443,7 +2473,7 @@ components:
           description: Small preview to show on the card instead of the full original.
     Project:
       type: object
-      required: [id, title, status, version, image, placeholders, contributors, participantCount, createdAt]
+      required: [id, title, status, version, image, placeholders, contributors, online, participantCount, createdAt]
       properties:
         id:
           type: string
@@ -2468,6 +2498,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UserRef"
+        online:
+          description: Users connected to the project's realtime room right now (one entry per user).
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRef"
         participantCount:
           type: integer
           minimum: 0
@@ -2477,7 +2512,7 @@ components:
     ProjectCard:
       type: object
       description: Compact project subset for the project list.
-      required: [id, title, status, image, contributors, participantCount]
+      required: [id, title, status, image, online, participantCount]
       properties:
         id:
           type: string
@@ -2492,13 +2527,24 @@ components:
           oneOf:
             - $ref: "#/components/schemas/CardImage"
             - type: "null"
-        contributors:
+        online:
+          description: Users connected to the project's realtime room right now (one entry per user).
           type: array
           items:
             $ref: "#/components/schemas/UserRef"
         participantCount:
           type: integer
           minimum: 0
+    ReorderProjectsRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          maxItems: 2000
+          items:
+            type: string
+            format: uuid
     ProjectResponse:
       type: object
       required: [project]

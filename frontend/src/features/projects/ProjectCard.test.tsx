@@ -13,7 +13,7 @@ const project = (patch: Partial<ProjectCardData>): ProjectCardData =>
     title: 'Tashkent City Mall',
     status: 'active',
     participantCount: 5000,
-    contributors: [],
+    online: [],
     image: null,
     ...patch,
   }) as ProjectCardData

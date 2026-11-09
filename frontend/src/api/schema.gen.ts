@@ -408,6 +408,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the team-wide order of projects
+         * @description `ids` lists the projects in the wanted order, usually every project the caller can see. The
+         *     listed projects take over, in that order, the positions they occupy now; unknown, hidden and
+         *     duplicate ids are ignored, projects not listed keep their place. Last write wins. The list
+         *     endpoint returns projects in this order and new projects go first.
+         */
+        put: operations["reorderProjects"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}": {
         parameters: {
             query?: never;
@@ -1083,6 +1106,8 @@ export interface components {
             image: components["schemas"]["ProjectImage"] | null;
             placeholders: components["schemas"]["Placeholders"];
             contributors: components["schemas"]["UserRef"][];
+            /** @description Users connected to the project's realtime room right now (one entry per user). */
+            online: components["schemas"]["UserRef"][];
             participantCount: number;
             /** Format: date-time */
             createdAt: string;
@@ -1094,8 +1119,12 @@ export interface components {
             title: string;
             status: components["schemas"]["ProjectStatus"];
             image: components["schemas"]["CardImage"] | null;
-            contributors: components["schemas"]["UserRef"][];
+            /** @description Users connected to the project's realtime room right now (one entry per user). */
+            online: components["schemas"]["UserRef"][];
             participantCount: number;
+        };
+        ReorderProjectsRequest: {
+            ids: string[];
         };
         ProjectResponse: {
             project: components["schemas"]["Project"];
@@ -2321,6 +2350,33 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
+        };
+    };
+    reorderProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderProjectsRequest"];
+            };
+        };
+        responses: {
+            /** @description The order was saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthenticated"];

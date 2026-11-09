@@ -187,7 +187,7 @@ func (a *app) wire(ctx context.Context) error {
 	})
 	projectsSvc := service.NewProjectService(service.ProjectsDeps{
 		Repo: projectRepo, Blobs: blobs, Images: img, Audit: projectAudit{auditSvc}, Events: a.hub,
-		Tx: tx, Clock: clk, IDs: a.ids,
+		Presence: a.hub, Tx: tx, Clock: clk, IDs: a.ids,
 	})
 	participantsSvc := service.NewParticipants(service.ParticipantsDeps{
 		Repo: participantRepo, Projects: projectRepo, Locks: a.hub, Notify: a.hub, Audit: auditSvc,

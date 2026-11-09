@@ -15,10 +15,17 @@ export const projectKeys = {
   detail: (id: string) => ['projects', 'detail', id] as const,
 }
 
-/** One list request: the server already hides finished projects without project.view_finished. */
-export function useProjects() {
+/** How often the list is refetched to keep the "online now" avatars fresh (only while the tab is visible). */
+export const PRESENCE_REFETCH_MS = 12_000
+
+/**
+ * One list request: the server already hides finished projects without project.view_finished.
+ * It refetches on an interval for presence; `paused` stops that during a drag so cards do not jump.
+ */
+export function useProjects(paused = false) {
   return useQuery({
     queryKey: projectKeys.list,
+    refetchInterval: paused ? false : PRESENCE_REFETCH_MS,
     queryFn: ({ signal }) => api.get<ProjectCardData[]>('/projects', { signal }),
   })
 }
@@ -54,6 +61,32 @@ export function useSetProjectStatus() {
     },
     onError: (_e, _v, ctx) => {
       if (ctx?.previous) qc.setQueryData(projectKeys.list, ctx.previous)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: projectKeys.list }),
+  })
+}
+
+export interface MoveProjectInput {
+  /** Every visible project id in the wanted order, or null when only the status changes. */
+  ids: string[] | null
+  /** The project that crosses to the other section, if any. */
+  status?: { id: string; status: ProjectStatus }
+}
+
+/**
+ * Drag and drop result: optionally finish/reopen one project, then save the team order. The page
+ * shows the new arrangement from its own state while this runs and drops it afterwards, so a failure
+ * simply falls back to the server list.
+ */
+export function useMoveProject() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ ids, status }: MoveProjectInput) => {
+      if (status)
+        await api.post<ProjectResponse>(
+          `/projects/${status.id}/${status.status === 'finished' ? 'finish' : 'reopen'}`,
+        )
+      if (ids) await api.put<void>('/projects/order', { ids })
     },
     onSettled: () => qc.invalidateQueries({ queryKey: projectKeys.list }),
   })

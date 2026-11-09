@@ -37,6 +37,7 @@ const project = (over: Partial<Project> = {}): Project => ({
   },
   placeholders: { number: ph(120), name: ph(340), phone: ph(600) },
   contributors: [],
+  online: [],
   participantCount: 0,
   createdAt: '2026-11-01T09:00:00Z',
   ...over,

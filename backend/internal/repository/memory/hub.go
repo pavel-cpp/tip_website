@@ -164,6 +164,30 @@ func (h *Hub) Publish(projectID string, e domain.Event) {
 	r.do(func(r *room) { r.broadcast(e, nil) })
 }
 
+// Online returns the users connected to each of the projects, one entry per user and sorted by
+// id. Projects with nobody connected are absent from the result.
+func (h *Hub) Online(ctx context.Context, projectIDs []string) map[string][]domain.Peer {
+	out := make(map[string][]domain.Peer)
+	for _, id := range projectIDs {
+		r := h.room(id)
+		if r == nil {
+			continue
+		}
+		reply := make(chan []domain.Peer, 1)
+		r.do(func(r *room) { reply <- r.peers() })
+		select {
+		case peers := <-reply:
+			if len(peers) > 0 {
+				out[id] = peers
+			}
+		case <-r.done:
+		case <-ctx.Done():
+			return out
+		}
+	}
+	return out
+}
+
 // BroadcastReauth asks the connections of userID (all users when empty) to
 // present a fresh token, for example after the permission epoch grew.
 func (h *Hub) BroadcastReauth(userID string) {

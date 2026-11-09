@@ -21,4 +21,7 @@
   if (reduce) root.setAttribute('data-reduce-motion', 'true')
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', light ? '#f4f5f8' : '#131418')
+  // Explicit app theme picks a fixed icon; 'system' keeps the OS-adaptive favicon.svg.
+  const icon = document.querySelector('link[rel="icon"]')
+  if (icon) icon.setAttribute('href', mode === 'system' ? '/favicon.svg' : `/favicon-${theme}.svg`)
 })()

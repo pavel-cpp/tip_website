@@ -7,18 +7,28 @@ import { Skeleton, useSkeleton } from '../components/Skeleton'
 import { useToast } from '../components/Toast'
 import {
   type ProjectCardData,
+  type ProjectStatus,
   useCreateProject,
   useDeleteProject,
+  useMoveProject,
   useProjects,
   useSetProjectStatus,
 } from '../features/projects/api'
-import { type ProjectAction, projectActions, splitProjects } from '../features/projects/logic'
+import {
+  type ProjectAction,
+  type ProjectSections,
+  projectActions,
+  splitProjects,
+} from '../features/projects/logic'
+import { moveProject, orderedIds } from '../features/projects/order'
 import { ProjectCard } from '../features/projects/ProjectCard'
 import { CreateProjectDialog, DeleteProjectDialog } from '../features/projects/ProjectDialogs'
 import { useFlip } from '../features/projects/useFlip'
 import { usePermissions } from '../features/projects/usePermissions'
+import { useProjectDnd } from '../features/projects/useProjectDnd'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
+import { cx } from '../lib/cx'
 import '../features/projects/projects.css'
 
 export default function Projects() {
@@ -26,26 +36,88 @@ export default function Projects() {
   const { can } = usePermissions()
   const navigate = useNavigate()
   const toast = useToast()
-  const projects = useProjects()
+  const [pending, setPending] = useState<ProjectSections | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const projects = useProjects(dragging || pending !== null)
   const create = useCreateProject()
   const setStatus = useSetProjectStatus()
   const remove = useDeleteProject()
+  const move = useMoveProject()
 
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<ProjectCardData | null>(null)
   const grid = useRef<HTMLDivElement>(null)
-  useFlip(grid)
+  const flip = useFlip(grid, dragging)
 
   const showSkeleton = useSkeleton(projects.isPending)
   const canCreate = can('project.create')
-  const sections = splitProjects(projects.data ?? [], query, can('project.view_finished'))
+  const searching = query.trim() !== ''
+  const canReorder = can('project.update')
+  const canMove = can('project.finish') && can('project.view_finished')
+  const base = splitProjects(projects.data ?? [], query, can('project.view_finished'))
+  // While a move is being saved the page shows its own arrangement; it falls back to the server list
+  // when the request settles, which is also the rollback on error.
+  const sections = pending && !searching ? pending : base
+
+  const commitMove = (next: ProjectSections, project: ProjectCardData, to: ProjectStatus) => {
+    const crossing = project.status !== to
+    const ids = canReorder ? orderedIds(next) : null
+    if (!crossing && !ids) return
+    setPending(next)
+    move.mutate(
+      { ids, status: crossing ? { id: project.id, status: to } : undefined },
+      {
+        onSuccess: () => {
+          if (crossing) {
+            toast.show({
+              message: t(to === 'finished' ? 'projects.toast.finished' : 'projects.toast.reopened', {
+                title: project.title,
+              }),
+            })
+          }
+        },
+        onError: (e) => toast.show({ message: errorText(e), tone: 'error' }),
+        onSettled: () => setPending(null),
+      },
+    )
+  }
+
+  const dragEnabled = !searching && (canReorder || canMove) && projects.isSuccess
+  const dnd = useProjectDnd({
+    enabled: dragEnabled,
+    canReorder,
+    canMove,
+    root: grid,
+    onDrop: (id, _from, to, index, rect) => {
+      const project = [...sections.active, ...sections.finished].find((p) => p.id === id)
+      const next = project && moveProject(sections, id, to, index)
+      if (!project || !next) return false
+      flip.release(id, rect)
+      commitMove(next, project, to)
+      return true
+    },
+  })
+  const isDragging = dnd.dragId !== null
+  if (isDragging !== dragging) setDragging(isDragging)
+  const dragFrom = [...sections.active, ...sections.finished].find((p) => p.id === dnd.dragId)?.status
 
   const onAction = (action: ProjectAction, project: ProjectCardData) => {
     if (action === 'settings') {
       void navigate(`/projects/${project.id}/settings`, { viewTransition: true })
     } else if (action === 'delete') {
       setDeleting(project)
+    } else if (action === 'moveUp' || action === 'moveDown') {
+      const list = project.status === 'active' ? sections.active : sections.finished
+      const at = list.findIndex((p) => p.id === project.id)
+      const to = action === 'moveUp' ? at - 1 : at + 1
+      const next = moveProject(sections, project.id, project.status, to)
+      if (!next) return
+      commitMove(next, project, project.status)
+      // Announced to screen readers through the toast live region: the menu has no other feedback.
+      toast.show({
+        message: t('projects.toast.moved', { title: project.title, position: to + 1, count: list.length }),
+      })
     } else {
       const status = action === 'finish' ? 'finished' : 'active'
       setStatus.mutate(
@@ -64,12 +136,20 @@ export default function Projects() {
   }
 
   const total = sections.active.length + sections.finished.length
-  const searching = query.trim() !== ''
 
   const renderSection = (key: 'active' | 'finished', list: ProjectCardData[], extra?: React.ReactNode) => {
-    if (list.length === 0 && !extra) return null
+    const dropReady = isDragging && (key === dragFrom || canMove)
+    if (list.length === 0 && !extra && !dropReady) return null
     return (
-      <section className="project-section" aria-labelledby={`sec-${key}`}>
+      <section
+        className={cx(
+          'project-section',
+          dropReady && 'is-drop-ready',
+          dnd.target?.status === key && 'is-drop-target',
+        )}
+        data-drop-section={key}
+        aria-labelledby={`sec-${key}`}
+      >
         <h2
           id={`sec-${key}`}
           className={key === 'finished' ? 'project-section-title muted' : 'project-section-title'}
@@ -82,11 +162,22 @@ export default function Projects() {
               key={p.id}
               project={p}
               index={i}
-              actions={projectActions(can, p.status)}
+              actions={projectActions(
+                can,
+                p.status,
+                searching ? undefined : { index: i, count: list.length },
+              )}
               onAction={onAction}
+              dragProps={dragEnabled ? dnd.cardProps(p.id, p.status) : undefined}
+              dragging={dnd.dragId === p.id}
             />
           ))}
           {extra}
+          {list.length === 0 && dropReady && (
+            <div className="project-drop-empty">
+              {t(key === 'active' ? 'projects.drop.active' : 'projects.drop.finished')}
+            </div>
+          )}
         </div>
       </section>
     )
@@ -171,6 +262,16 @@ export default function Projects() {
         />
       </div>
       <div ref={grid}>{body}</div>
+      {dnd.target?.line && (
+        <div
+          className="drop-line"
+          aria-hidden="true"
+          style={{
+            transform: `translate3d(${dnd.target.line.x}px, ${dnd.target.line.y}px, 0)`,
+            height: dnd.target.line.h,
+          }}
+        />
+      )}
 
       <CreateProjectDialog
         open={creating}

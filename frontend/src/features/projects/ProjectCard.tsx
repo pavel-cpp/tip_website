@@ -13,9 +13,24 @@ import './projects.css'
 
 const ACTION_ICON: Record<ProjectAction, IconName> = {
   settings: 'pencil',
+  moveUp: 'list',
+  moveDown: 'list',
   finish: 'check',
   reopen: 'check',
   delete: 'trash',
+}
+
+/** Online avatars shown on a card before the "+N" chip. */
+export const ONLINE_SHOWN = 3
+
+/**
+ * Width of the avatars + menu cluster on the footer row (px), so the caption on the left never runs
+ * under it. Mirrors the CSS: 32px button, 6px dot, 20px per overlapping 26px avatar plus 6px, 8px gaps.
+ */
+export function asideWidth(onlineCount: number, hasMenu: boolean): number {
+  const chips = Math.min(onlineCount, ONLINE_SHOWN) + (onlineCount > ONLINE_SHOWN ? 1 : 0)
+  const online = onlineCount > 0 ? 6 + 6 + 20 * chips + 6 : 0
+  return (hasMenu ? 32 : 0) + online + (hasMenu && online > 0 ? 8 : 0)
 }
 
 /** True once the element has been near the viewport; thumbnails are fetched lazily. */
@@ -47,9 +62,12 @@ interface ProjectCardProps {
   index: number
   actions: ProjectAction[]
   onAction: (action: ProjectAction, project: ProjectCardData) => void
+  /** Pointer handlers from useProjectDnd; present when the user may drag cards. */
+  dragProps?: Record<string, unknown>
+  dragging?: boolean
 }
 
-export function ProjectCard({ project, index, actions, onAction }: ProjectCardProps) {
+export function ProjectCard({ project, index, actions, onAction, dragProps, dragging }: ProjectCardProps) {
   const { t } = useI18n()
   const [ref, seen] = useSeen()
   const image = useAuthedImage(project.image?.thumbUrl, seen)
@@ -65,30 +83,33 @@ export function ProjectCard({ project, index, actions, onAction }: ProjectCardPr
   }))
 
   const background = image ? `left top / cover url(${image})` : gradientFor(project.id)
+  const online = project.online
+  const names = online.map((u) => u.displayName).join(', ')
 
   return (
     <div
       ref={ref}
-      className={cx('project-card', finished && 'is-finished')}
+      className={cx(
+        'project-card',
+        finished && 'is-finished',
+        dragProps && 'is-draggable',
+        dragging && 'is-dragging',
+      )}
       data-flip-id={project.id}
-      style={{ '--i': Math.min(index, 7) } as CSSProperties}
+      style={
+        {
+          '--i': Math.min(index, 7),
+          '--aside-w': `${asideWidth(online.length, items.length > 0) + 8}px`,
+        } as CSSProperties
+      }
+      {...dragProps}
     >
-      <AppLink to={`/projects/${project.id}`} className="project-card-link">
+      <AppLink to={`/projects/${project.id}`} className="project-card-link" draggable={false}>
         {/* The picture stays clean: title, status and actions live on the solid strip below it. */}
         <span className="project-card-thumb" style={{ background }} aria-hidden="true" />
         <span className="project-card-body">
           <span className="project-card-title">{project.title}</span>
           <span className="project-card-meta">
-            {project.contributors.length > 0 && (
-              <AvatarStack
-                users={project.contributors.map((c) => ({
-                  id: c.id,
-                  displayName: c.displayName,
-                  color: c.color,
-                  avatar: c.avatarUrl,
-                }))}
-              />
-            )}
             {finished && <span className="project-card-status">{t('projects.card.finished')}</span>}
             <span className="project-card-count">
               {t('projects.card.participants', { count: project.participantCount })}
@@ -96,25 +117,46 @@ export function ProjectCard({ project, index, actions, onAction }: ProjectCardPr
           </span>
         </span>
       </AppLink>
-      {items.length > 0 && (
-        <div className="project-card-menu">
-          <Menu
-            label={t('projects.menu.label', { title: project.title })}
-            items={items}
-            trigger={(props) => (
-              <Button
-                {...props}
-                variant="ghost"
-                size="sm"
-                iconOnly
-                aria-label={t('projects.menu.label', { title: project.title })}
-              >
-                <Icon name="more" />
-              </Button>
-            )}
-          />
-        </div>
-      )}
+      <div className="project-card-aside">
+        {online.length > 0 && (
+          <span
+            className="project-card-online"
+            role="img"
+            aria-label={t('projects.card.online', { names })}
+            title={t('projects.card.online', { names })}
+          >
+            <span className="project-card-online-dot" aria-hidden="true" />
+            <AvatarStack
+              max={ONLINE_SHOWN}
+              users={online.map((u) => ({
+                id: u.id,
+                displayName: u.displayName,
+                color: u.color,
+                avatar: u.avatarUrl,
+              }))}
+            />
+          </span>
+        )}
+        {items.length > 0 && (
+          <div className="project-card-menu">
+            <Menu
+              label={t('projects.menu.label', { title: project.title })}
+              items={items}
+              trigger={(props) => (
+                <Button
+                  {...props}
+                  variant="ghost"
+                  size="sm"
+                  iconOnly
+                  aria-label={t('projects.menu.label', { title: project.title })}
+                >
+                  <Icon name="more" />
+                </Button>
+              )}
+            />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

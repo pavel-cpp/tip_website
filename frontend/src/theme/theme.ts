@@ -32,13 +32,19 @@ function systemIsLight(): boolean {
   return typeof matchMedia === 'function' && matchMedia(LIGHT_QUERY).matches
 }
 
-/** Writes data-theme, color-scheme and the browser chrome colour for the given mode. */
+/** Tab icon file for a mode: 'system' keeps the OS-adaptive favicon, an explicit choice a fixed one. */
+export function iconHref(m: ThemeMode, resolved: ResolvedTheme): string {
+  return m === 'system' ? '/favicon.svg' : `/favicon-${resolved}.svg`
+}
+
+/** Writes data-theme, color-scheme, the browser chrome colour and the tab icon for the given mode. */
 export function applyTheme(m: ThemeMode): ResolvedTheme {
   const resolved = resolveTheme(m, systemIsLight())
   const root = document.documentElement
   root.setAttribute('data-theme', resolved)
   root.style.colorScheme = resolved
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLORS[resolved])
+  document.querySelector('link[rel="icon"]')?.setAttribute('href', iconHref(m, resolved))
   return resolved
 }
 
