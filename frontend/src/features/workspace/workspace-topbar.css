@@ -6,11 +6,25 @@
   flex: 1 1 auto;
   min-width: 0;
 }
-.wsbar-parent {
-  flex: none;
+.wsbar-crumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
 }
+.wsbar-crumb:last-child {
+  flex: 1 1 auto;
+}
+.wsbar-parent,
 .wsbar-slash {
   flex: none;
+}
+.wsbar-crumb .wsbar-parent {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .wsbar-title {
   min-width: 0;
@@ -54,8 +68,7 @@
 }
 @media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
   .wsbar-label,
-  .wsbar-parent,
-  .wsbar-slash {
+  .wsbar-hide-sm {
     display: none;
   }
   .wsbar-title {

@@ -269,11 +269,7 @@ test.describe('phone', () => {
     await expect(
       page.getByRole('menuitem', { name: ws.t('workspace.print.withCount', { count: 1 }) }),
     ).toBeVisible()
-    for (const key of [
-      'workspace.import',
-      'workspace.exportAs.xlsx',
-      'workspace.settings',
-    ] as const) {
+    for (const key of ['workspace.import', 'workspace.exportAs.xlsx', 'workspace.settings'] as const) {
       await expect(page.getByRole('menuitem', { name: ws.t(key) })).toBeVisible()
     }
   })

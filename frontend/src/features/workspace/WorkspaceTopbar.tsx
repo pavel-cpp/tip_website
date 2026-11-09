@@ -24,10 +24,10 @@ export function WorkspaceTopbar({
   return (
     <>
       <nav className="wsbar-crumbs" aria-label={t('workspace.crumbs')}>
-        <AppLink to="/" className="wsbar-parent muted">
+        <AppLink to="/" className="wsbar-parent wsbar-hide-sm muted">
           {t('projects.title')}
         </AppLink>
-        <span className="muted wsbar-slash" aria-hidden="true">
+        <span className="muted wsbar-slash wsbar-hide-sm" aria-hidden="true">
           /
         </span>
         <span className="wsbar-title" title={title}>
