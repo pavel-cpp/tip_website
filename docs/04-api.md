@@ -139,9 +139,11 @@
 | `POST /projects/{id}/participants` | `participant.edit` | `{count}` (1…5000 пустых) **или** `{items:[{name,phone}]}` → `201 {items}` |
 | `PATCH /participants/{id}` | `participant.edit` | `{name?, phone?, version}` → `{item}`; `409 ROW_LOCKED/VERSION_CONFLICT` |
 | `POST /projects/{id}/participants/printed` | `participant.print` | `{ids:[…]}` → `204`: запись в аудит «напечатано» (только ID); состояние строк не меняется |
-| `POST /projects/{id}/participants/delete` | `participant.delete` | `{ids:[…]}` → `{deleted:n}` |
-| `POST /projects/{id}/participants/clear` | `participant.clear` | `{confirmTitle}` (должно совпасть с названием) → `{deleted:n}` |
-| `POST /projects/{id}/participants/import` | `participant.import` | `multipart` XLSX/CSV, `mode=append\|replace`; `?dryRun=1` → предпросмотр ошибок |
+| `POST /projects/{id}/participants/batch` | `participant.edit` | `{items:[{id, version, name?, phone?}]}` (до 20 000) → `{items, conflicts}`: пакетная правка (вставка блока). Строки с устаревшей `version` или занятые другим пользователем не пишутся и возвращаются в `conflicts` в текущем виде; остальные применяются независимо. Одно событие `rows.upsert` |
+| `POST /projects/{id}/participants/clear` | `participant.edit` | `{ids:[…]}` → `{items}`: **очистка** — имя и телефон выбранных строк становятся пустыми, строка и её номер остаются; пустые и занятые другим пользователем пропускаются. Событие `rows.upsert`, аудит `participants.clear` |
+| `POST /projects/{id}/participants/import` | `participant.import` | `multipart` XLSX/CSV, `mode=append\|replace` (`replace` перезаписывает существующие строки по порядку номеров, лишние очищает, остаток добавляет); `?dryRun=1` → предпросмотр ошибок |
+
+Строки участников **не удаляются через API** (только вместе с проектом, `CASCADE`): вместо удаления есть очистка. События `rows.delete` в клиент не приходят, права `participant.delete` и `participant.clear` в API больше не используются (очистка требует `participant.edit`).
 | `GET /projects/{id}/export.xlsx` · `export.csv` | `participant.export` | → файл (номер, имя, телефон) |
 
 ```json
