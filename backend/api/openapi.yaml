@@ -1295,12 +1295,17 @@ paths:
           $ref: "#/components/responses/AuthUnavailable"
         "500":
           $ref: "#/components/responses/InternalError"
-  /projects/{id}/participants/delete:
+  /projects/{id}/participants/batch:
     post:
       tags: [Participants]
-      operationId: deleteParticipants
-      summary: Delete several rows
-      x-required-permissions: [participant.delete]
+      operationId: batchUpdateParticipants
+      summary: Edit many rows at once
+      description: |
+        The batched form of `PATCH /participants/{id}`, used by bulk paste. Every item carries the row version
+        the client edited. Rows with a stale version or locked by another user are not written and are returned
+        in `conflicts` with their current state; the other items succeed independently. Written rows are
+        announced as `rows.upsert`.
+      x-required-permissions: [participant.edit]
       parameters:
         - $ref: "#/components/parameters/ProjectId"
       requestBody:
@@ -1308,14 +1313,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ParticipantIds"
+              $ref: "#/components/schemas/BatchUpdateRequest"
       responses:
         "200":
-          description: Number of deleted rows.
+          description: Written rows and rows that could not be written.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeletedCount"
+                $ref: "#/components/schemas/BatchUpdateResult"
         "400":
           $ref: "#/components/responses/ValidationFailed"
         "401":
@@ -1334,9 +1339,12 @@ paths:
     post:
       tags: [Participants]
       operationId: clearParticipants
-      summary: Delete all rows of a project
-      description: '`confirmTitle` must equal the project title, otherwise `400 VALIDATION`.'
-      x-required-permissions: [participant.clear]
+      summary: Clear several rows
+      description: |
+        Empties name and phone of the given rows; the rows and their numbers stay. Rows that are already empty
+        or locked by another user are skipped. Rows are never deleted through the API. The changed rows are
+        announced as `rows.upsert` and recorded in the audit log as `participants.clear`.
+      x-required-permissions: [participant.edit]
       parameters:
         - $ref: "#/components/parameters/ProjectId"
       requestBody:
@@ -1344,14 +1352,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ClearParticipantsRequest"
+              $ref: "#/components/schemas/ParticipantIds"
       responses:
         "200":
-          description: Number of deleted rows.
+          description: The rows that were changed.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DeletedCount"
+                $ref: "#/components/schemas/ParticipantItems"
         "400":
           $ref: "#/components/responses/ValidationFailed"
         "401":
@@ -1373,7 +1381,7 @@ paths:
       summary: Import participants from XLSX or CSV
       description: |
         With `dryRun=1` nothing is written and the response is a preview of the rows and their errors.
-        `mode=append` adds rows, `mode=replace` clears the table first.
+        `mode=append` adds rows, `mode=replace` overwrites the existing rows in number order (surplus rows are emptied) and appends the rest. Rows are never deleted.
       x-required-permissions: [participant.import]
       parameters:
         - $ref: "#/components/parameters/ProjectId"
@@ -2654,22 +2662,46 @@ components:
           items:
             type: string
             format: uuid
-    DeletedCount:
+    BatchUpdateItem:
       type: object
-      required: [deleted]
+      required: [id, version]
       properties:
-        deleted:
-          type: integer
-          minimum: 0
-    ClearParticipantsRequest:
-      type: object
-      required: [confirmTitle]
-      properties:
-        confirmTitle:
+        id:
           type: string
-          minLength: 1
-          maxLength: 120
-          description: Must equal the project title.
+          format: uuid
+        name:
+          type: string
+          maxLength: 200
+        phone:
+          type: string
+          maxLength: 40
+        version:
+          type: integer
+          minimum: 1
+    BatchUpdateRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 20000
+          items:
+            $ref: "#/components/schemas/BatchUpdateItem"
+    BatchUpdateResult:
+      type: object
+      required: [items, conflicts]
+      properties:
+        items:
+          type: array
+          description: Rows that were written.
+          items:
+            $ref: "#/components/schemas/Participant"
+        conflicts:
+          type: array
+          description: Current state of rows that were not written (stale version or locked).
+          items:
+            $ref: "#/components/schemas/Participant"
     ImportUpload:
       type: object
       required: [file, mode]

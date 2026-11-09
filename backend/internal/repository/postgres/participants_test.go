@@ -249,41 +249,38 @@ func TestParticipantRepoConcurrentUpdateOneWins(t *testing.T) {
 	}
 }
 
-func TestParticipantRepoDeleteAndClear(t *testing.T) {
+func TestParticipantRepoUpdateManyAndClear(t *testing.T) {
 	d := newMigratedDB(t)
 	r := NewParticipantRepo(d)
 	ctx := context.Background()
 	a, b := seedProject(t, d, "active"), seedProject(t, d, "active")
-	rowsA, _ := r.AddEmpty(ctx, a, 4, "", time.Now())
-	rowsB, _ := r.AddEmpty(ctx, b, 2, "", time.Now())
+	rowsA, _ := r.AddEmpty(ctx, a, 3, "", time.Now())
+	rowsB, _ := r.AddEmpty(ctx, b, 1, "", time.Now())
 
-	// ids of another project and unknown ids are ignored
-	ids := []string{rowsA[0].ID, rowsA[1].ID, rowsB[0].ID, "00000000-0000-7000-8000-000000000000"}
-	deleted, err := r.DeleteByIDs(ctx, a, ids)
-	if err != nil {
-		t.Fatal(err)
+	// stale versions and rows of another project are left out; unset fields keep their value
+	got, err := r.UpdateMany(ctx, a, []domain.ParticipantChange{
+		{ID: rowsA[0].ID, SetName: true, Name: "Azam", Version: 1},
+		{ID: rowsA[1].ID, SetPhone: true, Phone: "+1", Version: 1},
+		{ID: rowsA[2].ID, SetName: true, Name: "stale", Version: 7},
+		{ID: rowsB[0].ID, SetName: true, Name: "foreign", Version: 1},
+	}, "", time.Now())
+	if err != nil || len(got) != 2 || got[0].Name != "Azam" || got[0].Version != 2 || got[1].Phone != "+1" || got[1].Name != "" {
+		t.Fatalf("update many = %+v, %v", got, err)
 	}
-	if len(deleted) != 2 {
-		t.Fatalf("deleted = %v", deleted)
-	}
-	if n, _ := r.Count(ctx, b); n != 2 {
-		t.Fatalf("other project was touched: %d", n)
-	}
-	if got, err := r.DeleteByIDs(ctx, a, nil); err != nil || got != nil {
-		t.Fatalf("empty delete: %v %v", got, err)
+	if byIDs, _ := r.ListByIDs(ctx, a, []string{rowsA[2].ID, rowsB[0].ID, rowsA[0].ID}); len(byIDs) != 2 || byIDs[0].Number != 1 {
+		t.Fatalf("list by ids = %+v", byIDs)
 	}
 
-	cleared, err := r.Clear(ctx, a)
-	if err != nil || len(cleared) != 2 {
-		t.Fatalf("clear = %v, %v", cleared, err)
+	// clear keeps rows and numbers, skips empty rows and other projects
+	cleared, err := r.ClearByIDs(ctx, a, []string{rowsA[0].ID, rowsA[2].ID, rowsB[0].ID}, "", time.Now())
+	if err != nil || len(cleared) != 1 || cleared[0].Name != "" || cleared[0].Number != 1 || cleared[0].Version != 3 {
+		t.Fatalf("clear = %+v, %v", cleared, err)
 	}
-	if n, _ := r.Count(ctx, b); n != 2 {
-		t.Fatalf("clear touched another project: %d", n)
+	if n, _ := r.Count(ctx, a); n != 3 {
+		t.Fatalf("rows were removed: %d", n)
 	}
-	// numbers are never reused after a clear
-	fresh, err := r.AddEmpty(ctx, a, 1, "", time.Now())
-	if err != nil || fresh[0].Number != 5 {
-		t.Fatalf("fresh = %+v, %v", fresh, err)
+	if none, err := r.ClearByIDs(ctx, a, nil, "", time.Now()); err != nil || none != nil {
+		t.Fatalf("empty clear: %v %v", none, err)
 	}
 }
 
@@ -339,12 +336,12 @@ func TestParticipantRepoFilterAndStamp(t *testing.T) {
 	if c1 != c0 || v1 != v0+1 || !w1.After(w0) {
 		t.Fatalf("stamp did not move on edit: (%d,%d,%v) -> (%d,%d,%v)", c0, v0, w0, c1, v1, w1)
 	}
-	if _, err := r.DeleteByIDs(ctx, proj, []string{rows[1].ID}); err != nil {
+	if _, err := r.AddEmpty(ctx, proj, 1, "", time.Now().Add(2*time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	c2, v2, _, _ := r.Stamp(ctx, proj, "")
-	if c2 != c1-1 || v2 >= v1 {
-		t.Fatalf("stamp did not move on delete: (%d,%d) -> (%d,%d)", c1, v1, c2, v2)
+	if c2 != c1+1 || v2 <= v1 {
+		t.Fatalf("stamp did not move on insert: (%d,%d) -> (%d,%d)", c1, v1, c2, v2)
 	}
 
 	empty := seedProject(t, d, "active")

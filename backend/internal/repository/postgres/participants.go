@@ -196,39 +196,68 @@ func (r *ParticipantRepo) UpdateIfVersion(ctx context.Context, p domain.Particip
 	return out, nil
 }
 
-// DeleteByIDs removes the given rows of the project and returns the ids actually deleted.
-// Ids of other projects or unknown ids are ignored.
-func (r *ParticipantRepo) DeleteByIDs(ctx context.Context, projectID string, ids []string) ([]string, error) {
+// updateMany applies many edits in one statement. A row is written only when its stored
+// version equals the expected one, so stale edits simply do not appear in the result.
+const updateMany = `
+UPDATE participants p SET
+	name = CASE WHEN v.set_name THEN v.name ELSE p.name END,
+	phone = CASE WHEN v.set_phone THEN v.phone ELSE p.phone END,
+	version = p.version + 1, updated_by = nullif($7, '')::uuid, updated_at = $8
+FROM unnest($2::text[]::uuid[], $3::bool[], $4::bool[], $5::text[], $6::text[], $9::bigint[])
+	AS v(id, set_name, set_phone, name, phone, version)
+WHERE p.project_id = $1 AND p.id = v.id AND p.version = v.version
+RETURNING ` + participantColumns
+
+// UpdateMany applies the changes whose expected version still matches and returns the stored
+// rows ordered by number; the others are silently left out (the caller detects them by id).
+func (r *ParticipantRepo) UpdateMany(ctx context.Context, projectID string, changes []domain.ParticipantChange, byUser string, now time.Time) ([]domain.Participant, error) {
+	n := len(changes)
+	ids, setN, setP := make([]string, n), make([]bool, n), make([]bool, n)
+	names, phones, vers := make([]string, n), make([]string, n), make([]int64, n)
+	for i, c := range changes {
+		ids[i], setN[i], setP[i], names[i], phones[i], vers[i] = c.ID, c.SetName, c.SetPhone, c.Name, c.Phone, int64(c.Version)
+	}
+	return r.queryRows(ctx, updateMany, projectID, ids, setN, setP, names, phones, byUser, now, vers)
+}
+
+// ClearByIDs empties name and phone of the given rows that are not empty yet, bumping their
+// versions. Ids of other projects or unknown ids are ignored.
+func (r *ParticipantRepo) ClearByIDs(ctx context.Context, projectID string, ids []string, byUser string, now time.Time) ([]domain.Participant, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return r.deleteReturning(ctx,
-		`DELETE FROM participants WHERE project_id = $1 AND id = ANY($2::text[]::uuid[]) RETURNING id::text`,
-		projectID, ids)
+	return r.queryRows(ctx, `UPDATE participants p SET name = '', phone = '', version = p.version + 1,
+			updated_by = nullif($3, '')::uuid, updated_at = $4
+		WHERE p.project_id = $1 AND p.id = ANY($2::text[]::uuid[]) AND (p.name <> '' OR p.phone <> '')
+		RETURNING `+participantColumns, projectID, ids, byUser, now)
 }
 
-// Clear removes every row of the project and returns the deleted ids. The number counter of
-// the project is untouched, so numbers are never reused.
-func (r *ParticipantRepo) Clear(ctx context.Context, projectID string) ([]string, error) {
-	return r.deleteReturning(ctx, `DELETE FROM participants WHERE project_id = $1 RETURNING id::text`, projectID)
+// ListByIDs returns the given rows of the project ordered by number.
+func (r *ParticipantRepo) ListByIDs(ctx context.Context, projectID string, ids []string) ([]domain.Participant, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	return r.queryRows(ctx, `SELECT `+participantColumns+` FROM participants p
+		WHERE p.project_id = $1 AND p.id = ANY($2::text[]::uuid[])`, projectID, ids)
 }
 
-func (r *ParticipantRepo) deleteReturning(ctx context.Context, query string, args ...any) ([]string, error) {
+func (r *ParticipantRepo) queryRows(ctx context.Context, query string, args ...any) ([]domain.Participant, error) {
 	rows, err := Querier(ctx, r.db).QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("delete participants: %w", err)
+		return nil, fmt.Errorf("query participants: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var ids []string
+	var out []domain.Participant
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan deleted id: %w", err)
+		p, err := scanParticipant(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan participant: %w", err)
 		}
-		ids = append(ids, id)
+		out = append(out, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("delete participants: %w", err)
+		return nil, fmt.Errorf("query participants: %w", err)
 	}
-	return ids, nil
+	slices.SortFunc(out, func(a, b domain.Participant) int { return a.Number - b.Number })
+	return out, nil
 }

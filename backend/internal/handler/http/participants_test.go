@@ -40,8 +40,8 @@ type ptFakeSvc struct {
 	listRes  service.ParticipantList
 	addIn    service.AddInput
 	updIn    service.UpdateInput
-	delIDs   []string
-	clearT   string
+	clearIDs []string
+	batchIn  []service.BatchItem
 	printIDs []string
 	impIn    service.ImportInput
 	impBody  string
@@ -65,14 +65,14 @@ func (f *ptFakeSvc) Update(_ context.Context, _ domain.Actor, in service.UpdateI
 	return ptRow(), f.err
 }
 
-func (f *ptFakeSvc) Delete(_ context.Context, _ domain.Actor, _ string, ids []string) (int, error) {
-	f.delIDs = ids
-	return len(ids), f.err
+func (f *ptFakeSvc) UpdateBatch(_ context.Context, _ domain.Actor, _ string, items []service.BatchItem) (service.BatchResult, error) {
+	f.batchIn = items
+	return service.BatchResult{Updated: []domain.Participant{ptRow()}, Conflicts: []domain.Participant{ptRow()}}, f.err
 }
 
-func (f *ptFakeSvc) Clear(_ context.Context, _ domain.Actor, _ string, title string) (int, error) {
-	f.clearT = title
-	return 7, f.err
+func (f *ptFakeSvc) Clear(_ context.Context, _ domain.Actor, _ string, ids []string) ([]domain.Participant, error) {
+	f.clearIDs = ids
+	return []domain.Participant{ptRow()}, f.err
 }
 
 func (f *ptFakeSvc) LogPrinted(_ context.Context, _ domain.Actor, _ string, ids []string) error {
@@ -250,20 +250,22 @@ func TestBulkEndpoints(t *testing.T) {
 	h := NewParticipantsHandler(svc)
 	ids := `{"ids":["` + testRow + `","` + testUser + `"]}`
 
-	w := ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.DeleteParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(ids))
-	if w.Code != 200 || len(svc.delIDs) != 2 || svc.delIDs[0] != testRow || !strings.Contains(w.Body.String(), `"deleted":2`) {
-		t.Fatalf("delete: %d %s %v", w.Code, w.Body.String(), svc.delIDs)
+	w := ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.ClearParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(ids))
+	if w.Code != 200 || len(svc.clearIDs) != 2 || svc.clearIDs[0] != testRow || !strings.Contains(w.Body.String(), `"items":[`) {
+		t.Fatalf("clear: %d %s %v", w.Code, w.Body.String(), svc.clearIDs)
+	}
+	body := `{"items":[{"id":"` + testRow + `","name":"A","version":3},{"id":"` + testUser + `","phone":"","version":1}]}`
+	w = ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.BatchUpdateParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(body))
+	if w.Code != 200 || len(svc.batchIn) != 2 || svc.batchIn[0].Name == nil || svc.batchIn[0].Phone != nil ||
+		svc.batchIn[1].Phone == nil || svc.batchIn[0].Version != 3 || !strings.Contains(w.Body.String(), `"conflicts":[`) {
+		t.Fatalf("batch: %d %s %+v", w.Code, w.Body.String(), svc.batchIn)
 	}
 	w = ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.LogPrinted(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(ids))
 	if w.Code != 204 || w.Body.Len() != 0 || len(svc.printIDs) != 2 {
 		t.Fatalf("printed: %d %q", w.Code, w.Body.String())
 	}
-	w = ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.ClearParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(`{"confirmTitle":"Raffle"}`))
-	if w.Code != 200 || svc.clearT != "Raffle" || !strings.Contains(w.Body.String(), `"deleted":7`) {
-		t.Fatalf("clear: %d %s", w.Code, w.Body.String())
-	}
 	// invalid uuid in the body is a validation error, not a 500
-	w = ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.DeleteParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(`{"ids":["nope"]}`))
+	w = ptDo(t, func(w http.ResponseWriter, r *http.Request) { h.ClearParticipants(w, r, ptID(testProject)) }, http.MethodPost, "/x", "application/json", ptJSON(`{"ids":["nope"]}`))
 	if code, _ := ptErrCode(t, w); w.Code != 400 || code != "VALIDATION" {
 		t.Fatalf("bad id: %d %s", w.Code, w.Body.String())
 	}
@@ -280,7 +282,7 @@ func TestErrorsMapToStatuses(t *testing.T) {
 		h := NewParticipantsHandler(&ptFakeSvc{err: err})
 		w := ptDo(t, func(w http.ResponseWriter, r *http.Request) {
 			h.ClearParticipants(w, r, ptID(testProject))
-		}, http.MethodPost, "/x", "application/json", ptJSON(`{"confirmTitle":"x"}`))
+		}, http.MethodPost, "/x", "application/json", ptJSON(`{"ids":["`+testRow+`"]}`))
 		if w.Code != want {
 			t.Errorf("%v: status %d, want %d", err, w.Code, want)
 		}

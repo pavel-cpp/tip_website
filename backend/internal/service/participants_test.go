@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
@@ -88,14 +89,14 @@ func TestListETagAndNotModified(t *testing.T) {
 	if after.NotModified || after.ETag == first.ETag {
 		t.Fatalf("etag did not change after an edit: %+v", after)
 	}
-	// a delete changes it too, and the filter is part of it
-	if _, err := f.repo.DeleteByIDs(ctx, projActive, []string{rows[1].ID}); err != nil {
+	// a clear changes it too, and the filter is part of it
+	if _, err := f.svc.Clear(ctx, operator(), projActive, []string{rows[0].ID}); err != nil {
 		t.Fatal(err)
 	}
-	afterDelete, _ := f.svc.List(ctx, operator(), ListInput{ProjectID: projActive})
+	afterClear, _ := f.svc.List(ctx, operator(), ListInput{ProjectID: projActive})
 	filtered, _ := f.svc.List(ctx, operator(), ListInput{ProjectID: projActive, Query: "new"})
-	if afterDelete.ETag == after.ETag || filtered.ETag == afterDelete.ETag || len(filtered.Items) != 1 {
-		t.Fatalf("etags: %s %s %s", after.ETag, afterDelete.ETag, filtered.ETag)
+	if afterClear.ETag == after.ETag || filtered.ETag == afterClear.ETag || len(filtered.Items) != 0 {
+		t.Fatalf("etags: %s %s %s", after.ETag, afterClear.ETag, filtered.ETag)
 	}
 }
 
@@ -321,45 +322,63 @@ func TestUpdateRepoFailureIsWrappedNotLeaked(t *testing.T) {
 	mustCode(t, err, domain.CodeInternal)
 }
 
-func TestDelete(t *testing.T) {
+func TestClear(t *testing.T) {
 	f := newFixture()
 	ctx := context.Background()
 	rows := f.seed(projActive, 4)
-
-	n, err := f.svc.Delete(ctx, operator(), projActive, []string{rows[0].ID, rows[0].ID, rows[1].ID, "ghost"})
-	if err != nil || n != 2 {
-		t.Fatalf("n=%d err=%v", n, err)
+	for _, r := range rows[:3] {
+		if _, err := f.svc.Update(ctx, operator(), UpdateInput{ID: r.ID, Name: ptr("N" + r.ID), Phone: ptr("1"), Version: 1}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if len(f.audit.calls) != 1 || f.audit.calls[0].action != domain.ActionParticipantsDelete || f.audit.calls[0].meta["count"] != 2 {
+	f.locks.locks[rows[2].ID] = domain.RowLock{RowID: rows[2].ID, UserID: "other", ExpiresAt: testNow.Add(time.Minute)}
+	f.notify.events = nil
+
+	// duplicates, unknown ids, empty rows (rows[3]) and rows locked by someone else are skipped
+	got, err := f.svc.Clear(ctx, operator(), projActive, []string{rows[0].ID, rows[0].ID, rows[1].ID, rows[2].ID, rows[3].ID, "ghost"})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+	for _, p := range got {
+		if p.Name != "" || p.Phone != "" || p.Version != 3 || p.Number == 0 {
+			t.Fatalf("row not cleared in place: %+v", p)
+		}
+	}
+	if n, _ := f.repo.Count(ctx, projActive); n != 4 {
+		t.Fatalf("rows were removed: %d", n)
+	}
+	if locked := f.repo.rows[rows[2].ID]; locked.Name == "" {
+		t.Fatal("locked row was cleared")
+	}
+	if len(f.audit.calls) != 1 || f.audit.calls[0].action != domain.ActionParticipantsClear || f.audit.calls[0].meta["count"] != 2 {
 		t.Fatalf("audit = %+v", f.audit.calls)
 	}
-	if _, hasIDs := f.audit.calls[0].meta["ids"]; hasIDs {
-		t.Fatal("delete audit must hold the count only")
-	}
-	ev := f.notify.events[len(f.notify.events)-1].ev.(domain.RowsDeletedEvent)
-	if len(ev.IDs) != 2 {
-		t.Fatalf("event = %+v", ev)
+	if len(f.notify.events) != 1 || f.notify.events[0].ev.EventType() != domain.EventRowsUpsert {
+		t.Fatalf("events = %+v", f.notify.events)
 	}
 
-	f.notify.events = nil
-	n, err = f.svc.Delete(ctx, operator(), projActive, []string{"ghost"})
-	if err != nil || n != 0 || len(f.notify.events) != 0 {
-		t.Fatalf("nothing deleted: n=%d err=%v events=%v", n, err, f.notify.events)
+	f.notify.events, f.audit.calls = nil, nil
+	if got, err := f.svc.Clear(ctx, operator(), projActive, []string{"ghost"}); err != nil || len(got) != 0 || len(f.notify.events) != 0 || len(f.audit.calls) != 0 {
+		t.Fatalf("nothing changed: %v %v %v", got, err, f.notify.events)
 	}
-
-	_, err = f.svc.Delete(ctx, operator(), projActive, nil)
+	_, err = f.svc.Clear(ctx, operator(), projActive, nil)
 	mustCode(t, err, domain.CodeValidation)
-	_, err = f.svc.Delete(ctx, operator(), projFinished, []string{"x"})
-	mustCode(t, err, domain.CodeProjectFinished)
-	_, err = f.svc.Delete(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantEdit), projActive, []string{"x"})
+	_, err = f.svc.Clear(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, []string{"x"})
 	mustCode(t, err, domain.CodeForbidden)
+	_, err = f.svc.Clear(ctx, operator(), projFinished, []string{"x"})
+	mustCode(t, err, domain.CodeProjectFinished)
 }
 
-func TestDeleteAuditFailureFailsTheRequest(t *testing.T) {
+func TestClearAuditFailureFailsTheRequest(t *testing.T) {
 	f := newFixture()
+	ctx := context.Background()
 	rows := f.seed(projActive, 1)
+	if _, err := f.svc.Update(ctx, operator(), UpdateInput{ID: rows[0].ID, Name: ptr("x"), Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+	f.notify.events = nil
 	f.audit.err = errors.New("audit down")
-	if _, err := f.svc.Delete(context.Background(), operator(), projActive, []string{rows[0].ID}); err == nil {
+	if _, err := f.svc.Clear(ctx, operator(), projActive, []string{rows[0].ID}); err == nil {
 		t.Fatal("expected the audit failure to fail the request (and roll back the Tx)")
 	}
 	if len(f.notify.events) != 0 {
@@ -367,31 +386,49 @@ func TestDeleteAuditFailureFailsTheRequest(t *testing.T) {
 	}
 }
 
-func TestClear(t *testing.T) {
+func TestUpdateBatch(t *testing.T) {
 	f := newFixture()
 	ctx := context.Background()
-	f.seed(projActive, 3)
+	rows := f.seed(projActive, 4)
+	// rows[1] is stale, rows[2] is locked by another user
+	if _, err := f.svc.Update(ctx, operator(), UpdateInput{ID: rows[1].ID, Name: ptr("fresh"), Version: 1}); err != nil {
+		t.Fatal(err)
+	}
+	f.locks.locks[rows[2].ID] = domain.RowLock{RowID: rows[2].ID, UserID: "other", ExpiresAt: testNow.Add(time.Minute)}
+	f.notify.events = nil
 
-	_, err := f.svc.Clear(ctx, operator(), projActive, "wrong")
-	mustCode(t, err, domain.CodeValidation)
-	if got, _ := f.repo.Count(ctx, projActive); got != 3 {
-		t.Fatalf("wrong title must not clear, rows = %d", got)
+	res, err := f.svc.UpdateBatch(ctx, operator(), projActive, []BatchItem{
+		{ID: rows[0].ID, Name: ptr("  A "), Version: 1},
+		{ID: rows[1].ID, Name: ptr("B"), Version: 1},
+		{ID: rows[2].ID, Name: ptr("C"), Version: 1},
+		{ID: rows[3].ID, Phone: ptr("+1"), Version: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	n, err := f.svc.Clear(ctx, operator(), projActive, "  Raffle ")
-	if err != nil || n != 3 {
-		t.Fatalf("n=%d err=%v", n, err)
+	if len(res.Updated) != 2 || res.Updated[0].Name != "A" || res.Updated[1].Phone != "+1" || res.Updated[1].Name != "" {
+		t.Fatalf("updated = %+v", res.Updated)
 	}
-	if len(f.audit.calls) != 1 || f.audit.calls[0].action != domain.ActionParticipantsClear || f.audit.calls[0].meta["count"] != 3 {
-		t.Fatalf("audit = %+v", f.audit.calls)
+	if len(res.Conflicts) != 2 || res.Conflicts[0].Name != "fresh" || res.Conflicts[0].Version != 2 {
+		t.Fatalf("conflicts = %+v", res.Conflicts)
 	}
-	if _, ok := f.notify.events[len(f.notify.events)-1].ev.(domain.RowsDeletedEvent); !ok {
+	if len(f.notify.events) != 1 || f.notify.events[0].ev.EventType() != domain.EventRowsUpsert {
 		t.Fatalf("events = %+v", f.notify.events)
 	}
 
-	_, err = f.svc.Clear(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantDelete), projActive, "Raffle")
+	for name, items := range map[string][]BatchItem{
+		"empty":     nil,
+		"no fields": {{ID: rows[0].ID, Version: 2}},
+		"duplicate": {{ID: rows[0].ID, Name: ptr("x"), Version: 2}, {ID: rows[0].ID, Name: ptr("y"), Version: 2}},
+		"too long":  {{ID: rows[0].ID, Name: ptr(strings.Repeat("x", 201)), Version: 2}},
+	} {
+		if _, err := f.svc.UpdateBatch(ctx, operator(), projActive, items); err == nil {
+			t.Errorf("%s: expected a validation error", name)
+		}
+	}
+	_, err = f.svc.UpdateBatch(ctx, ptActorWith("u", domain.PermProjectView, domain.PermParticipantView), projActive, []BatchItem{{ID: "x", Name: ptr("x"), Version: 1}})
 	mustCode(t, err, domain.CodeForbidden)
-	_, err = f.svc.Clear(ctx, operator(), projFinished, "Old")
+	_, err = f.svc.UpdateBatch(ctx, operator(), projFinished, []BatchItem{{ID: "x", Name: ptr("x"), Version: 1}})
 	mustCode(t, err, domain.CodeProjectFinished)
 }
 
@@ -525,7 +562,7 @@ func TestImportAppend(t *testing.T) {
 		t.Fatalf("rows = %+v", rows)
 	}
 	c := f.audit.calls[0]
-	if c.action != domain.ActionParticipantsImport || c.meta["imported"] != 2 || c.meta["mode"] != ImportAppend || c.meta["deleted"] != 0 {
+	if c.action != domain.ActionParticipantsImport || c.meta["imported"] != 2 || c.meta["mode"] != ImportAppend || c.meta["overwritten"] != 0 {
 		t.Fatalf("audit = %+v", c)
 	}
 	for k, v := range c.meta {
@@ -538,10 +575,10 @@ func TestImportAppend(t *testing.T) {
 	}
 }
 
-func TestImportReplace(t *testing.T) {
+func TestImportReplaceOverwritesInPlace(t *testing.T) {
 	f := newFixture()
 	ctx := context.Background()
-	f.seed(projActive, 3)
+	seeded := f.seed(projActive, 3)
 	f.notify.events = nil
 
 	res, err := f.svc.Import(ctx, operator(), importIn(ImportReplace, false, "Azam|1\nAli|2"))
@@ -549,14 +586,22 @@ func TestImportReplace(t *testing.T) {
 		t.Fatalf("res = %+v, %v", res, err)
 	}
 	rows, _ := f.repo.List(ctx, projActive, "")
-	if len(rows) != 2 || rows[0].Number != 4 { // numbers are never reused
+	if len(rows) != 3 || rows[0].ID != seeded[0].ID || rows[0].Name != "Azam" || rows[1].Name != "Ali" || rows[2].Name != "" {
 		t.Fatalf("rows = %+v", rows)
 	}
-	if f.audit.calls[0].meta["deleted"] != 3 {
-		t.Fatalf("audit = %+v", f.audit.calls[0])
+	for _, ev := range f.notify.events {
+		if ev.ev.EventType() != domain.EventRowsUpsert {
+			t.Fatalf("replace must not delete rows: %+v", f.notify.events)
+		}
 	}
-	if len(f.notify.events) != 2 || f.notify.events[0].ev.EventType() != domain.EventRowsDelete || f.notify.events[1].ev.EventType() != domain.EventRowsUpsert {
-		t.Fatalf("events = %+v", f.notify.events)
+
+	// more file rows than table rows: the surplus is appended
+	res, err = f.svc.Import(ctx, operator(), importIn(ImportReplace, false, "A|1\nB|2\nC|3\nD|4\nE|5"))
+	if err != nil || res.Imported != 5 {
+		t.Fatalf("res = %+v, %v", res, err)
+	}
+	if rows, _ = f.repo.List(ctx, projActive, ""); len(rows) != 5 || rows[3].Name != "D" || rows[4].Number != 5 {
+		t.Fatalf("rows = %+v", rows)
 	}
 }
 
