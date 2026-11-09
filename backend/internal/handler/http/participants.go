@@ -7,7 +7,7 @@ package http
 //
 // Embed *ParticipantsHandler and *AuditHandler in the composite gen.ServerInterface
 // implementation at a shallower depth than gen.Unimplemented so their methods win. The
-// ParticipantsHandler serves list/create/update/delete/clear/printed (this file) and import
+// ParticipantsHandler serves list/create/update/batch/clear/printed (this file) and import
 // and export (exportimport.go); the AuditHandler serves GET /admin/audit (audit.go).
 
 import (
@@ -28,8 +28,8 @@ type ParticipantsService interface {
 	List(ctx context.Context, a domain.Actor, in service.ListInput) (service.ParticipantList, error)
 	Add(ctx context.Context, a domain.Actor, in service.AddInput) ([]domain.Participant, error)
 	Update(ctx context.Context, a domain.Actor, in service.UpdateInput) (domain.Participant, error)
-	Delete(ctx context.Context, a domain.Actor, projectID string, ids []string) (int, error)
-	Clear(ctx context.Context, a domain.Actor, projectID, confirmTitle string) (int, error)
+	UpdateBatch(ctx context.Context, a domain.Actor, projectID string, items []service.BatchItem) (service.BatchResult, error)
+	Clear(ctx context.Context, a domain.Actor, projectID string, ids []string) ([]domain.Participant, error)
 	LogPrinted(ctx context.Context, a domain.Actor, projectID string, ids []string) error
 	Export(ctx context.Context, a domain.Actor, projectID, format string) (service.ExportFile, error)
 	Import(ctx context.Context, a domain.Actor, in service.ImportInput) (service.ImportResult, error)
@@ -193,8 +193,33 @@ func (h *ParticipantsHandler) LogPrinted(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// DeleteParticipants handles POST /projects/{id}/participants/delete.
-func (h *ParticipantsHandler) DeleteParticipants(w http.ResponseWriter, r *http.Request, id gen.ProjectId) {
+// BatchUpdateParticipants handles POST /projects/{id}/participants/batch.
+func (h *ParticipantsHandler) BatchUpdateParticipants(w http.ResponseWriter, r *http.Request, id gen.ProjectId) {
+	a, ok := actorOrFail(w, r)
+	if !ok {
+		return
+	}
+	var req gen.BatchUpdateRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		participantsFail(w, r, err)
+		return
+	}
+	items := make([]service.BatchItem, len(req.Items))
+	for i, it := range req.Items {
+		items[i] = service.BatchItem{ID: it.Id.String(), Name: it.Name, Phone: it.Phone, Version: it.Version}
+	}
+	res, err := h.svc.UpdateBatch(r.Context(), a, id.String(), items)
+	if err != nil {
+		participantsFail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, gen.BatchUpdateResult{
+		Items: participantsItemsDTO(res.Updated), Conflicts: participantsItemsDTO(res.Conflicts),
+	})
+}
+
+// ClearParticipants handles POST /projects/{id}/participants/clear.
+func (h *ParticipantsHandler) ClearParticipants(w http.ResponseWriter, r *http.Request, id gen.ProjectId) {
 	a, ok := actorOrFail(w, r)
 	if !ok {
 		return
@@ -204,29 +229,10 @@ func (h *ParticipantsHandler) DeleteParticipants(w http.ResponseWriter, r *http.
 		participantsFail(w, r, err)
 		return
 	}
-	n, err := h.svc.Delete(r.Context(), a, id.String(), participantsIDs(req.Ids))
+	rows, err := h.svc.Clear(r.Context(), a, id.String(), participantsIDs(req.Ids))
 	if err != nil {
 		participantsFail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, gen.DeletedCount{Deleted: n})
-}
-
-// ClearParticipants handles POST /projects/{id}/participants/clear.
-func (h *ParticipantsHandler) ClearParticipants(w http.ResponseWriter, r *http.Request, id gen.ProjectId) {
-	a, ok := actorOrFail(w, r)
-	if !ok {
-		return
-	}
-	var req gen.ClearParticipantsRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		participantsFail(w, r, err)
-		return
-	}
-	n, err := h.svc.Clear(r.Context(), a, id.String(), req.ConfirmTitle)
-	if err != nil {
-		participantsFail(w, r, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, gen.DeletedCount{Deleted: n})
+	writeJSON(w, http.StatusOK, gen.ParticipantItems{Items: participantsItemsDTO(rows)})
 }

@@ -51,7 +51,6 @@ function Harness(props: Partial<ParticipantsTableProps> & { presence?: RowPresen
       rows={ROWS}
       loading={false}
       canEdit
-      canDelete
       selected={selected}
       onSelectedChange={setSelected}
       currentId={null}
@@ -59,9 +58,9 @@ function Harness(props: Partial<ParticipantsTableProps> & { presence?: RowPresen
       presence={none}
       onCommit={async () => ({ status: 'ok' })}
       onAdopt={() => undefined}
-      onDelete={() => undefined}
+      onClear={() => undefined}
       onAddRows={() => undefined}
-      onPasteRows={() => undefined}
+      onPaste={() => undefined}
       query={query}
       onQueryChange={setQuery}
       cards

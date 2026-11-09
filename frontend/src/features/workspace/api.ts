@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, apiRequest } from '../../api/http'
 import type { components } from '../../api/schema.gen'
 
@@ -118,21 +118,42 @@ export function useCreateParticipants(projectId: string) {
   })
 }
 
-/** The request itself; hiding rows and the undo window live in useUndoableDelete. */
-export function useDeleteParticipants(projectId: string) {
-  const qc = useQueryClient()
-  const key = participantKeys.list(projectId)
-  return useMutation({
-    mutationFn: (ids: string[]) =>
-      api.post<{ deleted: number }>(`/projects/${projectId}/participants/delete`, { ids }),
-    onSuccess: (_r, ids) => {
-      const gone = new Set(ids)
-      qc.setQueryData<ParticipantList>(key, (list) =>
-        patchList(list, (items) => items.filter((p) => !gone.has(p.id))),
-      )
-      void qc.invalidateQueries({ queryKey: ['projects', 'detail', projectId] })
-    },
-  })
+export interface BatchItem {
+  id: string
+  /** The row version the edit is based on. */
+  version: number
+  name?: string
+  phone?: string
+}
+export type BatchResult = components['schemas']['BatchUpdateResult']
+
+/** The most rows one create request accepts. */
+export const MAX_ADD_ROWS_PER_REQUEST = 5000
+
+export async function createParticipantRows(
+  projectId: string,
+  items: ParticipantInput[],
+): Promise<Participant[]> {
+  return (await api.post<{ items: Participant[] }>(`/projects/${projectId}/participants`, { items })).items
+}
+
+/** Rows can only be cleared, never deleted: name and phone are emptied, the row and its number stay. */
+export function clearParticipantRows(projectId: string, ids: string[]): Promise<{ items: Participant[] }> {
+  return api.post<{ items: Participant[] }>(`/projects/${projectId}/participants/clear`, { ids })
+}
+
+/** One request for many edits; rows whose version is stale or that are locked come back as `conflicts`. */
+export function batchUpdateParticipants(projectId: string, items: BatchItem[]): Promise<BatchResult> {
+  return api.post<BatchResult>(`/projects/${projectId}/participants/batch`, { items })
+}
+
+/** Replaces rows in the cached list by id, whatever their version (optimistic edits and their rollbacks). */
+export function putRows(qc: QueryClient, projectId: string, rows: readonly Participant[]): void {
+  if (rows.length === 0) return
+  const byId = new Map(rows.map((r) => [r.id, r]))
+  qc.setQueryData<ParticipantList>(participantKeys.list(projectId), (list) =>
+    patchList(list, (items) => items.map((p) => byId.get(p.id) ?? p)),
+  )
 }
 
 export function logPrinted(projectId: string, ids: string[]): Promise<void> {

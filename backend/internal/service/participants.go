@@ -114,16 +114,6 @@ func (s *Participants) publishUpserts(projectID string, rows []domain.Participan
 	}
 }
 
-// publishDeletes announces deleted ids in chunks.
-func (s *Participants) publishDeletes(projectID string, ids []string) {
-	const chunk = 2000
-	for len(ids) > 0 {
-		n := min(chunk, len(ids))
-		s.d.Notify.Publish(projectID, domain.RowsDeleted(ids[:n]...))
-		ids = ids[n:]
-	}
-}
-
 // ListInput selects the rows of a table.
 type ListInput struct {
 	ProjectID string
@@ -380,57 +370,141 @@ func uniqueIDs(ids []string) ([]string, error) {
 	return out, nil
 }
 
-// Delete removes the given rows (participant.delete) and returns how many existed.
-func (s *Participants) Delete(ctx context.Context, a domain.Actor, projectID string, ids []string) (int, error) {
-	if _, err := s.writableProject(ctx, a, projectID, domain.PermParticipantDelete); err != nil {
-		return 0, err
+// BatchItem is one edit of a bulk update. A nil field keeps its current value.
+type BatchItem struct {
+	ID      string
+	Name    *string
+	Phone   *string
+	Version int
+}
+
+// BatchResult splits a bulk update into the rows written and the rows that were not: stale
+// versions and rows locked by someone else are returned as their current state.
+type BatchResult struct {
+	Updated   []domain.Participant
+	Conflicts []domain.Participant
+}
+
+// UpdateBatch edits many rows at once (participant.edit), the batched form of Update. Rows
+// whose version is stale, or that another user has locked, are not written and come back in
+// Conflicts with their current state; the rest succeed independently.
+func (s *Participants) UpdateBatch(ctx context.Context, a domain.Actor, projectID string, items []BatchItem) (BatchResult, error) {
+	if _, err := s.writableProject(ctx, a, projectID, domain.PermParticipantEdit); err != nil {
+		return BatchResult{}, err
+	}
+	if len(items) < 1 || len(items) > MaxIDsPerRequest {
+		return BatchResult{}, domain.NewValidation(domain.FieldError{Field: "items", Reason: fmt.Sprintf("must contain 1-%d items", MaxIDsPerRequest)})
+	}
+	seen := make(map[string]struct{}, len(items))
+	changes := make([]domain.ParticipantChange, 0, len(items))
+	var bad []domain.FieldError
+	var blocked []string
+	for i, it := range items {
+		if _, dup := seen[it.ID]; dup {
+			bad = append(bad, domain.FieldError{Field: fmt.Sprintf("items[%d].id", i), Reason: "must be unique"})
+			continue
+		}
+		seen[it.ID] = struct{}{}
+		if it.Name == nil && it.Phone == nil {
+			bad = append(bad, domain.FieldError{Field: fmt.Sprintf("items[%d]", i), Reason: "name or phone is required"})
+			continue
+		}
+		c := domain.ParticipantChange{ID: it.ID, Version: it.Version, SetName: it.Name != nil, SetPhone: it.Phone != nil}
+		if it.Name != nil {
+			c.Name = *it.Name
+		}
+		if it.Phone != nil {
+			c.Phone = *it.Phone
+		}
+		c, err := c.Normalized()
+		var ve *domain.ValidationError
+		if errors.As(err, &ve) {
+			for _, f := range ve.Fields {
+				bad = append(bad, domain.FieldError{Field: fmt.Sprintf("items[%d].%s", i, f.Field), Reason: f.Reason})
+			}
+			continue
+		}
+		if err != nil {
+			return BatchResult{}, err
+		}
+		if err := s.d.Locks.EnsureFree(ctx, it.ID, a.UserID); err != nil {
+			if !errors.Is(err, domain.ErrRowLocked) {
+				return BatchResult{}, err
+			}
+			blocked = append(blocked, it.ID)
+			continue
+		}
+		changes = append(changes, c)
+	}
+	if len(bad) > 0 {
+		return BatchResult{}, domain.NewValidation(bad...)
+	}
+
+	var res BatchResult
+	err := s.d.Tx.Do(ctx, func(ctx context.Context) error {
+		var err error
+		if res.Updated, err = s.d.Repo.UpdateMany(ctx, projectID, changes, a.UserID, s.d.Clock.Now()); err != nil {
+			return fmt.Errorf("update participants: %w", err)
+		}
+		done := make(map[string]struct{}, len(res.Updated))
+		for _, p := range res.Updated {
+			done[p.ID] = struct{}{}
+		}
+		rest := blocked
+		for _, c := range changes {
+			if _, ok := done[c.ID]; !ok {
+				rest = append(rest, c.ID)
+			}
+		}
+		if res.Conflicts, err = s.d.Repo.ListByIDs(ctx, projectID, rest); err != nil {
+			return fmt.Errorf("list conflicting participants: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return BatchResult{}, err
+	}
+	s.publishUpserts(projectID, res.Updated)
+	return res, nil
+}
+
+// Clear empties name and phone of the given rows (participant.edit). Rows keep their id and
+// number; rows already empty or locked by someone else are left alone. It returns the rows
+// that were changed.
+func (s *Participants) Clear(ctx context.Context, a domain.Actor, projectID string, ids []string) ([]domain.Participant, error) {
+	if _, err := s.writableProject(ctx, a, projectID, domain.PermParticipantEdit); err != nil {
+		return nil, err
 	}
 	ids, err := uniqueIDs(ids)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	var deleted []string
-	err = s.d.Tx.Do(ctx, func(ctx context.Context) error {
-		var err error
-		if deleted, err = s.d.Repo.DeleteByIDs(ctx, projectID, ids); err != nil {
-			return fmt.Errorf("delete participants: %w", err)
+	free := ids[:0:0]
+	for _, id := range ids {
+		if err := s.d.Locks.EnsureFree(ctx, id, a.UserID); err != nil {
+			if errors.Is(err, domain.ErrRowLocked) {
+				continue
+			}
+			return nil, err
 		}
-		return s.d.Audit.Record(ctx, a, domain.ActionParticipantsDelete, projectID, "", map[string]any{"count": len(deleted)})
-	})
-	if err != nil {
-		return 0, err
+		free = append(free, id)
 	}
-	if len(deleted) > 0 {
-		s.publishDeletes(projectID, deleted)
-	}
-	return len(deleted), nil
-}
-
-// Clear removes every row of the project (participant.clear). confirmTitle must equal the
-// project title, which guards against clearing the wrong project.
-func (s *Participants) Clear(ctx context.Context, a domain.Actor, projectID, confirmTitle string) (int, error) {
-	p, err := s.writableProject(ctx, a, projectID, domain.PermParticipantClear)
-	if err != nil {
-		return 0, err
-	}
-	if strings.TrimSpace(confirmTitle) != p.Title {
-		return 0, domain.NewValidation(domain.FieldError{Field: "confirmTitle", Reason: "must equal the project title"})
-	}
-	var deleted []string
+	var cleared []domain.Participant
 	err = s.d.Tx.Do(ctx, func(ctx context.Context) error {
 		var err error
-		if deleted, err = s.d.Repo.Clear(ctx, projectID); err != nil {
+		if cleared, err = s.d.Repo.ClearByIDs(ctx, projectID, free, a.UserID, s.d.Clock.Now()); err != nil {
 			return fmt.Errorf("clear participants: %w", err)
 		}
-		return s.d.Audit.Record(ctx, a, domain.ActionParticipantsClear, projectID, "", map[string]any{"count": len(deleted)})
+		if len(cleared) == 0 {
+			return nil
+		}
+		return s.d.Audit.Record(ctx, a, domain.ActionParticipantsClear, projectID, "", map[string]any{"count": len(cleared)})
 	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	if len(deleted) > 0 {
-		s.publishDeletes(projectID, deleted)
-	}
-	return len(deleted), nil
+	s.publishUpserts(projectID, cleared)
+	return cleared, nil
 }
 
 // LogPrinted records that tickets were printed (participant.print). The audit entry holds
@@ -549,11 +623,11 @@ type ImportResult struct {
 }
 
 // Import loads participants from an XLSX or CSV (participant.import). Rows with errors are
-// reported and skipped; valid rows are written. Replace mode first clears the table inside
-// the same transaction and refuses a file without any valid row. With DryRun nothing is
+// reported and skipped; valid rows are written. Replace mode overwrites the existing rows in
+// number order (surplus rows are emptied, never deleted) and refuses a file without any valid row. With DryRun nothing is
 // written and no audit entry is made.
 func (s *Participants) Import(ctx context.Context, a domain.Actor, in ImportInput) (ImportResult, error) {
-	proj, err := s.writableProject(ctx, a, in.ProjectID, domain.PermParticipantImport)
+	_, err := s.writableProject(ctx, a, in.ProjectID, domain.PermParticipantImport)
 	if err != nil {
 		return ImportResult{}, err
 	}
@@ -599,28 +673,43 @@ func (s *Participants) Import(ctx context.Context, a domain.Actor, in ImportInpu
 	}
 
 	now := s.d.Clock.Now()
-	var added []domain.Participant
-	var removed []string
-	if _, _, err := domain.AllocateNumbers(proj.NextNumber, min(len(valid), domain.MaxAddRows)); err != nil {
-		return ImportResult{}, err
-	}
+	var added, overwritten []domain.Participant
+	// Rows beyond the existing ones are appended; in replace mode the existing ones are
+	// overwritten in number order first, so no row is ever deleted.
 	err = s.d.Tx.Do(ctx, func(ctx context.Context) error {
-		if in.Mode == ImportReplace {
-			var err error
-			if removed, err = s.d.Repo.Clear(ctx, in.ProjectID); err != nil {
-				return fmt.Errorf("clear participants: %w", err)
-			}
-		}
 		have, err := s.d.Repo.Count(ctx, in.ProjectID)
 		if err != nil {
 			return fmt.Errorf("count participants: %w", err)
 		}
-		if have+len(valid) > MaxProjectRows {
+		rest := valid
+		if in.Mode == ImportReplace && have > 0 {
+			existing, err := s.d.Repo.List(ctx, in.ProjectID, "")
+			if err != nil {
+				return fmt.Errorf("list participants: %w", err)
+			}
+			changes := make([]domain.ParticipantChange, 0, len(existing))
+			for i, e := range existing {
+				c := domain.ParticipantChange{ID: e.ID, Version: e.Version, SetName: true, SetPhone: true}
+				if i < len(valid) {
+					c.Name, c.Phone = valid[i].Name, valid[i].Phone
+				}
+				if c.Name != e.Name || c.Phone != e.Phone {
+					changes = append(changes, c)
+				}
+			}
+			if overwritten, err = s.d.Repo.UpdateMany(ctx, in.ProjectID, changes, a.UserID, now); err != nil {
+				return fmt.Errorf("overwrite participants: %w", err)
+			}
+			if len(overwritten) != len(changes) {
+				return domain.ErrVersionConflict // a row was edited meanwhile; retrying is safe
+			}
+			rest = valid[min(len(valid), len(existing)):]
+		}
+		if have+len(rest) > MaxProjectRows {
 			return domain.NewValidation(domain.FieldError{Field: "file", Reason: fmt.Sprintf("a project holds at most %d rows", MaxProjectRows)})
 		}
 		// The repository inserts at most domain.MaxAddRows per call to keep statements small.
-		added = added[:0]
-		for rest := valid; len(rest) > 0; {
+		for len(rest) > 0 {
 			n := min(domain.MaxAddRows, len(rest))
 			rows, err := s.d.Repo.Add(ctx, in.ProjectID, rest[:n], a.UserID, now)
 			if err != nil {
@@ -630,16 +719,14 @@ func (s *Participants) Import(ctx context.Context, a domain.Actor, in ImportInpu
 			rest = rest[n:]
 		}
 		return s.d.Audit.Record(ctx, a, domain.ActionParticipantsImport, in.ProjectID, "", map[string]any{
-			"mode": in.Mode, "total": res.Total, "valid": res.Valid, "imported": len(added), "deleted": len(removed),
+			"mode": in.Mode, "total": res.Total, "valid": res.Valid, "imported": len(valid), "overwritten": len(overwritten),
 		})
 	})
 	if err != nil {
 		return ImportResult{}, err
 	}
-	res.Imported = len(added)
-	if len(removed) > 0 {
-		s.publishDeletes(in.ProjectID, removed)
-	}
+	res.Imported = len(valid)
+	s.publishUpserts(in.ProjectID, overwritten)
 	s.publishUpserts(in.ProjectID, added)
 	return res, nil
 }

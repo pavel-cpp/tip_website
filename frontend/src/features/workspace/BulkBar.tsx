@@ -7,7 +7,7 @@ import { WsIcon } from './icons'
 export interface BulkBarProps {
   /** Rows currently selected (and visible). */
   count: number
-  canDelete: boolean
+  canClear: boolean
   /** Print/copy/save are offered only when the user may print. */
   canPrint: boolean
   /** Why printing is unavailable regardless of the selection (for example, no picture yet). */
@@ -19,13 +19,13 @@ export interface BulkBarProps {
   onPrint: () => void
   onCopy: () => void
   onSave: () => void
-  onDelete: () => void
+  onClear: () => void
   onDone: () => void
 }
 
 /**
  * Bulk actions of selection mode on touch screens. It takes the place of the bottom toolbar (same slot,
- * same height), so it never covers the list: close and count, the primary "Print (N)", delete and a menu.
+ * same height), so it never covers the list: close and count, the primary "Print (N)", clear and a menu.
  */
 export function BulkBar(p: BulkBarProps) {
   const { t, formatNumber } = useI18n()
@@ -76,15 +76,14 @@ export function BulkBar(p: BulkBarProps) {
           </span>
         </Button>
       )}
-      {p.canDelete && (
+      {p.canClear && (
         <Button
-          variant="danger"
           iconOnly
           disabled={none}
-          aria-label={t('workspace.bulk.delete', { count: p.count })}
-          onClick={p.onDelete}
+          aria-label={t('workspace.bulk.clear', { count: p.count })}
+          onClick={p.onClear}
         >
-          <Icon name="trash" />
+          <WsIcon name="eraser" />
         </Button>
       )}
       {items.length > 0 && (

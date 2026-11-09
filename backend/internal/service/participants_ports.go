@@ -29,10 +29,13 @@ type ParticipantRepo interface {
 	// UpdateIfVersion stores p, which holds the new state from Participant.Edited, only while
 	// the stored version is p.Version-1; otherwise it returns domain.ErrVersionConflict.
 	UpdateIfVersion(ctx context.Context, p domain.Participant) (domain.Participant, error)
-	// DeleteByIDs deletes the given rows of the project and returns the ids actually removed.
-	DeleteByIDs(ctx context.Context, projectID string, ids []string) ([]string, error)
-	// Clear deletes every row of the project and returns the removed ids.
-	Clear(ctx context.Context, projectID string) ([]string, error)
+	// UpdateMany applies the changes whose expected version still matches, bumping versions in
+	// one statement, and returns the stored rows. Stale or unknown ids are left out.
+	UpdateMany(ctx context.Context, projectID string, changes []domain.ParticipantChange, byUser string, now time.Time) ([]domain.Participant, error)
+	// ClearByIDs empties name and phone of the non-empty rows among ids and returns them.
+	ClearByIDs(ctx context.Context, projectID string, ids []string, byUser string, now time.Time) ([]domain.Participant, error)
+	// ListByIDs returns the given rows of the project ordered by number.
+	ListByIDs(ctx context.Context, projectID string, ids []string) ([]domain.Participant, error)
 }
 
 // ProjectReader gives Participants read access to projects. It is implemented by the

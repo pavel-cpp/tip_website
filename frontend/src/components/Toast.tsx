@@ -18,6 +18,8 @@ export interface ToastOptions {
   tone?: 'info' | 'error'
   /** Shown as a button until the timer ends, e.g. Undo. */
   action?: { label: string; onAction: () => void }
+  /** A second button after `action`, e.g. "Show" next to "Undo". */
+  secondaryAction?: { label: string; onAction: () => void }
   /** Milliseconds before auto-dismiss. Defaults to 5000. */
   duration?: number
 }
@@ -109,18 +111,22 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: () => v
       onBlur={() => setPaused(false)}
     >
       <span>{toast.message}</span>
-      {toast.action && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="toast-action"
-          onClick={() => {
-            toast.action?.onAction()
-            onDismiss()
-          }}
-        >
-          {toast.action.label}
-        </Button>
+      {[toast.action, toast.secondaryAction].map(
+        (a) =>
+          a && (
+            <Button
+              key={a.label}
+              variant="ghost"
+              size="sm"
+              className="toast-action"
+              onClick={() => {
+                a.onAction()
+                onDismiss()
+              }}
+            >
+              {a.label}
+            </Button>
+          ),
       )}
       <span className="toast-bar" aria-hidden="true" />
     </div>

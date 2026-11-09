@@ -38,10 +38,10 @@ test('N7: the search field keeps its width and the placeholder is not cut', asyn
   await ws.open(project.id)
   expect((await box(ws.search)).width).toBeGreaterThanOrEqual(180)
   expect(await ws.search.evaluate((el: HTMLInputElement) => el.scrollWidth <= el.clientWidth)).toBe(true)
-  // Selecting a row brings the delete button without squeezing the field below a usable width.
+  // Selecting a row brings the clear button without squeezing the field below a usable width.
   await ws.cell(ws.rows.first(), 'name').click()
   await ws.cell(ws.rows.nth(1), 'name').click({ modifiers: ['Shift'] })
-  await expect(ws.button('workspace.deleteSelected', { count: 2 })).toBeVisible()
+  await expect(ws.button('workspace.clearSelected', { count: 2 })).toBeVisible()
   expect((await box(ws.search)).width).toBeGreaterThanOrEqual(150)
   await page.setViewportSize({ width: 1440, height: 900 })
   await ws.cell(ws.rows.first(), 'name').click()
@@ -69,7 +69,7 @@ test('N8: the failure toast goes away when Retry succeeds', async ({ admin, sign
     .toBe(true)
 })
 
-test('N9: pasting from a filled row says which row was filled and follows it', async ({
+test('N9: pasting says which row it started at, and Show moves the cursor there', async ({
   admin,
   signedIn,
 }) => {
@@ -77,15 +77,16 @@ test('N9: pasting from a filled row says which row was filled and follows it', a
   const page = await signedIn(adminCreds())
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
-  await ws.cell(ws.rows.first(), 'name').click()
-  await ws.paste('Pasted One\t+998905550001\nPasted Two\t+998905550002')
-  await expect(page.getByText(ws.t('workspace.toast.pasted', { count: 2, number: 4 }))).toBeVisible()
+  await ws.cell(ws.rows.nth(2), 'name').click()
+  await ws.paste('Pasted One\t+998905550001\nPasted Two	+998905550002')
+  await expect(page.getByText(ws.t('workspace.toast.pasted', { count: 2, number: 3 }))).toBeVisible()
+  // Lines fill from the cursor row down: rows 3 and 4 are overwritten, nothing is created.
+  await expect(ws.rows).toHaveCount(4)
   const filled = ws.rowByText('Pasted One')
-  await expect(filled).toHaveAttribute('data-current', 'true')
-  await expect(filled).toHaveAttribute('data-selected', 'true')
-  await expect(ws.rows.first()).not.toHaveAttribute('data-selected', 'true')
+  await ws.cell(ws.rows.first(), 'name').click()
   await page.getByRole('button', { name: ws.t('workspace.toast.show') }).click()
   await expect(filled).toHaveAttribute('data-current', 'true')
+  await expect(filled).toHaveAttribute('data-selected', 'true')
 })
 
 test('m14: a failing participant list shows an error with Retry within 3 s', async ({ admin, signedIn }) => {

@@ -99,7 +99,7 @@ test.describe('phone', () => {
       .toBe('+998905550000')
   })
 
-  test('the sheet shows the ticket preview, pages between rows and warns about a bad phone', async ({
+  test('the sheet shows the ticket preview and pages between rows, keeping the phone as free text', async ({
     admin,
     signedIn,
   }) => {
@@ -113,7 +113,7 @@ test.describe('phone', () => {
     await expect(ws.sheet.getByLabel(ws.t('workspace.col.name'))).toHaveValue('Bobur Rahimov')
     await expect(ws.sheet.getByRole('img', { name: /Bobur Rahimov/ })).toBeVisible()
     await ws.sheet.getByLabel(ws.t('workspace.col.phone')).fill('abc')
-    await expect(ws.sheet.getByText(ws.t('workspace.phone.suspicious'))).toBeVisible()
+    await expect(ws.sheet.getByRole('alert')).toHaveCount(0)
     // Paging with unsaved changes sends them in the background.
     await ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.prev') }).tap()
     await expect
@@ -305,38 +305,44 @@ test.describe('phone', () => {
     expect(rail.x + rail.w).toBeLessThanOrEqual(845)
   })
 
-  test('bulk delete shows Undo and restores the rows', async ({ admin, signedIn }) => {
+  test('bulk clear empties the rows, keeps them, and Undo brings the text back', async ({
+    admin,
+    signedIn,
+  }) => {
     const { project } = await seeded(admin)
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
     await ws.longPress(ws.rowByText('Alisher'))
     await ws.rowByText('Bobur').locator('.pc-main').tap()
-    await ws.deleteSelected(2)
-    await expect(ws.rows).toHaveCount(3)
-    await expect(ws.bulkBar).toBeHidden()
-    await page.getByRole('button', { name: ws.t('action.undo') }).tap()
+    await ws.clearSelected(2)
+    await expect(page.getByText(ws.t('workspace.toast.cleared', { count: 2 }))).toBeVisible()
     await expect(ws.rows).toHaveCount(5)
+    await expect(ws.rowByText('Alisher')).toHaveCount(0)
+    await expect(ws.bulkBar).toBeHidden()
+    await expect
+      .poll(async () => (await admin.participants(project.id)).filter((p) => p.name === '').length)
+      .toBe(2)
+    await page.getByRole('button', { name: ws.t('action.undo') }).tap()
+    await expect(ws.rowByText('Alisher')).toHaveCount(1)
+    await expect
+      .poll(async () => (await admin.participants(project.id)).filter((p) => p.name !== '').length)
+      .toBe(5)
     expect(await admin.participants(project.id)).toHaveLength(5)
-
-    // Without Undo the server delete follows after the undo window.
-    await ws.longPress(ws.rowByText('Dilnoza'))
-    await ws.deleteSelected(1)
-    await expect(ws.rows).toHaveCount(4)
-    await expect.poll(async () => (await admin.participants(project.id)).length, { timeout: 15_000 }).toBe(4)
   })
 
-  test('delete from the sheet, then Undo', async ({ admin, signedIn }) => {
+  test('clear from the sheet, then Undo', async ({ admin, signedIn }) => {
     const { project } = await seeded(admin)
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
     await ws.rowByText('Eldor').locator('.pc-main').tap()
-    await ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.delete') }).tap()
+    await ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.clear') }).tap()
     await expect(ws.sheet).toBeHidden()
-    await expect(ws.rows).toHaveCount(4)
-    await page.getByRole('button', { name: ws.t('action.undo') }).tap()
     await expect(ws.rows).toHaveCount(5)
+    await expect(ws.rowByText('Eldor')).toHaveCount(0)
+    await page.getByRole('button', { name: ws.t('action.undo') }).tap()
+    await expect(ws.rowByText('Eldor')).toHaveCount(1)
   })
 
   test('two phones: a row open in the sheet is locked for the other', async ({ admin, freshContext }) => {
@@ -530,8 +536,8 @@ test.describe('tablet', () => {
     await expect(ws.rows.first()).toHaveAttribute('data-selected', 'true')
     expect(await box(page.locator('.pt-scroll'))).toEqual(before.scroller)
     expect((await box(ws.rows.nth(1))).y).toBe(before.row.y)
-    // The delete button appears when something is selected; it no longer holds room back from the search.
-    await expect(ws.button('workspace.deleteSelected', { count: 1 })).toBeVisible()
+    // The clear button appears when something is selected; it no longer holds room back from the search.
+    await expect(ws.button('workspace.clearSelected', { count: 1 })).toBeVisible()
   })
 
   test('every control is at least 44 x 44 px', async ({ admin, signedIn }) => {
