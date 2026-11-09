@@ -75,6 +75,7 @@ function renderPage() {
           <Routes>
             <Route path="/projects/:id/settings" element={<ProjectSettings />} />
             <Route path="/" element={<p>list</p>} />
+            <Route path="/projects/:id" element={<p>workspace</p>} />
           </Routes>
         </MemoryRouter>
       </ToastProvider>
@@ -172,7 +173,8 @@ describe('ProjectSettings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
     expect(await screen.findByRole('dialog', { name: 'Выйти без сохранения?' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Выйти' }))
-    expect(await screen.findByText('list')).toBeInTheDocument()
+    // A direct visit has no in-app history, so Close falls back to the workspace.
+    expect(await screen.findByText('workspace')).toBeInTheDocument()
   })
 
   it('leaves at once when nothing changed', async () => {
@@ -180,7 +182,8 @@ describe('ProjectSettings', () => {
     renderPage()
     await screen.findByDisplayValue('Tashkent City')
     await userEvent.click(screen.getByRole('button', { name: 'Закрыть' }))
-    expect(await screen.findByText('list')).toBeInTheDocument()
+    // A direct visit has no in-app history, so Close falls back to the workspace.
+    expect(await screen.findByText('workspace')).toBeInTheDocument()
   })
 
   it('disables editing for a finished project', async () => {

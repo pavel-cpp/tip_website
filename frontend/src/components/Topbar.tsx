@@ -9,6 +9,7 @@ import { Button } from './Button'
 import { LanguageMenu } from './LanguageMenu'
 import { Menu, type MenuItem } from './Menu'
 import { ThemeMenu } from './ThemeMenu'
+import { TopbarSlotTarget } from './TopbarSlot'
 
 export function Topbar({ minimal = false }: { minimal?: boolean }) {
   const { t } = useI18n()
@@ -96,7 +97,7 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
       <AppLink to="/" className="brand">
         {t('app.name')}
       </AppLink>
-      <div className="spacer" />
+      <TopbarSlotTarget />
       <LanguageMenu />
       <ThemeMenu />
       {!minimal && user && (
