@@ -185,9 +185,13 @@ func (a *app) wire(ctx context.Context) error {
 	rolesSvc := service.NewRoles(service.RolesDeps{
 		Roles: roleRepo, Authz: authzRepo, Epoch: epoch, Tx: tx, Audit: accounts, IDs: a.ids,
 	})
+	fontRepo := postgres.NewFontRepo(a.conn)
 	projectsSvc := service.NewProjectService(service.ProjectsDeps{
 		Repo: projectRepo, Blobs: blobs, Images: img, Audit: projectAudit{auditSvc}, Events: a.hub,
-		Tx: tx, Clock: clk, IDs: a.ids,
+		Fonts: fontRepo, Tx: tx, Clock: clk, IDs: a.ids,
+	})
+	fontsSvc := service.NewFontService(service.FontsDeps{
+		Repo: fontRepo, Blobs: blobs, Audit: projectAudit{auditSvc}, Tx: tx, Clock: clk, IDs: a.ids,
 	})
 	participantsSvc := service.NewParticipants(service.ParticipantsDeps{
 		Repo: participantRepo, Projects: projectRepo, Locks: a.hub, Notify: a.hub, Audit: auditSvc,
@@ -231,6 +235,7 @@ func (a *app) wire(ctx context.Context) error {
 			InsecureCookies: !cfg.CookieSecure,
 			Auth:            meteredAuth{Auth: authSvc, m: m}, Users: meteredUsers{Users: a.users, m: m}, Roles: rolesSvc,
 			Projects:     meteredProjects{ProjectService: projectsSvc, m: m},
+			Fonts:        fontsSvc,
 			Participants: meteredParticipants{Participants: participantsSvc, m: m}, Audit: auditSvc, System: systemSvc,
 			MaxImageBytes: int64(cfg.MaxImageMB) << 20,
 		},

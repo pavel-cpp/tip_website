@@ -178,9 +178,16 @@ const (
 	MaxStroke   = 50
 )
 
-// allowedFonts is the font allow-list; fonts are bundled with the frontend.
+// allowedFonts is the curated font allow-list (SIL OFL / Apache faces with Cyrillic and Latin);
+// the files are bundled with the frontend and frontend/scripts/gen-fonts.mjs keeps the catalogue
+// in sync. Uploaded fonts are referenced as CustomFontPrefix + id instead, see font.go.
 var allowedFonts = []string{
-	"Montserrat", "Roboto", "Open Sans", "Inter", "PT Sans", "Oswald", "Playfair Display", "Arimo",
+	"Montserrat", "Roboto", "Open Sans", "Inter", "PT Sans", "Arimo", "Noto Sans", "Source Sans 3",
+	"Fira Sans", "IBM Plex Sans", "Manrope", "Nunito", "Rubik", "Raleway", "Golos Text", "Onest", "Jost",
+	"Exo 2", "Oswald", "Roboto Condensed", "PT Sans Narrow", "Russo One", "Unbounded", "Comfortaa",
+	"Pacifico", "Lobster", "Caveat", "Marck Script", "Playfair Display", "PT Serif", "Merriweather",
+	"Lora", "Noto Serif", "Source Serif 4", "Roboto Slab", "Cormorant", "EB Garamond", "Roboto Mono",
+	"JetBrains Mono", "IBM Plex Mono", "PT Mono",
 }
 
 // AllowedFonts returns a copy of the font allow-list.
@@ -205,7 +212,7 @@ type Placeholder struct {
 // by prefix (for example "placeholders.name").
 func (p Placeholder) Validate(prefix string) error {
 	var errs []error
-	if !slices.Contains(allowedFonts, p.Font) {
+	if !slices.Contains(allowedFonts, p.Font) && !IsCustomFont(p.Font) {
 		errs = append(errs, fieldError(prefix+".font", "font is not in the allow-list"))
 	}
 	if p.Size < MinFontSize || p.Size > MaxFontSize {
