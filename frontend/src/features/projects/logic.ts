@@ -29,12 +29,30 @@ export function splitProjects(
   return out
 }
 
-export type ProjectAction = 'settings' | 'finish' | 'reopen' | 'delete'
+export type ProjectAction = 'settings' | 'moveUp' | 'moveDown' | 'finish' | 'reopen' | 'delete'
 
-/** Card menu entries for a project, filtered by the user's permissions. Order matches the mockup. */
-export function projectActions(can: (perm: string) => boolean, status: ProjectStatus): ProjectAction[] {
+/** Where a card stands in its section; enables the keyboard move entries when set. */
+export interface CardPosition {
+  index: number
+  count: number
+}
+
+/**
+ * Card menu entries for a project, filtered by the user's permissions. Order matches the mockup.
+ * Moving within the section needs project.update (the shared order) and a position; moving to the
+ * other section is the finish / reopen entry (project.finish).
+ */
+export function projectActions(
+  can: (perm: string) => boolean,
+  status: ProjectStatus,
+  position?: CardPosition,
+): ProjectAction[] {
   const actions: ProjectAction[] = []
   if (can('project.update') && status === 'active') actions.push('settings')
+  if (can('project.update') && position) {
+    if (position.index > 0) actions.push('moveUp')
+    if (position.index < position.count - 1) actions.push('moveDown')
+  }
   if (can('project.finish')) actions.push(status === 'active' ? 'finish' : 'reopen')
   if (can('project.delete')) actions.push('delete')
   return actions

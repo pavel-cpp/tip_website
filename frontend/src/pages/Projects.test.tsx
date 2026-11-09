@@ -15,7 +15,7 @@ const card = (id: string, title: string, status: 'active' | 'finished' = 'active
   title,
   status,
   image: null,
-  contributors: [{ id: 'u1', displayName: 'Azam T', color: '#ffb84d', avatarUrl: null }],
+  online: [{ id: 'u1', displayName: 'Azam T', color: '#ffb84d', avatarUrl: null }],
   participantCount: 3,
 })
 
@@ -151,4 +151,46 @@ describe('Projects screen', () => {
     expect(await screen.findByText('Не удалось загрузить проекты', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Повторить' })).toBeInTheDocument()
   }, 10000)
+
+  it('lists only the people online now on a card, with their names as a tooltip', async () => {
+    mockApi(LIST)
+    renderPage()
+    const online = await screen.findAllByRole('img', { name: /Сейчас в проекте: Azam T/ })
+    expect(online[0]).toHaveAttribute('title', 'Сейчас в проекте: Azam T')
+  })
+
+  it('moves a card down from its menu and saves the whole order', async () => {
+    mockApi([card('1', 'Tashkent City'), card('2', 'Autumn iPhone'), card('3', 'Spring 2025', 'finished')])
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Действия: Tashkent City' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Переместить ниже' }))
+    await waitFor(() =>
+      expect(calls.some((c) => c.method === 'PUT' && c.url === '/api/v1/projects/order')).toBe(true),
+    )
+    expect(await screen.findByText(/место 2 из 2/)).toBeInTheDocument()
+  })
+
+  it('offers no move entries and no drag affordance without project.update', async () => {
+    setAccessToken(jwt(['project.view', 'project.finish']))
+    mockApi(LIST)
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Действия: Tashkent City' }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).queryByRole('menuitem', { name: /Переместить/ })).not.toBeInTheDocument()
+  })
+
+  it('shows no drag affordance to a worker', async () => {
+    setAccessToken(jwt(['project.view']))
+    mockApi(LIST)
+    renderPage()
+    await screen.findByRole('link', { name: /Tashkent City/ })
+    expect(document.querySelector('.is-draggable')).toBeNull()
+  })
+
+  it('makes cards draggable for a user who may reorder', async () => {
+    mockApi(LIST)
+    renderPage()
+    await screen.findByRole('link', { name: /Tashkent City/ })
+    expect(document.querySelectorAll('.project-card.is-draggable')).toHaveLength(3)
+  })
 })

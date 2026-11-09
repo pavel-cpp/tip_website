@@ -2,19 +2,36 @@ import { type RefObject, useLayoutEffect, useRef } from 'react'
 import { DURATION, prefersReducedMotion } from '../../lib/motion'
 import { flipDelta } from './logic'
 
+export interface FlipApi {
+  /**
+   * A dragged card was let go at `rect`: on the next render it glides from there to its new slot,
+   * and its inline drag transform is removed in the same frame so there is no flash at home.
+   */
+  release: (id: string, rect: { left: number; top: number }) => void
+}
+
 /**
  * FLIP layout animation for children marked `data-flip-id` inside `container`: after every render
  * each element that moved is translated back to its old position (transform only) and released,
  * so reordering, filtering and moving between sections glide instead of jumping.
  * Uses the Web Animations API directly; no animation library is needed for this.
+ * While `paused` (a drag in progress) nothing is measured or animated.
  */
-export function useFlip(container: RefObject<HTMLElement | null>): void {
+export function useFlip(container: RefObject<HTMLElement | null>, paused = false): FlipApi {
   const previous = useRef(new Map<string, { left: number; top: number }>())
+  const released = useRef<{ id: string; rect: { left: number; top: number } } | null>(null)
 
   // No dependency list on purpose: positions can change on any render of the owning component.
   useLayoutEffect(() => {
     const root = container.current
-    if (!root) return
+    if (!root || paused) return
+    const drop = released.current
+    released.current = null
+    if (drop) {
+      const el = root.querySelector<HTMLElement>(`[data-flip-id="${CSS.escape(drop.id)}"]`)
+      if (el) el.style.transform = ''
+      previous.current.set(drop.id, drop.rect)
+    }
     const next = new Map<string, { left: number; top: number }>()
     const animate = !prefersReducedMotion()
     for (const el of root.querySelectorAll<HTMLElement>('[data-flip-id]')) {
@@ -32,4 +49,11 @@ export function useFlip(container: RefObject<HTMLElement | null>): void {
     }
     previous.current = next
   })
+
+  const api = useRef<FlipApi>({
+    release: (id, rect) => {
+      released.current = { id, rect }
+    },
+  })
+  return api.current
 }

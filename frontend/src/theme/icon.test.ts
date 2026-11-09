@@ -25,6 +25,6 @@ describe('tab icon', () => {
   it('the pre-paint script mirrors the same file names', () => {
     const src = readFileSync('public/theme-init.js', 'utf8')
     expect(src).toContain("'/favicon.svg'")
-    expect(src).toContain('/favicon-${theme}.svg')
+    expect(src).toMatch(/favicon-\$\{theme\}\.svg/)
   })
 })
