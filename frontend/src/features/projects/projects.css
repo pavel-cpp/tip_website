@@ -13,6 +13,12 @@
 .projects-search {
   width: min(280px, 100%);
 }
+@media (max-width: 559px) {
+  /* Same right edge as the card grid below. */
+  .projects-search {
+    width: 100%;
+  }
+}
 /* The label stays for screen readers; the placeholder carries the visible hint. */
 .projects-search .field-label {
   position: absolute;
@@ -152,6 +158,10 @@
   align-items: center;
   gap: 6px;
 }
+/* Less overlap than the default stack so two-letter initials stay readable. */
+.project-card-online .avatar-stack > * + * {
+  margin-left: -6px;
+}
 .project-card-online-dot {
   width: 6px;
   height: 6px;
@@ -231,7 +241,7 @@ body.is-dnd .project-card:not(.is-dragging):hover {
   align-items: flex-start;
   justify-content: flex-start;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--card-pad);
   background: transparent;
   border-style: dashed;
   color: var(--text-muted);
