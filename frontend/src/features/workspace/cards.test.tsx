@@ -161,7 +161,7 @@ describe('phone cards', () => {
     expect(card('Timur')).toHaveAttribute('data-selected', 'true')
     // The number is gone from the card (the box stands in its place) but stays in the accessible name.
     expect(card('Timur').querySelector('.pc-num')).toBeNull()
-    expect(main).toHaveAccessibleName(/^1 Timur/)
+    expect(main).toHaveAccessibleName(/^№ 1, Timur/)
     expect(screen.getByText('Выбрано: 1 из 3')).toBeInTheDocument()
 
     fireEvent.click(within(card('Nadezhda')).getByRole('button'))
@@ -175,9 +175,9 @@ describe('phone cards', () => {
   it('gives every card one readable accessible name with its state', () => {
     render(<Harness unsentIds={new Set(['id1'])} />)
     expect(within(card('Timur')).getByRole('button')).toHaveAccessibleName(
-      '1 Timur +998901234567, не отправлено',
+      '№ 1, Timur, +998901234567, не отправлено',
     )
-    expect(within(card(LONG)).getByRole('button')).toHaveAccessibleName(`3 ${LONG} +998 90 108 33 44`)
+    expect(within(card(LONG)).getByRole('button')).toHaveAccessibleName(`№ 3, ${LONG}, +998 90 108 33 44`)
   })
 
   it('shows the row count in the list header, not in a footer', () => {

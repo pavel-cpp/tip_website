@@ -237,14 +237,12 @@ test.describe('phone', () => {
     ).toBeVisible()
     expect(await smallTargets(ws.bulkBar)).toEqual([])
 
-    // Copy is labelled as one-ticket-only, saving several tickets is offered as one ZIP.
-    await ws.bulkBar.getByRole('button', { name: ws.t('workspace.more') }).tap()
-    await expect(page.getByRole('menuitem', { name: ws.t('workspace.bulk.copyOne') })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    // Copy is the primary action; saving several tickets is offered as one ZIP; Print stays neutral.
     await expect(
-      page.getByRole('menuitem', { name: ws.t('workspace.bulk.saveMany', { count: 2 }) }),
+      ws.bulkBar.getByRole('button', { name: ws.t('workspace.bulk.copyMany', { count: 2 }) }),
+    ).toBeVisible()
+    await expect(
+      ws.bulkBar.getByRole('button', { name: ws.t('workspace.bulk.saveMany', { count: 2 }) }),
     ).toBeVisible()
     await page.keyboard.press('Escape')
 

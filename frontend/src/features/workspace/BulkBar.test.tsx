@@ -27,36 +27,40 @@ function setup(over: Partial<BulkBarProps> = {}) {
 }
 
 describe('bulk bar', () => {
-  it('is one row: close, count, Print (N), clear and a menu', async () => {
-    const p = setup()
+  it('is one row: close, count, primary Copy (N), then Save, Print and Clear', async () => {
+    const p = setup({ copyReady: true })
     const bar = screen.getByRole('toolbar', { name: 'Действия с выбранными строками' })
     expect(within(bar).getByRole('status')).toHaveTextContent('выбрано 3')
-    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Печать (3)' }))
+    const user = userEvent.setup()
+    await user.click(within(bar).getByRole('button', { name: 'Копировать (3)' }))
+    expect(p.onCopy).toHaveBeenCalled()
+    await user.click(within(bar).getByRole('button', { name: 'Сохранить 3 билета в ZIP' }))
+    expect(p.onSave).toHaveBeenCalled()
+    await user.click(within(bar).getByRole('button', { name: 'Печать (3)' }))
     expect(p.onPrint).toHaveBeenCalled()
-    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Очистить (3)' }))
+    await user.click(within(bar).getByRole('button', { name: 'Очистить (3)' }))
     expect(p.onClear).toHaveBeenCalled()
-    await userEvent.setup().click(within(bar).getByRole('button', { name: 'Готово' }))
+    await user.click(within(bar).getByRole('button', { name: 'Готово' }))
     expect(p.onDone).toHaveBeenCalled()
   })
 
-  it('labels Copy as one-ticket-only and offers a ZIP for several rows', async () => {
-    const p = setup()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Ещё' }))
-    const copy = await screen.findByRole('menuitem', { name: 'Копировать билет (только один)' })
-    expect(copy).toHaveAttribute('aria-disabled', 'true')
-    await userEvent.setup().click(screen.getByRole('menuitem', { name: 'Сохранить 3 билета в ZIP' }))
-    expect(p.onSave).toHaveBeenCalled()
+  it('makes Copy the only primary action and keeps Print neutral', () => {
+    setup({ copyReady: true })
+    const copy = screen.getByRole('button', { name: 'Копировать (3)' })
+    const print = screen.getByRole('button', { name: 'Печать (3)' })
+    expect(copy.className).toContain('primary')
+    expect(print.className).not.toContain('primary')
   })
 
   it('disables Print and Clear while nothing is selected', () => {
     setup({ count: 0 })
     expect(screen.getByRole('button', { name: 'Печать' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: 'Копировать билет' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('button', { name: 'Очистить (0)' })).toHaveAttribute('aria-disabled', 'true')
   })
 
   it('hides ticket actions without the print permission', () => {
     setup({ canPrint: false })
     expect(screen.queryByRole('button', { name: /Печать/ })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Ещё' })).toBeNull()
   })
 })
