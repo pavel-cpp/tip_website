@@ -15,20 +15,24 @@ import (
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
 )
 
-// Contributor list sizes: the card shows a few avatars, the project page shows more.
+// Contributor list sizes: the list cards do not show contributors (they show who is online),
+// the project page shows more.
 const (
-	cardContributors   = 5
+	cardContributors   = 0
 	detailContributors = 50
+	// maxReorderIDs bounds one reorder request.
+	maxReorderIDs = 2000
 )
 
 // Audit action names written by the projects service.
 const (
-	ActionProjectCreate = "project.create"
-	ActionProjectUpdate = "project.update"
-	ActionProjectFinish = "project.finish"
-	ActionProjectReopen = "project.reopen"
-	ActionProjectDelete = "project.delete"
-	ActionImageUpload   = "image.upload"
+	ActionProjectCreate  = "project.create"
+	ActionProjectUpdate  = "project.update"
+	ActionProjectFinish  = "project.finish"
+	ActionProjectReopen  = "project.reopen"
+	ActionProjectDelete  = "project.delete"
+	ActionProjectReorder = "project.reorder"
+	ActionImageUpload    = "image.upload"
 )
 
 // ProjectsDeps are the collaborators of ProjectService. Events may be nil.
@@ -38,9 +42,11 @@ type ProjectsDeps struct {
 	Images ImageProcessor
 	Audit  ProjectAudit
 	Events ProjectEvents
-	Tx     Tx
-	Clock  Clock
-	IDs    IDGen
+	// Presence supplies the users online per project; may be nil.
+	Presence ProjectPresence
+	Tx       Tx
+	Clock    Clock
+	IDs      IDGen
 }
 
 // ProjectService implements the project use cases. Authorization is decided from the
@@ -131,9 +137,14 @@ func (s *ProjectService) withDetails(ctx context.Context, projects []domain.Proj
 			return nil, fmt.Errorf("load project details: %w", err)
 		}
 	}
+	var online map[string][]domain.Peer
+	if s.d.Presence != nil && len(ids) > 0 {
+		online = s.d.Presence.Online(ctx, ids)
+	}
 	out := make([]ProjectView, len(projects))
 	for i, p := range projects {
 		out[i] = ProjectView{Project: p, ProjectDetails: details[p.ID]}
+		out[i].Online = online[p.ID]
 	}
 	return out, nil
 }
@@ -354,6 +365,24 @@ func (s *ProjectService) transition(ctx context.Context, a domain.Actor, id, act
 	}
 	s.publish(out)
 	return s.view(ctx, out)
+}
+
+// Reorder stores the team-wide order of projects: the listed projects take over, in that order,
+// the positions they occupy now. Last write wins; finished projects the actor may not see are
+// ignored.
+func (s *ProjectService) Reorder(ctx context.Context, a domain.Actor, ids []string) error {
+	if err := a.Require(domain.PermProjectUpdate); err != nil {
+		return err
+	}
+	if len(ids) > maxReorderIDs {
+		return domain.NewValidation(domain.FieldError{Field: "ids", Reason: "too many projects"})
+	}
+	return s.d.Tx.Do(ctx, func(ctx context.Context) error {
+		if err := s.d.Repo.Reorder(ctx, ids, !a.Can(domain.PermProjectViewFinished)); err != nil {
+			return fmt.Errorf("reorder projects: %w", err)
+		}
+		return s.audit(ctx, a, ActionProjectReorder, "", map[string]any{"count": len(ids)})
+	})
 }
 
 // Delete removes a project and its image file when no other project shares the file.

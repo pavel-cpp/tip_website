@@ -21,6 +21,9 @@ type fakeRepo struct {
 	touched  []string
 	details  map[string]domain.ProjectDetails
 	saveErr  error
+
+	reorderIDs        []string
+	reorderActiveOnly bool
 }
 
 func newFakeRepo() *fakeRepo {

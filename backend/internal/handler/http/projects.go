@@ -40,6 +40,7 @@ type ProjectsService interface {
 	Finish(ctx context.Context, a domain.Actor, id string) (service.ProjectView, error)
 	Reopen(ctx context.Context, a domain.Actor, id string) (service.ProjectView, error)
 	Delete(ctx context.Context, a domain.Actor, id string) error
+	Reorder(ctx context.Context, a domain.Actor, ids []string) error
 	PutImage(ctx context.Context, a domain.Actor, id, filename string, data []byte) (service.ProjectView, error)
 	Image(ctx context.Context, a domain.Actor, id, ifNoneMatch string, thumb bool) (service.ImageFile, error)
 }
@@ -170,6 +171,28 @@ func (h *ProjectsHandler) ReopenProject(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	h.respond(w, r)(h.svc.Reopen(r.Context(), a, id.String()))
+}
+
+// ReorderProjects implements gen.ServerInterface.
+func (h *ProjectsHandler) ReorderProjects(w http.ResponseWriter, r *http.Request) {
+	a, ok := actorOrFail(w, r)
+	if !ok {
+		return
+	}
+	var req gen.ReorderProjectsRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		projectsFail(w, r, err)
+		return
+	}
+	ids := make([]string, len(req.Ids))
+	for i, id := range req.Ids {
+		ids[i] = id.String()
+	}
+	if err := h.svc.Reorder(r.Context(), a, ids); err != nil {
+		projectsFail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // PutProjectImage implements gen.ServerInterface. The file is streamed from the multipart body
@@ -345,6 +368,23 @@ func projectsContributors(cs []domain.Contributor) []gen.UserRef {
 	return out
 }
 
+func projectsOnline(ps []domain.Peer) []gen.UserRef {
+	out := make([]gen.UserRef, 0, len(ps))
+	for _, p := range ps {
+		id, err := uuid.Parse(p.ID)
+		if err != nil {
+			continue
+		}
+		ref := gen.UserRef{Id: id, DisplayName: p.DisplayName, Color: p.Color}
+		if p.AvatarURL != "" {
+			u := p.AvatarURL
+			ref.AvatarUrl = &u
+		}
+		out = append(out, ref)
+	}
+	return out
+}
+
 func projectsDTO(v service.ProjectView) gen.Project {
 	out := gen.Project{
 		Id:               uuid.MustParse(v.ID),
@@ -354,6 +394,7 @@ func projectsDTO(v service.ProjectView) gen.Project {
 		CreatedAt:        v.CreatedAt,
 		ParticipantCount: v.ParticipantCount,
 		Contributors:     projectsContributors(v.Contributors),
+		Online:           projectsOnline(v.Online),
 		Placeholders: gen.Placeholders{
 			Number: projectsPlaceholderDTO(v.Placeholders.Number),
 			Name:   projectsPlaceholderDTO(v.Placeholders.Name),
@@ -375,7 +416,7 @@ func projectsCardDTO(v service.ProjectView) gen.ProjectCard {
 		Title:            v.Title,
 		Status:           gen.ProjectStatus(v.Status),
 		ParticipantCount: v.ParticipantCount,
-		Contributors:     projectsContributors(v.Contributors),
+		Online:           projectsOnline(v.Online),
 	}
 	if v.Image != nil {
 		out.Image = &gen.CardImage{Url: projectsImageURL(v.ID, v.Image.SHA256), ThumbUrl: projectsThumbURL(v.ID, v.Image.SHA256)}
