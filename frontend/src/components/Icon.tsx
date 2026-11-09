@@ -55,6 +55,14 @@ const paths = {
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.900 4.900L7 7M17 17l2.100 2.100M4.900 19.100L7 17M17 7l2.100-2.100" />
     </>
   ),
+  // Two stacked server units with status dots: the System page (health, metrics), unlike the settings gear.
+  server: (
+    <>
+      <rect x="3" y="4" width="18" height="7" rx="2" />
+      <rect x="3" y="13" width="18" height="7" rx="2" />
+      <path d="M7 7.500h.01M7 16.500h.01M12 7.500h5M12 16.500h5" />
+    </>
+  ),
   sun: (
     <>
       <circle cx="12" cy="12" r="4" />
