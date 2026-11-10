@@ -1,4 +1,5 @@
 import { projectsRu } from '../features/projects/messages.ru'
+import { settingsRu } from '../features/projects/messages.settings.ru'
 import { realtimeRu } from '../features/realtime/messages.ru'
 import { workspaceRu } from '../features/workspace/messages.ru'
 import { ruAccess } from './ru.access'
@@ -164,6 +165,7 @@ export const ru = {
   'design.motion.bounce': 'Пружина',
 
   ...projectsRu,
+  ...settingsRu,
   ...workspaceRu,
   ...realtimeRu,
 } as const satisfies Record<string, Message>

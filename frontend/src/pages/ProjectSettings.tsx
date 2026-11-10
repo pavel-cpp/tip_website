@@ -4,7 +4,6 @@ import { isApiError } from '../api/errors'
 import { AppLink } from '../components/AppLink'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
-import { Input } from '../components/Input'
 import { Modal } from '../components/Modal'
 import { Panel } from '../components/Panel'
 import { Skeleton, useSkeleton } from '../components/Skeleton'
@@ -12,9 +11,9 @@ import { Tabs } from '../components/Tabs'
 import { useToast } from '../components/Toast'
 import { type Project, useProject, useReplaceImage, useUpdateProject } from '../features/projects/api'
 import { buildPatch, type Draft, isDirty, normalizePlaceholder, toDraft } from '../features/projects/draft'
-import { ImageField } from '../features/projects/ImageField'
+import { MAX_IMAGE_BYTES } from '../features/projects/imageFile'
 import { PlaceholderControls } from '../features/projects/PlaceholderControls'
-import { PlaceholderPreview } from '../features/projects/PlaceholderPreview'
+import { PreviewStage } from '../features/projects/PreviewStage'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
 import { usePermissions } from '../features/projects/usePermissions'
 import { useUnsavedGuard } from '../features/projects/useUnsavedGuard'
@@ -65,7 +64,7 @@ function SettingsEditor({
   project: Project
   refetch: () => Promise<Project | undefined>
 }) {
-  const { t } = useI18n()
+  const { t, formatBytes } = useI18n()
   const toast = useToast()
   const update = useUpdateProject(project.id)
   const replace = useReplaceImage(project.id)
@@ -73,6 +72,7 @@ function SettingsEditor({
   const [draft, setDraft] = useState<Draft>(() => toDraft(project))
   const [active, setActive] = useState<PlaceholderKey>('number')
   const [progress, setProgress] = useState<number | null>(null)
+  const [imageError, setImageError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
   const [saved, setSaved] = useState(false)
   const savedTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -120,11 +120,19 @@ function SettingsEditor({
   }
 
   const upload = (file: File) => {
+    setImageError(null)
     setProgress(0)
     replace.mutate(
       { file, onProgress: setProgress },
       {
-        onError: (e) => toast.show({ message: errorText(e), tone: 'error' }),
+        onSuccess: (next) => {
+          // The server rescales the placeholders when the picture size changes; the draft follows it.
+          const before = project.image
+          if (!next.image || (before && before.w === next.image.w && before.h === next.image.h)) return
+          setDraft((d) => ({ ...d, placeholders: toDraft(next).placeholders }))
+          if (before) toast.show({ message: t('settings.image.adapted') })
+        },
+        onError: (e) => setImageError(errorText(e)),
         onSettled: () => setProgress(null),
       },
     )
@@ -132,116 +140,130 @@ function SettingsEditor({
 
   const titleEmpty = draft.title.trim() === ''
   const tabs = PLACEHOLDER_KEYS.map((k) => ({ id: k, label: t(`settings.ph.${k}`) }))
+  const canSave = dirty && !titleEmpty && !readOnly
+
+  // Ctrl/Cmd+S saves, as in any editor; the browser's own "save page" would be useless here.
+  const saveRef = useRef(() => {})
+  saveRef.current = () => {
+    if (canSave && !update.isPending) void save()
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        saveRef.current()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
     <>
-      <div className="settings-head">
-        <nav className="breadcrumb" aria-label={t('settings.title')}>
-          <AppLink to="/" className="muted">
-            {t('projects.title')}
-          </AppLink>
-          <span className="muted" aria-hidden="true">
-            /
-          </span>
-          <h1 className="breadcrumb-current">{t('settings.title')}</h1>
-        </nav>
-        <Button
-          variant="ghost"
-          iconOnly
-          aria-label={t('action.close')}
-          onClick={() => guard.requestLeave('/')}
-        >
-          <Icon name="x" />
-        </Button>
-      </div>
-
-      {readOnly && (
-        <p className="image-hint" role="status">
-          <Icon name="info" size={16} />
-          {t('settings.readOnly')}
-        </p>
-      )}
-
-      <div className="settings-grid">
-        <Panel title={t('settings.preview.title')} icon="pencil" className="settings-preview">
-          {image && size ? (
-            <PlaceholderPreview
-              image={image}
-              size={size}
-              placeholders={draft.placeholders}
-              values={values}
-              active={active}
-              onSelect={setActive}
-              onMove={(key, p) => patchPlaceholder(key, p)}
-              disabled={readOnly}
-            />
-          ) : (
-            <p className="muted preview-empty">
-              {project.image ? t('state.loading') : t('settings.preview.empty')}
-            </p>
-          )}
-        </Panel>
-
-        <Panel title={t('settings.title')} icon="settings" className="settings-form">
-          <form
-            className="settings-fields"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (dirty && !titleEmpty && !readOnly) void save()
-            }}
-          >
-            <Input
+      <form
+        className="st"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault()
+          saveRef.current()
+        }}
+      >
+        <h1 className="sr-only">{t('settings.title')}</h1>
+        <div className="settings-head">
+          <div className="st-title-wrap">
+            <input
+              className="st-title"
               name="title"
-              label={t('settings.name')}
+              aria-label={t('settings.name')}
+              title={t('settings.titleHint')}
               value={draft.title}
               maxLength={200}
               autoComplete="off"
               disabled={readOnly}
-              error={titleEmpty ? t('validation.required') : undefined}
+              aria-invalid={titleEmpty || undefined}
+              aria-describedby={titleEmpty ? 'st-title-error' : undefined}
               onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
             />
-            <div className="field">
-              <span className="field-label">{t('settings.image')}</span>
-              <ImageField
-                image={project.image}
-                progress={progress}
+            <Icon name="pencil" size={18} />
+            {titleEmpty && (
+              <span id="st-title-error" className="field-error st-title-error" role="alert">
+                {t('validation.required')}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            iconOnly
+            aria-label={t('action.close')}
+            onClick={() => guard.requestLeave('/')}
+          >
+            <Icon name="x" />
+          </Button>
+        </div>
+
+        {readOnly && (
+          <p className="image-hint" role="status">
+            <Icon name="info" size={16} />
+            {t('settings.readOnly')}
+          </p>
+        )}
+
+        <div className="settings-grid">
+          <PreviewStage
+            project={project}
+            image={image}
+            placeholders={draft.placeholders}
+            values={values}
+            active={active}
+            onSelect={setActive}
+            onMove={(key, p) => patchPlaceholder(key, p)}
+            progress={progress}
+            error={imageError}
+            disabled={readOnly}
+            onFile={upload}
+            onReject={(reason) =>
+              setImageError(
+                reason === 'type'
+                  ? t('settings.image.badType')
+                  : t('settings.image.tooLarge', { size: formatBytes(MAX_IMAGE_BYTES) }),
+              )
+            }
+          />
+
+          <Panel title={t('settings.placeholders')} icon="settings" className="st-side">
+            <div className="settings-fields">
+              <Tabs
+                tabs={tabs}
+                value={active}
+                onChange={(k) => setActive(k as PlaceholderKey)}
+                label={t('settings.tabs.label')}
+              />
+              <PlaceholderControls
+                value={draft.placeholders[active]}
+                image={size ?? { w: 100_000, h: 100_000 }}
                 disabled={readOnly}
-                onFile={upload}
-                onReject={(message) => toast.show({ message, tone: 'error' })}
+                onChange={(patch) => patchPlaceholder(active, patch)}
               />
             </div>
+          </Panel>
+        </div>
 
-            <h2 className="settings-subtitle">{t('settings.placeholders')}</h2>
-            <Tabs
-              tabs={tabs}
-              value={active}
-              onChange={(k) => setActive(k as PlaceholderKey)}
-              label={t('settings.tabs.label')}
-            />
-            <PlaceholderControls
-              value={draft.placeholders[active]}
-              image={size ?? { w: 100_000, h: 100_000 }}
-              disabled={readOnly}
-              onChange={(patch) => patchPlaceholder(active, patch)}
-            />
-
-            <div className="settings-actions">
-              <Button variant="ghost" onClick={() => guard.requestLeave('/')}>
-                {t('action.cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                type="submit"
-                loading={update.isPending}
-                disabled={!dirty || titleEmpty || readOnly}
-              >
-                {saved ? <Icon name="check" size={16} /> : null}
-                {t('action.save')}
-              </Button>
-            </div>
-          </form>
-        </Panel>
-      </div>
+        <div className="st-bar">
+          <p className="st-status" role="status" data-dirty={dirty || undefined}>
+            <span className="st-dot" aria-hidden="true" />
+            {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}
+          </p>
+          <div className="st-bar-actions">
+            <Button variant="ghost" disabled={!dirty || readOnly} onClick={() => setDraft(toDraft(project))}>
+              {t('settings.discard')}
+            </Button>
+            <Button variant="primary" type="submit" loading={update.isPending} disabled={!canSave}>
+              {saved ? <Icon name="check" size={16} /> : null}
+              {t('action.save')}
+            </Button>
+          </div>
+        </div>
+      </form>
 
       <Modal
         open={conflict}

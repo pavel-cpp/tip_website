@@ -64,9 +64,3 @@ export function normalizePlaceholder(
     y: clampInt(p.y, 0, image?.h ?? Number.MAX_SAFE_INTEGER),
   }
 }
-
-/** True when the image is noticeably not 7:4 (2% tolerance); the UI then shows a gentle hint. */
-export function isOffRatio(w: number, h: number, target = 7 / 4, tolerance = 0.02): boolean {
-  if (w <= 0 || h <= 0) return false
-  return Math.abs(w / h / target - 1) > tolerance
-}

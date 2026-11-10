@@ -1,8 +1,9 @@
 import { useEffect, useId, useState } from 'react'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
-import { PLACEHOLDER_LIMITS, TICKET_FONTS, type TicketPlaceholder } from '../../lib/ticket'
+import { PLACEHOLDER_LIMITS, type TicketPlaceholder } from '../../lib/ticket'
 import { clampInt, isHexColor } from './draft'
+import { FontPicker } from './FontPicker'
 import './settings.css'
 
 interface NumberFieldProps {
@@ -145,7 +146,7 @@ interface Props {
 
 export function PlaceholderControls({ value: p, image, onChange, disabled }: Props) {
   const { t } = useI18n()
-  const fontId = useId()
+  const styleId = useId()
   const { minSize, maxSize, minStroke, maxStroke } = PLACEHOLDER_LIMITS
   const toggles = [
     { key: 'bold', short: t('settings.boldShort'), label: t('settings.bold') },
@@ -155,25 +156,12 @@ export function PlaceholderControls({ value: p, image, onChange, disabled }: Pro
 
   return (
     <div className="ph-controls">
-      <div className="field">
-        <label className="field-label" htmlFor={fontId}>
-          {t('settings.font')}
-        </label>
-        <div className="input">
-          <select
-            id={fontId}
-            value={p.font}
-            disabled={disabled}
-            onChange={(e) => onChange({ font: e.target.value })}
-          >
-            {TICKET_FONTS.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <FontPicker
+        label={t('settings.font')}
+        value={p.font}
+        disabled={disabled}
+        onChange={(font) => onChange({ font })}
+      />
       <div className="ph-row">
         <NumberField
           label={t('settings.size')}
@@ -207,11 +195,11 @@ export function PlaceholderControls({ value: p, image, onChange, disabled }: Pro
         />
       </div>
       <div className="field">
-        <span className="field-label" id={`${fontId}-style`}>
+        <span className="field-label" id={styleId}>
           {t('settings.style')}
         </span>
         {/* biome-ignore lint/a11y/useSemanticElements: a styled button group; fieldset would add default chrome */}
-        <div className="style-toggles" role="group" aria-labelledby={`${fontId}-style`}>
+        <div className="style-toggles" role="group" aria-labelledby={styleId}>
           {toggles.map(({ key, short, label }) => (
             <button
               key={key}
@@ -251,7 +239,7 @@ export function PlaceholderControls({ value: p, image, onChange, disabled }: Pro
             onChange={(y) => onChange({ y })}
           />
         </div>
-        <span className="field-hint">{t('settings.positionHint')}</span>
+        <span className="field-hint">{t('settings.nudgeHint')}</span>
       </div>
     </div>
   )

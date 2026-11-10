@@ -1,3 +1,4 @@
+import { settingsUz } from '../features/projects/messages.settings.uz'
 import { projectsUz } from '../features/projects/messages.uz'
 import { realtimeUz } from '../features/realtime/messages.uz'
 import { workspaceUz } from '../features/workspace/messages.uz'
@@ -150,6 +151,7 @@ export const uz: Record<MessageKey, Message> = {
   'design.motion.bounce': 'Prujina',
 
   ...projectsUz,
+  ...settingsUz,
   ...workspaceUz,
   ...realtimeUz,
 }

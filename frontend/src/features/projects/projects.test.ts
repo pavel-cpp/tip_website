@@ -2,15 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { ru } from '../../i18n/ru'
 import { uz } from '../../i18n/uz'
 import type { ProjectCardData } from './api'
-import {
-  buildPatch,
-  changedKeys,
-  clampInt,
-  isDirty,
-  isOffRatio,
-  normalizePlaceholder,
-  toDraft,
-} from './draft'
+import { buildPatch, changedKeys, clampInt, isDirty, normalizePlaceholder, toDraft } from './draft'
 import { clampToImage, clientToImage, dragPosition, keyDelta, snapPosition, snapThreshold } from './drag'
 import { deleteConfirmed, flipDelta, gradientFor, hueFor, projectActions, splitProjects } from './logic'
 import { permissionsFromToken } from './usePermissions'
@@ -204,16 +196,11 @@ describe('settings draft', () => {
     expect([p.size, p.stroke, p.x, p.y]).toEqual([6, 50, 0, 500])
     expect(clampInt(7.6, 0, 10)).toBe(8)
   })
-
-  it('hints only when the aspect ratio is not 7:4', () => {
-    expect(isOffRatio(1400, 800)).toBe(false)
-    expect(isOffRatio(1024, 768)).toBe(true)
-  })
 })
 
 describe('i18n parity for the projects namespaces', () => {
   const prefixed = (d: Record<string, unknown>) =>
-    Object.keys(d).filter((k) => /^(projects|settings|ticket)\./.test(k))
+    Object.keys(d).filter((k) => /^(projects|settings|ticket|fonts)\./.test(k))
 
   it('has the same keys in ru and uz', () => {
     expect(prefixed(uz).sort()).toEqual(prefixed(ru).sort())

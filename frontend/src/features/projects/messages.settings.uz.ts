@@ -1,0 +1,57 @@
+import type { Message } from '../../i18n/types'
+import type { settingsRu } from './messages.settings.ru'
+
+// Uzbek, Latin script (oʻ and gʻ use U+02BB). Needs a native-speaker review before release.
+export const settingsUz: Record<keyof typeof settingsRu, Message> = {
+  'settings.drop.hint': 'Rasmni koʻrinish ustiga sudrab keltiring yoki fayl tanlang',
+  'settings.drop.release': 'Rasmni yuklash uchun faylni qoʻyib yuboring',
+  'settings.image.choose': 'Fayl tanlash',
+  'settings.image.formats': 'PNG yoki JPEG, {size} gacha',
+  'settings.image.tooLarge': 'Fayl {size} dan katta. Uni kichraytirib, qayta urinib koʻring.',
+  'settings.image.adapted': 'Maydonlar joylashuvi yangi rasm oʻlchamiga moslandi',
+  'settings.image.dropFailed': 'Rasmni yuklab boʻlmadi',
+  'settings.image.busy': 'Rasm yuklanmoqda, tugashini kuting',
+  'settings.status.unsaved': 'Saqlanmagan',
+  'settings.status.saved': 'Hammasi saqlangan',
+  'settings.discard': 'Bekor qilish',
+  'settings.titleHint': 'Loyiha nomi — oʻzgartirish uchun bosing',
+  'settings.panel.hint': 'Tanlangan chipta maydonining parametrlari',
+  'settings.nudgeHint':
+    'Belgini koʻrinish ustida sudrang. Strelkalar 1 piksel, Shift bilan 10 piksel suradi; sudrash paytida Alt yopishishni oʻchiradi.',
+
+  'fonts.search': 'Shrift qidirish',
+  'fonts.list': 'Shriftlar',
+  'fonts.category': 'Shrift turkumi',
+  'fonts.empty': 'Hech narsa topilmadi',
+  'fonts.cat.all': 'Barchasi',
+  'fonts.cat.sans': 'Serifsiz',
+  'fonts.cat.serif': 'Serifli',
+  'fonts.cat.mono': 'Monoeniy',
+  'fonts.cat.display': 'Sarlavha',
+  'fonts.cat.script': 'Qoʻlyozma',
+  'fonts.cat.custom': 'Mening shriftlarim',
+  'fonts.upload': 'Oʻz shriftimni yuklash…',
+  'fonts.upload.title': 'Shrift yuklash',
+  'fonts.upload.file': 'Shrift fayli',
+  'fonts.upload.choose': 'Fayl tanlash',
+  'fonts.upload.formats': 'TTF, OTF yoki WOFF2, {size} gacha',
+  'fonts.upload.name': 'Roʻyxatdagi nomi',
+  'fonts.upload.license':
+    'Bu shriftni chiptalarda ishlatish huquqim borligini tasdiqlayman: litsenziya uni joylashtirish va chop etishga ruxsat beradi',
+  'fonts.upload.submit': 'Yuklash',
+  'fonts.upload.badType': 'TTF, OTF yoki WOFF2 fayl kerak',
+  'fonts.upload.tooLarge': 'Fayl {size} dan katta',
+  'fonts.upload.unreadable': 'Bu fayl shrift sifatida ochilmaydi',
+  'fonts.upload.nameRequired': 'Nomini kiriting',
+  'fonts.upload.licenseRequired': 'Shriftdan foydalanish huquqini tasdiqlang',
+  'fonts.upload.noFile': 'Shrift faylini tanlang',
+  'fonts.uploaded': '«{name}» shrifti qoʻshildi',
+  'fonts.delete': '«{name}» shriftini oʻchirish',
+  'fonts.delete.title': 'Shrift oʻchirilsinmi?',
+  'fonts.delete.body':
+    '«{name}» shrifti serverdan oʻchiriladi. Agar loyiha undan foydalansa, oʻchirib boʻlmaydi.',
+  'fonts.delete.confirm': 'Oʻchirish',
+  'fonts.deleted': 'Shrift oʻchirildi',
+  'fonts.inUse': 'Shrift loyihada ishlatilmoqda. Avval maydonlar uchun boshqa shrift tanlang.',
+  'fonts.hint.custom': 'Yuklangan shrift',
+}

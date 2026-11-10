@@ -49,8 +49,6 @@ export const projectsRu = {
   'settings.image.upload': 'Загрузить изображение',
   'settings.image.drop': 'Отпустите файл, чтобы загрузить',
   'settings.image.meta': '{name} · {size}',
-  'settings.image.ratioHint':
-    'Рекомендуемое соотношение сторон — 7:4, как у билета 7×4 см. Иначе изображение растянется при печати.',
   'settings.image.uploading': 'Загрузка… {percent}%',
   'settings.image.badType': 'Нужен файл PNG или JPEG',
   'settings.placeholders': 'Поля билета',

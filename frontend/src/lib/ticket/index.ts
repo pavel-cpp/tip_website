@@ -1,3 +1,5 @@
+export * from './catalog.gen'
+export * from './fonts'
 export * from './printLayout'
 export * from './render'
 export * from './types'

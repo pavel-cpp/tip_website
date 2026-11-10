@@ -61,6 +61,7 @@ function mockApi(opts: { project?: Project; patchStatus?: number } = {}) {
         })
       }
       if (url.includes('/image')) return new Response('', { status: 404 })
+      if (url.endsWith('/fonts')) return new Response('[]', { status: 200 })
       return new Response(JSON.stringify({ project: base }), { status: 200 })
     }),
   )
@@ -97,24 +98,40 @@ describe('ProjectSettings', () => {
     expect(await screen.findByText('Нет прав на это действие')).toBeInTheDocument()
   })
 
-  it('shows the title, the image info and the ratio hint for a non-7:4 image', async () => {
+  it('shows the title and the image info, and no aspect-ratio recommendation', async () => {
     mockApi()
     renderPage()
     expect(await screen.findByDisplayValue('Tashkent City')).toBeInTheDocument()
-    expect(screen.getByText(/bmw\.jpg/)).toBeInTheDocument()
-    expect(screen.getByText(/соотношение сторон — 7:4/)).toBeInTheDocument()
+    expect(screen.getByText(/bmw.jpg/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Заменить изображение' })).toBeInTheDocument()
+    expect(screen.queryByText(/соотношение сторон/)).not.toBeInTheDocument()
   })
 
-  it('shows no ratio hint for a 7:4 image', async () => {
-    mockApi({
-      project: project({
-        image: { url: '/x', thumbUrl: '/x?size=thumb', name: 'a.png', w: 1400, h: 800, bytes: 1000 },
-      }),
-    })
+  it('shows the unsaved state next to Save and can discard the edits', async () => {
+    mockApi()
+    renderPage()
+    const title = await screen.findByDisplayValue('Tashkent City')
+    expect(screen.getByText('Всё сохранено')).toBeInTheDocument()
+    await userEvent.type(title, '!')
+    expect(screen.getByText('Не сохранено')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+    expect(screen.getByDisplayValue('Tashkent City')).toBeInTheDocument()
+    expect(screen.getByText('Всё сохранено')).toBeInTheDocument()
+  })
+
+  it('rejects a dropped file of the wrong type with an explanation and does not upload', async () => {
+    mockApi()
     renderPage()
     await screen.findByDisplayValue('Tashkent City')
-    expect(screen.queryByText(/соотношение сторон/)).not.toBeInTheDocument()
+    const input = document.querySelector<HTMLInputElement>(
+      'input[type="file"][accept="image/png,image/jpeg"]',
+    )
+    if (!input) throw new Error('no picture input')
+    await userEvent.upload(input, new File(['x'], 'doc.pdf', { type: 'application/pdf' }), {
+      applyAccept: false,
+    })
+    expect(await screen.findByText('Нужен файл PNG или JPEG')).toBeInTheDocument()
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false)
   })
 
   it('switches placeholder tabs and edits fields; Save sends only the changed placeholder with the version', async () => {
