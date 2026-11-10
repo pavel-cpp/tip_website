@@ -10,7 +10,7 @@ Source: `improve-animations` audit of `frontend/` at commit c8d7b7a. Phones are 
 | 004 | Page-turn of the ticket: faster, ease-out, skipped on key repeat | MEDIUM | DONE |
 | 005 | Shorten sibling route transitions; stop animating layout for the panel collapse | MEDIUM | DONE |
 | 006 | Reduced motion keeps short opacity fades | MEDIUM | TODO |
-| 007 | Panel-collapse snap, colour picker unfold, crossfade and will-change polish | LOW | TODO |
+| 007 | Panel-collapse snap, colour picker unfold, crossfade and will-change polish | LOW | DONE |
 
 ## Order and dependencies
 

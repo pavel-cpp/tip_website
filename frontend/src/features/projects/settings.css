@@ -443,6 +443,13 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-input);
+  animation: cp-in var(--dur-fast) var(--ease-out) both;
+}
+@keyframes cp-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 .cp-square {
   position: relative;
