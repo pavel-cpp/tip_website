@@ -338,7 +338,6 @@
   cursor: grab;
   /* The chip owns the touch gesture, so page scroll and pinch do not fight the drag. */
   touch-action: none;
-  will-change: transform;
 }
 /* The visible handle is a 22px dot; the hit area is stretched to a comfortable target. */
 .ph-chip::after {
