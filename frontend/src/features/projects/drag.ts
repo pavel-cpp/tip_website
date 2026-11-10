@@ -33,7 +33,7 @@ export function clampToImage(p: Point, image: Size): Point {
 }
 
 export interface Guides {
-  /** x of the vertical guide the position snapped to: 0 (left edge), w/2 (centre) or w (right edge). */
+  /** x of the vertical guide the position snapped to: an edge, the centre or another field's x. */
   x: number | null
   /** y of the horizontal guide the position snapped to. */
   y: number | null
@@ -57,10 +57,24 @@ function snapAxis(value: number, targets: number[], threshold: number): number |
   return best
 }
 
-/** Snaps each axis independently to the centre line or an edge when within the threshold. */
-export function snapPosition(p: Point, image: Size, threshold: number): { point: Point; guides: Guides } {
-  const x = snapAxis(p.x, [0, image.w / 2, image.w], threshold)
-  const y = snapAxis(p.y, [0, image.h / 2, image.h], threshold)
+/** Positions of the other fields; the dragged one also snaps to their centre lines. */
+export interface SnapTargets {
+  xs?: readonly number[]
+  ys?: readonly number[]
+}
+
+/**
+ * Snaps each axis independently to the centre line, an edge or (with `others`) the centre line of another
+ * field when within the threshold.
+ */
+export function snapPosition(
+  p: Point,
+  image: Size,
+  threshold: number,
+  others: SnapTargets = {},
+): { point: Point; guides: Guides } {
+  const x = snapAxis(p.x, [0, image.w / 2, image.w, ...(others.xs ?? [])], threshold)
+  const y = snapAxis(p.y, [0, image.h / 2, image.h, ...(others.ys ?? [])], threshold)
   return {
     point: { x: Math.round(x ?? p.x), y: Math.round(y ?? p.y) },
     guides: { x, y },

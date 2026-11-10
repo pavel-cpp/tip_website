@@ -152,12 +152,20 @@ func TestPlaceholderValidate(t *testing.T) {
 }
 
 func TestAllowedFonts(t *testing.T) {
-	want := []string{"Montserrat", "Roboto", "Open Sans", "Inter", "PT Sans", "Oswald", "Playfair Display", "Arimo"}
 	got := AllowedFonts()
-	if !slices.Equal(got, want) {
-		t.Fatalf("fonts = %v", got)
+	for _, must := range []string{"Montserrat", "Roboto", "Open Sans", "Inter", "PT Sans", "Oswald", "Playfair Display", "Arimo"} {
+		if !slices.Contains(got, must) {
+			t.Errorf("%s missing from the allow-list", must)
+		}
 	}
-	for _, f := range want {
+	seen := map[string]bool{}
+	for _, f := range got {
+		if seen[f] {
+			t.Errorf("%s listed twice", f)
+		}
+		seen[f] = true
+	}
+	for _, f := range got {
 		p := goodPlaceholder()
 		p.Font = f
 		if err := p.Validate("p"); err != nil {

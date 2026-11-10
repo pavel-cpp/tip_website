@@ -1,4 +1,8 @@
+import { customFontId, ensureCatalogFonts, ensureCustomFont } from './fonts'
 import { PLACEHOLDER_KEYS, type TicketPlaceholder, type TicketPlaceholders, type TicketValues } from './types'
+
+/** Covers Cyrillic and the Uzbek Latin letters (oʻ gʻ) so every needed subset of a family is fetched. */
+const SAMPLE = 'Аа Aa oʻgʻ'
 
 /** Safari/iOS canvas area limit (16.7 megapixels); larger canvases silently draw nothing. */
 export const MAX_CANVAS_PIXELS = 16_777_216
@@ -31,8 +35,14 @@ export function imageSize(image: TicketImage): { w: number; h: number } {
  */
 export async function loadFonts(placeholders: TicketPlaceholders): Promise<void> {
   if (typeof document === 'undefined' || !document.fonts) return
+  const fonts = new Set(PLACEHOLDER_KEYS.map((k) => placeholders[k].font))
+  // Rules first (bundled families) or registration (uploaded files), then the faces themselves.
+  const ready: Promise<unknown>[] = []
+  if ([...fonts].some((f) => customFontId(f) === null)) ready.push(ensureCatalogFonts())
+  for (const f of fonts) ready.push(ensureCustomFont(f))
+  await Promise.all(ready)
   const specs = new Set(PLACEHOLDER_KEYS.map((k) => fontSpec(placeholders[k])))
-  await Promise.all([...specs].map((spec) => document.fonts.load(spec, 'Аа Aa oʻgʻ')))
+  await Promise.all([...specs].map((spec) => document.fonts.load(spec, SAMPLE).catch(() => [])))
 }
 
 /** Draws background and the text placeholders in source-image pixel coordinates. */

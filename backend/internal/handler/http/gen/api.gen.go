@@ -111,6 +111,27 @@ func (e ErrorCode) Valid() bool {
 	}
 }
 
+// Defines values for FontFormat.
+const (
+	Otf   FontFormat = "otf"
+	Ttf   FontFormat = "ttf"
+	Woff2 FontFormat = "woff2"
+)
+
+// Valid indicates whether the value is a known member of the FontFormat enum.
+func (e FontFormat) Valid() bool {
+	switch e {
+	case Otf:
+		return true
+	case Ttf:
+		return true
+	case Woff2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for HealthResponseStatus.
 const (
 	HealthResponseStatusOk HealthResponseStatus = "ok"
@@ -534,6 +555,33 @@ type FieldError struct {
 	Message string `json:"message"`
 }
 
+// Font An uploaded font. Placeholders select it with the font value `custom:<id>`.
+type Font struct {
+	Bytes     int                `json:"bytes"`
+	CreatedAt time.Time          `json:"createdAt"`
+	Format    FontFormat         `json:"format"`
+	Id        openapi_types.UUID `json:"id"`
+	Name      string             `json:"name"`
+
+	// Url Download URL, cache-busted with the content hash prefix.
+	Url string `json:"url"`
+}
+
+// FontFormat defines model for Font.Format.
+type FontFormat string
+
+// FontUpload defines model for FontUpload.
+type FontUpload struct {
+	// File TTF, OTF (CFF) or WOFF2, at most 2 MiB.
+	File openapi_types.File `json:"file"`
+
+	// LicenseConfirmed Must be `true`; confirms the right to use and embed the font.
+	LicenseConfirmed bool `json:"licenseConfirmed"`
+
+	// Name Display name in the font picker.
+	Name string `json:"name"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status HealthResponseStatus `json:"status"`
@@ -672,7 +720,7 @@ type Placeholder struct {
 	// Color Hex colour `#rrggbb`.
 	Color Color `json:"color"`
 
-	// Font Font family from the application's allow list.
+	// Font Font family from the application's allow list, or `custom:<id>` for an uploaded font (see `/fonts`).
 	Font   string `json:"font"`
 	Italic bool   `json:"italic"`
 	Size   int    `json:"size"`
@@ -954,6 +1002,9 @@ type UserResponse struct {
 	User User `json:"user"`
 }
 
+// FontId defines model for FontId.
+type FontId = openapi_types.UUID
+
 // IfNoneMatch defines model for IfNoneMatch.
 type IfNoneMatch = string
 
@@ -1044,6 +1095,12 @@ type ListAuditParams struct {
 	Action *string `form:"action,omitempty" json:"action,omitempty"`
 }
 
+// GetFontFileParams defines parameters for GetFontFile.
+type GetFontFileParams struct {
+	// IfNoneMatch ETag previously received; a match yields `304 Not Modified`.
+	IfNoneMatch *IfNoneMatch `json:"If-None-Match,omitempty"`
+}
+
 // ListProjectsParams defines parameters for ListProjects.
 type ListProjectsParams struct {
 	// Status Filter by status.
@@ -1106,6 +1163,9 @@ type LoginJSONRequestBody = LoginRequest
 
 // ReportClientErrorJSONRequestBody defines body for ReportClientError for application/json ContentType.
 type ReportClientErrorJSONRequestBody = ClientError
+
+// UploadFontMultipartRequestBody defines body for UploadFont for multipart/form-data ContentType.
+type UploadFontMultipartRequestBody = FontUpload
 
 // UpdateMeJSONRequestBody defines body for UpdateMe for application/json ContentType.
 type UpdateMeJSONRequestBody = UpdateMeRequest
@@ -1374,6 +1434,18 @@ type ServerInterface interface {
 	// ReportClientError Report a frontend error
 	// (POST /client-errors)
 	ReportClientError(w http.ResponseWriter, r *http.Request)
+	// ListFonts List uploaded fonts
+	// (GET /fonts)
+	ListFonts(w http.ResponseWriter, r *http.Request)
+	// UploadFont Upload a font
+	// (POST /fonts)
+	UploadFont(w http.ResponseWriter, r *http.Request)
+	// DeleteFont Delete an uploaded font
+	// (DELETE /fonts/{id})
+	DeleteFont(w http.ResponseWriter, r *http.Request, id FontId)
+	// GetFontFile Download an uploaded font
+	// (GET /fonts/{id}/file)
+	GetFontFile(w http.ResponseWriter, r *http.Request, id FontId, params GetFontFileParams)
 	// GetHealthz Liveness probe
 	// (GET /healthz)
 	GetHealthz(w http.ResponseWriter, r *http.Request)
@@ -1560,6 +1632,30 @@ func (_ Unimplemented) RefreshToken(w http.ResponseWriter, r *http.Request) {
 // ReportClientError Report a frontend error
 // (POST /client-errors)
 func (_ Unimplemented) ReportClientError(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// ListFonts List uploaded fonts
+// (GET /fonts)
+func (_ Unimplemented) ListFonts(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// UploadFont Upload a font
+// (POST /fonts)
+func (_ Unimplemented) UploadFont(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// DeleteFont Delete an uploaded font
+// (DELETE /fonts/{id})
+func (_ Unimplemented) DeleteFont(w http.ResponseWriter, r *http.Request, id FontId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// GetFontFile Download an uploaded font
+// (GET /fonts/{id}/file)
+func (_ Unimplemented) GetFontFile(w http.ResponseWriter, r *http.Request, id FontId, params GetFontFileParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2106,6 +2202,110 @@ func (siw *ServerInterfaceWrapper) ReportClientError(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReportClientError(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFonts operation middleware
+func (siw *ServerInterfaceWrapper) ListFonts(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFonts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadFont operation middleware
+func (siw *ServerInterfaceWrapper) UploadFont(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadFont(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteFont operation middleware
+func (siw *ServerInterfaceWrapper) DeleteFont(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id FontId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteFont(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFontFile operation middleware
+func (siw *ServerInterfaceWrapper) GetFontFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id FontId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFontFileParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch IfNoneMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFontFile(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3087,6 +3287,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/client-errors", wrapper.ReportClientError)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/fonts", wrapper.ListFonts)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/fonts", wrapper.UploadFont)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/fonts/{id}", wrapper.DeleteFont)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/fonts/{id}/file", wrapper.GetFontFile)
 	})
 
 	return r

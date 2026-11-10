@@ -17,6 +17,7 @@ type APIDeps struct {
 	Roles           RolesService
 	Projects        ProjectsService
 	Participants    ParticipantsService
+	Fonts           FontsService
 	Audit           *service.Audit
 	System          *service.SystemService
 	// MaxImageBytes bounds an uploaded project image (MAX_IMAGE_MB).
@@ -42,6 +43,7 @@ type apiHandlers struct {
 	*AuthAPI
 	*ProjectsHandler
 	*ParticipantsHandler
+	*FontsHandler
 	*AuditHandler
 	*SystemHandler
 	*ClientErrorsHandler
@@ -60,6 +62,7 @@ func newAPIHandlers(d APIDeps, probes probeAPI) gen.ServerInterface {
 		AuthAPI:             NewAuthAPI(AuthAPIDeps{Auth: d.Auth, Users: d.Users, Roles: d.Roles, InsecureCookies: d.InsecureCookies}),
 		ProjectsHandler:     NewProjectsHandler(d.Projects, d.MaxImageBytes),
 		ParticipantsHandler: NewParticipantsHandler(d.Participants),
+		FontsHandler:        NewFontsHandler(d.Fonts),
 		AuditHandler:        NewAuditHandler(d.Audit),
 		SystemHandler:       NewSystemHandler(d.System),
 		ClientErrorsHandler: NewClientErrorsHandler(now),

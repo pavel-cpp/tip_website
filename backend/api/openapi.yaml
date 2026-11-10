@@ -117,6 +117,8 @@ tags:
     description: Audit log and system status.
   - name: Projects
     description: Projects, their placeholders and ticket images.
+  - name: Fonts
+    description: Fonts uploaded for ticket text.
   - name: Participants
     description: Participant tables, import, export and printing log.
   - name: Diagnostics
@@ -1533,6 +1535,145 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /fonts:
+    get:
+      tags: [Fonts]
+      operationId: listFonts
+      summary: List uploaded fonts
+      description: |
+        The fonts uploaded by administrators, newest first. A placeholder selects one with the font value
+        `custom:<id>`; the built-in fonts are not listed here.
+      x-required-permissions: [project.view]
+      responses:
+        "200":
+          description: The uploaded fonts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Font"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Fonts]
+      operationId: uploadFont
+      summary: Upload a font
+      description: |
+        Multipart upload of a TrueType, OpenType (CFF) or WOFF2 file of at most 2 MiB (the content is
+        checked, not the file name). `licenseConfirmed` must be `true`. At most 50 fonts and 20 MiB in total
+        are kept. Uploading the same file again returns the existing font. Written to the audit log
+        (`font.upload`). Failures: 400, 413, 415.
+      x-required-permissions: [project.update]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/FontUpload"
+      responses:
+        "201":
+          description: The stored font.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Font"
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          $ref: "#/components/responses/UnsupportedMedia"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "507":
+          $ref: "#/components/responses/DiskLow"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /fonts/{id}:
+    delete:
+      tags: [Fonts]
+      operationId: deleteFont
+      summary: Delete an uploaded font
+      description: |
+        Refused with `VALIDATION` while a project placeholder still uses the font. Written to the audit log
+        (`font.delete`).
+      x-required-permissions: [project.update]
+      parameters:
+        - $ref: "#/components/parameters/FontId"
+      responses:
+        "204":
+          description: The font was deleted.
+        "400":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /fonts/{id}/file:
+    get:
+      tags: [Fonts]
+      operationId: getFontFile
+      summary: Download an uploaded font
+      description: |
+        Served with a strong `ETag` (the SHA-256 of the file) and `Cache-Control: immutable`; the content
+        behind an id never changes.
+      x-required-permissions: [project.view]
+      parameters:
+        - $ref: "#/components/parameters/FontId"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: The font file.
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Cache-Control:
+              description: Always `public, max-age=31536000, immutable`.
+              schema:
+                type: string
+          content:
+            font/ttf:
+              schema:
+                type: string
+                format: binary
+            font/otf:
+              schema:
+                type: string
+                format: binary
+            font/woff2:
+              schema:
+                type: string
+                format: binary
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/AuthUnavailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1589,6 +1730,14 @@ components:
       in: path
       required: true
       description: User id.
+      schema:
+        type: string
+        format: uuid
+    FontId:
+      name: id
+      in: path
+      required: true
+      description: Uploaded font id.
       schema:
         type: string
         format: uuid
@@ -2398,7 +2547,7 @@ components:
           type: string
           minLength: 1
           maxLength: 64
-          description: Font family from the application's allow list.
+          description: Font family from the application's allow list, or `custom:<id>` for an uploaded font (see `/fonts`).
         size:
           type: integer
           minimum: 6
@@ -2588,6 +2737,48 @@ components:
           type: string
           format: binary
           description: PNG or JPEG, at most 10 MiB and 16 megapixels.
+
+    Font:
+      type: object
+      description: An uploaded font. Placeholders select it with the font value `custom:<id>`.
+      required: [id, name, format, bytes, url, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        format:
+          type: string
+          enum: [ttf, otf, woff2]
+        bytes:
+          type: integer
+        url:
+          type: string
+          description: Download URL, cache-busted with the content hash prefix.
+          example: /api/v1/fonts/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/file?v=ab12cd34
+        createdAt:
+          type: string
+          format: date-time
+
+    FontUpload:
+      type: object
+      required: [file, name, licenseConfirmed]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: TTF, OTF (CFF) or WOFF2, at most 2 MiB.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: Display name in the font picker.
+        licenseConfirmed:
+          type: boolean
+          description: Must be `true`; confirms the right to use and embed the font.
 
     Participant:
       type: object

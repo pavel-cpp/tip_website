@@ -42,6 +42,9 @@ type ProjectsDeps struct {
 	Images ImageProcessor
 	Audit  ProjectAudit
 	Events ProjectEvents
+	// Fonts validates uploaded-font references and protects their files from the blob GC; nil
+	// accepts only built-in fonts.
+	Fonts ProjectFonts
 	// Presence supplies the users online per project; may be nil.
 	Presence ProjectPresence
 	Tx       Tx
@@ -307,6 +310,9 @@ func (s *ProjectService) Update(ctx context.Context, a domain.Actor, id string, 
 			if err := p.Placeholders.Validate(); err != nil {
 				return err
 			}
+			if err := s.checkCustomFonts(ctx, in.Placeholders); err != nil {
+				return err
+			}
 		}
 		p.Version++
 		p.UpdatedAt = s.d.Clock.Now()
@@ -321,6 +327,31 @@ func (s *ProjectService) Update(ctx context.Context, a domain.Actor, id string, 
 	}
 	s.publish(updated)
 	return s.view(ctx, updated)
+}
+
+// checkCustomFonts verifies that every uploaded font referenced by the patch exists (the shape of
+// the reference was already checked by Placeholder.Validate).
+func (s *ProjectService) checkCustomFonts(ctx context.Context, ps *PlaceholdersPatch) error {
+	for field, p := range map[string]*domain.Placeholder{"number": ps.Number, "name": ps.Name, "phone": ps.Phone} {
+		if p == nil {
+			continue
+		}
+		id, ok := domain.CustomFontID(p.Font)
+		if !ok {
+			continue
+		}
+		found := false
+		if s.d.Fonts != nil {
+			var err error
+			if found, err = s.d.Fonts.Exists(ctx, id); err != nil {
+				return fmt.Errorf("check font: %w", err)
+			}
+		}
+		if !found {
+			return domain.NewValidation(domain.FieldError{Field: "placeholders." + field + ".font", Reason: "unknown uploaded font"})
+		}
+	}
+	return nil
 }
 
 // Finish makes the project read-only.
@@ -613,6 +644,15 @@ func (s *ProjectService) CollectGarbage(ctx context.Context) (int, error) {
 	refs, err := s.d.Repo.ReferencedImageHashes(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list referenced images: %w", err)
+	}
+	if s.d.Fonts != nil {
+		fonts, err := s.d.Fonts.Hashes(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("list referenced fonts: %w", err)
+		}
+		for sha := range fonts {
+			refs[sha] = struct{}{}
+		}
 	}
 	return s.d.Blobs.GC(ctx, refs)
 }

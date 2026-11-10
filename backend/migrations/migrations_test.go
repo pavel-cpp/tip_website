@@ -100,7 +100,7 @@ const (
 var allTables = []string{
 	"users", "user_avatars", "permissions", "roles", "role_permissions", "user_roles",
 	"authz_state", "projects", "project_placeholders", "project_contributors",
-	"participants", "audit_log",
+	"participants", "audit_log", "fonts",
 }
 
 func TestMigrations(t *testing.T) {
@@ -166,6 +166,22 @@ func TestMigrations(t *testing.T) {
 		mustFail(t, db, sqlCheck, `INSERT INTO users (login, display_name, password_hash, color) VALUES ('col.user', 'N', 'h', 'red')`)
 		mustFail(t, db, sqlCheck, `INSERT INTO users (login, display_name, password_hash) VALUES ('empty.dn', '', 'h')`)
 		mustExec(t, db, `INSERT INTO users (login, display_name, password_hash, locale, theme) VALUES ('uz.system', 'N', 'h', 'uz', 'system')`)
+	})
+
+	t.Run("fonts", func(t *testing.T) {
+		sha := strings.Repeat("a", 64)
+		id := newUser(t, "font.user")
+		mustExec(t, db, `INSERT INTO fonts (name, format, sha256, bytes, created_by) VALUES ('F', 'ttf', $1, 10, $2)`, sha, id)
+		mustFail(t, db, sqlUnique, `INSERT INTO fonts (name, format, sha256, bytes) VALUES ('G', 'otf', $1, 10)`, sha)
+		other := strings.Repeat("b", 64)
+		mustFail(t, db, sqlCheck, `INSERT INTO fonts (name, format, sha256, bytes) VALUES ('G', 'woff', $1, 10)`, other)
+		mustFail(t, db, sqlCheck, `INSERT INTO fonts (name, format, sha256, bytes) VALUES ('', 'ttf', $1, 10)`, other)
+		mustFail(t, db, sqlCheck, `INSERT INTO fonts (name, format, sha256, bytes) VALUES ('G', 'ttf', 'XYZ', 10)`)
+		mustFail(t, db, sqlCheck, `INSERT INTO fonts (name, format, sha256, bytes) VALUES ('G', 'ttf', $1, 0)`, other)
+		mustExec(t, db, `DELETE FROM users WHERE id = $1`, id)
+		if got := scalarString(t, db, `SELECT COALESCE(created_by::text, 'null') FROM fonts WHERE sha256 = $1`, sha); got != "null" {
+			t.Errorf("created_by after user delete = %q", got)
+		}
 	})
 
 	t.Run("avatar size limit and cascade", func(t *testing.T) {

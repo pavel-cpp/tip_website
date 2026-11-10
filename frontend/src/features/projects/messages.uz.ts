@@ -55,8 +55,6 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   'settings.image.upload': 'Rasm yuklash',
   'settings.image.drop': 'Yuklash uchun faylni qoʻyib yuboring',
   'settings.image.meta': '{name} · {size}',
-  'settings.image.ratioHint':
-    'Tavsiya etilgan tomonlar nisbati — 7:4, 7×4 sm chiptadagidek. Aks holda rasm chop etishda choʻziladi.',
   'settings.image.uploading': 'Yuklanmoqda… {percent}%',
   'settings.image.badType': 'PNG yoki JPEG fayl kerak',
   'settings.placeholders': 'Chipta maydonlari',

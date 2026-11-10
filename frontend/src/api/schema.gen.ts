@@ -716,6 +716,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/fonts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List uploaded fonts
+         * @description The fonts uploaded by administrators, newest first. A placeholder selects one with the font value
+         *     `custom:<id>`; the built-in fonts are not listed here.
+         */
+        get: operations["listFonts"];
+        put?: never;
+        /**
+         * Upload a font
+         * @description Multipart upload of a TrueType, OpenType (CFF) or WOFF2 file of at most 2 MiB (the content is
+         *     checked, not the file name). `licenseConfirmed` must be `true`. At most 50 fonts and 20 MiB in total
+         *     are kept. Uploading the same file again returns the existing font. Written to the audit log
+         *     (`font.upload`). Failures: 400, 413, 415.
+         */
+        post: operations["uploadFont"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fonts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an uploaded font
+         * @description Refused with `VALIDATION` while a project placeholder still uses the font. Written to the audit log
+         *     (`font.delete`).
+         */
+        delete: operations["deleteFont"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fonts/{id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an uploaded font
+         * @description Served with a strong `ETag` (the SHA-256 of the file) and `Cache-Control: immutable`; the content
+         *     behind an id never changes.
+         */
+        get: operations["getFontFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1062,7 +1132,7 @@ export interface components {
          *     }
          */
         Placeholder: {
-            /** @description Font family from the application's allow list. */
+            /** @description Font family from the application's allow list, or `custom:<id>` for an uploaded font (see `/fonts`). */
             font: string;
             size: number;
             stroke: number;
@@ -1151,6 +1221,33 @@ export interface components {
              * @description PNG or JPEG, at most 10 MiB and 16 megapixels.
              */
             file: string;
+        };
+        /** @description An uploaded font. Placeholders select it with the font value `custom:<id>`. */
+        Font: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            format: "ttf" | "otf" | "woff2";
+            bytes: number;
+            /**
+             * @description Download URL, cache-busted with the content hash prefix.
+             * @example /api/v1/fonts/0198f2f0-7a3c-7c1e-9b57-2f4d5a6b7c8d/file?v=ab12cd34
+             */
+            url: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        FontUpload: {
+            /**
+             * Format: binary
+             * @description TTF, OTF (CFF) or WOFF2, at most 2 MiB.
+             */
+            file: string;
+            /** @description Display name in the font picker. */
+            name: string;
+            /** @description Must be `true`; confirms the right to use and embed the font. */
+            licenseConfirmed: boolean;
         };
         /**
          * @example {
@@ -1568,6 +1665,8 @@ export interface components {
         ParticipantId: string;
         /** @description User id. */
         UserId: string;
+        /** @description Uploaded font id. */
+        FontId: string;
         /** @description Role id. */
         RoleId: string;
         /** @description ETag previously received; a match yields `304 Not Modified`. */
@@ -2952,6 +3051,126 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listFonts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The uploaded fonts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Font"][];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
+        };
+    };
+    uploadFont: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["FontUpload"];
+            };
+        };
+        responses: {
+            /** @description The stored font. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Font"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            413: components["responses"]["PayloadTooLarge"];
+            415: components["responses"]["UnsupportedMedia"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
+            507: components["responses"]["DiskLow"];
+        };
+    };
+    deleteFont: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Uploaded font id. */
+                id: components["parameters"]["FontId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The font was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
+        };
+    };
+    getFontFile: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description ETag previously received; a match yields `304 Not Modified`. */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /** @description Uploaded font id. */
+                id: components["parameters"]["FontId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The font file. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    /** @description Always `public, max-age=31536000, immutable`. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "font/ttf": string;
+                    "font/otf": string;
+                    "font/woff2": string;
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
         };
     };
 }

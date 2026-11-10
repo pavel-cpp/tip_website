@@ -1,6 +1,5 @@
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n'
-import { prefersReducedMotion } from '../../lib/motion'
 import {
   fontSpec,
   PLACEHOLDER_KEYS,
@@ -16,6 +15,7 @@ import {
   type Guides,
   keyDelta,
   type Point,
+  type SnapTargets,
   snapPosition,
   snapThreshold,
 } from './drag'
@@ -71,14 +71,13 @@ interface Session {
   key: PlaceholderKey
   pointerId: number
   grab: Point
-  raw: Point
-  start: Point
 }
 
 /**
- * Live ticket preview with draggable placeholder chips. While dragging the chip follows the pointer
- * 1:1 (no easing); guides fade in near the centre/edges; on release the position snaps and the chip
- * settles with a short overshoot (skipped under reduced motion).
+ * Live ticket preview with draggable placeholder chips. While dragging, the field follows the pointer
+ * 1:1 (no easing) and magnetically snaps to the centre lines, the edges and the other fields' lines, with
+ * a guide drawn where it snapped; holding Alt turns snapping off for pixel-precise placement. The arrow
+ * keys nudge the focused handle by 1 px (10 px with Shift).
  */
 export function PlaceholderPreview({
   image,
@@ -93,7 +92,6 @@ export function PlaceholderPreview({
   const { t } = useI18n()
   const stage = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
-  const chips = useRef<Partial<Record<PlaceholderKey, HTMLButtonElement | null>>>({})
   const session = useRef<Session | null>(null)
   const [shown, setShown] = useState(0)
   const [guides, setGuides] = useState<Guides>({ x: null, y: null })
@@ -138,38 +136,33 @@ export function PlaceholderPreview({
       key,
       pointerId: e.pointerId,
       grab: { x: ptr.x - p.x, y: ptr.y - p.y },
-      raw: { x: p.x, y: p.y },
-      start: { x: p.x, y: p.y },
     }
+  }
+
+  const othersOf = (key: PlaceholderKey): SnapTargets => {
+    const rest = PLACEHOLDER_KEYS.filter((k) => k !== key).map((k) => placeholders[k])
+    return { xs: rest.map((p) => p.x), ys: rest.map((p) => p.y) }
   }
 
   const onPointerMove = (e: PointerEvent<HTMLButtonElement>) => {
     const s = session.current
     if (!s || s.pointerId !== e.pointerId) return
-    s.raw = dragPosition(pointerImg(e), s.grab, size)
-    onMove(s.key, s.raw)
-    setGuides(snapPosition(s.raw, size, snapThreshold(size.w, shown)).guides)
+    const raw = dragPosition(pointerImg(e), s.grab, size)
+    if (e.altKey) {
+      setGuides({ x: null, y: null })
+      onMove(s.key, raw)
+      return
+    }
+    const snapped = snapPosition(raw, size, snapThreshold(size.w, shown), othersOf(s.key))
+    setGuides(snapped.guides)
+    onMove(s.key, snapped.point)
   }
 
   const finish = (e: PointerEvent<HTMLButtonElement>) => {
     const s = session.current
     if (!s || s.pointerId !== e.pointerId) return
     session.current = null
-    const snapped = snapPosition(s.raw, size, snapThreshold(size.w, shown)).point
     setGuides({ x: null, y: null })
-    if (snapped.x === s.raw.x && snapped.y === s.raw.y) return
-    onMove(s.key, snapped)
-    const el = chips.current[s.key]
-    if (el && !prefersReducedMotion() && typeof el.animate === 'function') {
-      // The individual `translate` property composes with the positioning `transform`.
-      el.animate(
-        [
-          { translate: `${(s.raw.x - snapped.x) * scale}px ${(s.raw.y - snapped.y) * scale}px` },
-          { translate: '0 0' },
-        ],
-        { duration: 280, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' },
-      )
-    }
   }
 
   const onKey = (key: PlaceholderKey) => (e: KeyboardEvent) => {
@@ -183,9 +176,6 @@ export function PlaceholderPreview({
     })
   }
 
-  const xGuides = [0, size.w / 2, size.w]
-  const yGuides = [0, size.h / 2, size.h]
-
   return (
     <div
       ref={stage}
@@ -195,31 +185,24 @@ export function PlaceholderPreview({
       data-narrow={shown > 0 && shown < NARROW_STAGE ? '' : undefined}
     >
       <canvas ref={canvas} className="ph-canvas" role="img" aria-label={t('settings.preview.label')} />
-      {xGuides.map((x) => (
+      {guides.x !== null && (
         <span
-          key={`x${x}`}
           className="ph-guide ph-guide-v"
-          data-on={guides.x === x || undefined}
-          style={{ transform: `translateX(${Math.min(x * scale, shown - 1)}px)` }}
+          style={{ transform: `translateX(${Math.min(guides.x * scale, shown - 1)}px)` }}
         />
-      ))}
-      {yGuides.map((y) => (
+      )}
+      {guides.y !== null && (
         <span
-          key={`y${y}`}
           className="ph-guide ph-guide-h"
-          data-on={guides.y === y || undefined}
-          style={{ transform: `translateY(${Math.min(y * scale, shown * (size.h / size.w) - 1)}px)` }}
+          style={{ transform: `translateY(${Math.min(guides.y * scale, shown * (size.h / size.w) - 1)}px)` }}
         />
-      ))}
+      )}
       {PLACEHOLDER_KEYS.map((key, i) => {
         const p = placeholders[key]
         const at = chipAnchor(p, values[key] || labelOf(key), scale)
         return (
           <button
             key={key}
-            ref={(el) => {
-              chips.current[key] = el
-            }}
             type="button"
             className="ph-chip"
             aria-pressed={active === key}
