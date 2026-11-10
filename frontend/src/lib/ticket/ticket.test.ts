@@ -88,6 +88,7 @@ describe('print layout', () => {
   it('emits print CSS with A4, zero margin and stretched images', () => {
     const css = printCss()
     expect(css).toContain('@page { size: A4; margin: 0mm }')
+    expect(css).toContain('@media print {')
     expect(css).toContain('repeat(3, 70mm)')
     expect(css).toContain('object-fit: fill')
   })

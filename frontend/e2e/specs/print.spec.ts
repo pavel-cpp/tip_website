@@ -5,7 +5,9 @@ import { WorkspacePage } from '../support/workspace'
 
 const MM = 96 / 25.4
 
-async function openPrintPage(admin: Api, page: Page, count: number): Promise<WorkspacePage> {
+// Printing happens in place: tickets are rendered into hidden A4 sheets and the dialog opens over the
+// workspace, so cancelling it leaves the user where they were.
+async function printFromWorkspace(admin: Api, page: Page, count: number): Promise<WorkspacePage> {
   const project = await admin.createProject(uniq('Print '))
   await admin.uploadImage(project.id)
   const rows = Array.from({ length: count }, (_, i) => ({
@@ -24,33 +26,39 @@ async function openPrintPage(admin: Api, page: Page, count: number): Promise<Wor
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
   await ws.selectAllAndPrint()
-  await expect(page).toHaveURL(/\/print$/)
   await expect(page.locator('.print-ticket')).toHaveCount(count, { timeout: 30_000 })
   return ws
 }
 
-test('print page splits 22 tickets into two A4 sheets of 21 and 1', async ({ admin, signedIn }) => {
+test('printing stays on the workspace and splits 22 tickets into A4 sheets of 21 and 1', async ({
+  admin,
+  signedIn,
+}) => {
   const page = await signedIn(adminCreds())
-  const ws = await openPrintPage(admin, page, 22)
+  await printFromWorkspace(admin, page, 22)
   const sheets = page.locator('.print-page')
   await expect(sheets).toHaveCount(2)
-  await expect(page.getByText(ws.t('workspace.print.ready', { count: 22, pages: 2 }))).toBeVisible()
   await expect(sheets.first().locator('.print-ticket')).toHaveCount(21)
   await expect(sheets.nth(1).locator('.print-ticket')).toHaveCount(1)
-
-  // The print button is the explicit path (iOS) and opens the dialog.
-  await page.getByRole('button', { name: ws.t('workspace.print.button') }).click()
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __prints: number }).__prints))
     .toBeGreaterThan(0)
+
+  // Nothing about the sheets is visible on screen and the user is still in the workspace.
+  await expect(page).toHaveURL(/\/projects\/[^/]+$/)
+  await expect(page.locator('.print-sheets')).toBeHidden()
+
+  // Closing the dialog drops the sheets.
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+  await expect(page.locator('.print-sheets')).toHaveCount(0)
 })
 
 // Regression: the print layout used to be an inline <style> element, which the server's
-// Content-Security-Policy blocks. It is now applied as a constructed stylesheet; this checks the
-// real geometry on the embedded server.
+// Content-Security-Policy blocks. It is a constructed stylesheet; this checks the real paper geometry.
 test('print sheet is A4 with a 3 x 7 grid of 70 x 40 mm tickets', async ({ admin, signedIn }) => {
   const page = await signedIn(adminCreds())
-  await openPrintPage(admin, page, 22)
+  await printFromWorkspace(admin, page, 22)
+  await page.emulateMedia({ media: 'print' })
   const geometry = await page.evaluate(() => {
     const box = (el: Element) => el.getBoundingClientRect()
     const sheet = document.querySelector('.print-page') as HTMLElement
@@ -64,6 +72,7 @@ test('print sheet is A4 with a 3 x 7 grid of 70 x 40 mm tickets', async ({ admin
       columns: getComputedStyle(sheet).gridTemplateColumns.split(' ').length,
       distinctLefts: new Set(tickets.map((t) => Math.round(box(t).left))).size,
       distinctTops: new Set(tickets.map((t) => Math.round(box(t).top))).size,
+      appHidden: getComputedStyle(document.querySelector('#root') as Element).display === 'none',
     }
   })
   expect(geometry.sheetW).toBeCloseTo(210 * MM, 0)
@@ -73,4 +82,5 @@ test('print sheet is A4 with a 3 x 7 grid of 70 x 40 mm tickets', async ({ admin
   expect(geometry.columns).toBe(3)
   expect(geometry.distinctLefts).toBe(3)
   expect(geometry.distinctTops).toBe(7)
+  expect(geometry.appHidden).toBe(true)
 })

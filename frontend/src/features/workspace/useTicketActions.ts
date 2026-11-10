@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
 import { useToast } from '../../components/Toast'
 import { useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
-import type { Participant } from './api'
+import { paginate } from '../../lib/ticket'
+import { logPrinted, type Participant } from './api'
 import { COPY_CAP } from './clipboardPayload'
 import {
   downloadEach,
@@ -15,21 +15,22 @@ import {
   storeSaveMode,
   writeToFolder,
 } from './folderSave'
+import { printSheets } from './PrintSheets'
 import { isIOS } from './platform'
-import { setPrintJob } from './printJob'
 import { safeFilePart } from './tableLogic'
 import {
   copyTicket,
   copyTickets,
   downloadBlob,
   nextTurn,
+  renderPrintBatch,
   saveTickets,
   type TicketSource,
   ticketBatch,
 } from './ticketActions'
 
 export interface Progress {
-  kind: 'save' | 'copy'
+  kind: 'save' | 'copy' | 'print'
   done: number
   total: number
   /** Folder and serial-download saves can be stopped half way. */
@@ -53,20 +54,28 @@ const zipName = (title: string) => `${safeFilePart(title) || 'tickets'}.zip`
 export function useTicketActions({ projectId, projectTitle, source, current, selectedRows }: Args) {
   const { t } = useI18n()
   const toast = useToast()
-  const navigate = useNavigate()
   const [progress, setProgress] = useState<Progress | null>(null)
   const [fallback, setFallback] = useState<Blob | null>(null)
   const [saveMode, setSaveModeState] = useState<SaveMode>(loadSaveMode)
   const busy = useRef(false)
   const alive = useRef(true)
   const abort = useRef<AbortController | null>(null)
+  // Rendered print sheets live (as object URLs) until the print dialog closes.
+  const [sheets, setSheets] = useState<string[] | null>(null)
+  const sheetUrls = useRef<string[]>([])
+  const printedIds = useRef<string[]>([])
+  const dropSheets = useCallback(() => {
+    for (const u of sheetUrls.current) URL.revokeObjectURL(u)
+    sheetUrls.current = []
+  }, [])
   useEffect(() => {
     alive.current = true
     return () => {
       alive.current = false
       abort.current?.abort()
+      dropSheets()
     }
-  }, [])
+  }, [dropSheets])
 
   const targets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
   const setSaveMode = useCallback((m: SaveMode) => {
@@ -218,11 +227,55 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
 
   const cancel = useCallback(() => abort.current?.abort(), [])
 
-  const print = useCallback(() => {
-    if (targets.length === 0) return
-    setPrintJob({ projectId, ids: targets.map((r) => r.id) })
-    void navigate(`/projects/${projectId}/print`)
-  }, [targets, projectId, navigate])
+  /** Renders the tickets, mounts them as hidden sheets and opens the print dialog without leaving the page. */
+  const runPrint = useCallback(async () => {
+    if (!source || targets.length === 0 || busy.current) {
+      if (!source) toast.show({ message: t('workspace.toast.notReady'), tone: 'error' })
+      return
+    }
+    busy.current = true
+    const ctl = new AbortController()
+    abort.current = ctl
+    const rows = targets
+    setProgress({ kind: 'print', done: 0, total: rows.length, cancellable: true })
+    try {
+      const blobs = await renderPrintBatch(
+        source,
+        rows,
+        (done, total) => {
+          if (alive.current) setProgress({ kind: 'print', done, total, cancellable: true })
+        },
+        () => ctl.signal.aborted,
+      )
+      if (ctl.signal.aborted || !alive.current) return
+      dropSheets()
+      sheetUrls.current = blobs.map((b) => URL.createObjectURL(b))
+      printedIds.current = rows.map((r) => r.id)
+      setSheets([...sheetUrls.current])
+      if (isIOS()) {
+        // Safari only prints from a user gesture, and the rendering above used it up.
+        toast.show({
+          message: t('workspace.print.ready', { count: rows.length, pages: paginate(rows.length).length }),
+          action: { label: t('workspace.print.button'), onAction: () => void printSheets() },
+          duration: 30_000,
+        })
+      }
+    } catch (e) {
+      toast.show({ message: errorText(e), tone: 'error' })
+    } finally {
+      busy.current = false
+      abort.current = null
+      if (alive.current) setProgress(null)
+    }
+  }, [source, targets, toast, t, dropSheets])
+  const print = useCallback(() => void runPrint(), [runPrint])
+
+  const printClosed = useCallback(() => {
+    dropSheets()
+    setSheets(null)
+    // Only ids are sent; the dialog gives no way to tell printed from cancelled.
+    void logPrinted(projectId, printedIds.current).catch(() => undefined)
+  }, [dropSheets, projectId])
 
   return {
     progress,
@@ -235,6 +288,8 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
     setSaveMode,
     cancel,
     print,
+    sheets,
+    printClosed,
     targetCount: targets.length,
   }
 }

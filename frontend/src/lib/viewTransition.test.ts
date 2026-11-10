@@ -8,7 +8,6 @@ describe('route transition direction', () => {
     expect(routeRank('/projects/abc/settings')).toBe(2)
     expect(routeRank('/profile')).toBeNull()
     expect(routeRank('/admin/users')).toBeNull()
-    expect(routeRank('/projects/abc/print')).toBeNull()
   })
 
   it('drills in going deeper, goes back going shallower, and treats the rest as siblings', () => {

@@ -162,5 +162,5 @@ test('large print: more than 500 tickets ask for confirmation with a time estima
   await expect(dialog).toContainText('501')
   await expect(dialog).toContainText(/\d+\s*(мин|с)/)
   await dialog.getByRole('button', { name: ws.t('workspace.printBig.cancel') }).click()
-  await expect(page).not.toHaveURL(/\/print$/)
+  await expect(page.locator('.print-sheets')).toHaveCount(0)
 })

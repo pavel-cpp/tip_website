@@ -68,12 +68,20 @@ export function paginate(count: number): number[][] {
   return pages
 }
 
-/** CSS for the dedicated print page: always light, zero margins, stretched images. */
+/**
+ * CSS for the in-place print sheets: the sheets stay hidden on screen, and only the paper layout
+ * (A4, zero margins, stretched images) lives in the print media block.
+ */
 export function printCss(): string {
   return [
     `@page { size: A4; margin: ${PAGE_MARGIN_MM}mm }`,
-    'html, body { margin: 0; background: #fff }',
-    `.print-page { width: ${A4_MM.w}mm; height: ${A4_MM.h}mm; box-sizing: border-box; padding: ${PAGE_MARGIN_MM}mm; overflow: hidden; break-after: page; display: grid; grid-template-columns: repeat(${COLUMNS}, ${TICKET_MM.w}mm); grid-auto-rows: ${TICKET_MM.h}mm; gap: ${GAP_MM}mm; align-content: start }`,
-    `.print-ticket { width: ${TICKET_MM.w}mm; height: ${TICKET_MM.h}mm; object-fit: fill; display: block; break-inside: avoid }`,
+    '@media print {',
+    '  html, body { margin: 0; background: #fff }',
+    '  body > *:not(.print-sheets) { display: none !important }',
+    '  .print-sheets { display: block }',
+    `  .print-page { width: ${A4_MM.w}mm; height: ${A4_MM.h}mm; box-sizing: border-box; padding: ${PAGE_MARGIN_MM}mm; overflow: hidden; break-after: page; display: grid; grid-template-columns: repeat(${COLUMNS}, ${TICKET_MM.w}mm); grid-auto-rows: ${TICKET_MM.h}mm; gap: ${GAP_MM}mm; align-content: start }`,
+    '  .print-page:last-child { break-after: auto }',
+    `  .print-ticket { width: ${TICKET_MM.w}mm; height: ${TICKET_MM.h}mm; object-fit: fill; display: block; break-inside: avoid }`,
+    '}',
   ].join('\n')
 }

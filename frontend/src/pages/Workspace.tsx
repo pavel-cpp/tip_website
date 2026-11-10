@@ -37,14 +37,15 @@ import { WsIcon, type WsIconName } from '../features/workspace/icons'
 import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineBanner'
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
 import { PhoneToolbar } from '../features/workspace/PhoneToolbar'
-import { copyShortcutLabel } from '../features/workspace/platform'
+import { PrintSheets } from '../features/workspace/PrintSheets'
+import { copyShortcutLabel, isIOS } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
 import { stepRow } from '../features/workspace/rowStep'
 import { SaveButton } from '../features/workspace/SaveButton'
 import { HANDLE_PX, Splitter } from '../features/workspace/Splitter'
-import { applyArrow, loadSplit, type SplitState, saveSplit, tracks } from '../features/workspace/split'
+import { loadSplit, type SplitState, saveSplit, tracks } from '../features/workspace/split'
 import { TicketPanel } from '../features/workspace/TicketPanel'
 import { filterRows, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
@@ -818,6 +819,7 @@ function WorkspaceView({ project }: { project: Project }) {
       )}
       {watchedPeer && watchRowId && <style>{spotlightCss(watchRowId, peerColor)}</style>}
 
+      {actions.sheets && <PrintSheets urls={actions.sheets} auto={!isIOS()} onClosed={actions.printClosed} />}
       {actions.progress && (
         <div className="ws-progress" role="status">
           <div
@@ -826,9 +828,7 @@ function WorkspaceView({ project }: { project: Project }) {
             aria-valuemin={0}
             aria-valuemax={actions.progress.total}
             aria-valuenow={actions.progress.done}
-            aria-label={t(
-              actions.progress.kind === 'copy' ? 'workspace.progress.copy' : 'workspace.progress.save',
-            )}
+            aria-label={t(`workspace.progress.${actions.progress.kind}`)}
           >
             <span style={{ transform: `scaleX(${actions.progress.done / actions.progress.total})` }} />
           </div>
@@ -882,14 +882,11 @@ function WorkspaceView({ project }: { project: Project }) {
         {!narrow && (
           <Splitter
             orientation={stacked ? 'vertical' : 'horizontal'}
-            ratio={split.ratio}
-            collapsed={split.collapsed}
+            split={split}
             gridRef={gridRef}
             names={names}
-            onRatio={(ratio) => setSplit((s) => ({ ...s, ratio }))}
+            onSplit={setSplit}
             onDragging={setDragging}
-            onArrow={(side) => setSplit((s) => ({ ...s, collapsed: applyArrow(s.collapsed, side) }))}
-            onReset={() => setSplit({ ratio: 0.5, collapsed: null })}
           />
         )}
         <div
