@@ -17,32 +17,21 @@ import { ticketValues } from './ticketActions'
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
 const DEFAULT_ZOOM = 1
 
-/** Page-turn timing in ms: keyboard-driven and repeated, so the whole turn stays within 240 ms. */
-const TURN = { out: 160, in: 240, delay: 0 } as const
+/** Both tickets move together for 180 ms: a keyboard-driven, repeated action must stay quick and calm. */
+const TURN = { ms: 180, shift: 32 } as const
 
 /**
- * Turns the card: the outgoing canvas swings away in the direction of travel (slight rotateY, fade), the
- * incoming one arrives from the other side. Only transform and opacity, so it stays on the compositor.
- * Returns the animations so a quick next step can cancel them instead of queueing up.
+ * Flat slide: the outgoing canvas drifts a little way in the direction of travel and fades, the incoming one
+ * arrives from the opposite side and fades in. Only transform and opacity (compositor). Returns the
+ * animations so a quick next step can cancel them instead of queueing up.
  */
 export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1): Animation[] {
-  const swing = (x: number, deg: number): Keyframe => ({
-    transform: `translateX(${x}%) rotateY(${deg}deg) scale(0.96)`,
-    opacity: 0,
-  })
-  const rest: Keyframe = { transform: 'translateX(0) rotateY(0deg) scale(1)', opacity: 1 }
+  const away = (x: number): Keyframe => ({ transform: `translateX(${x}px)`, opacity: 0 })
+  const rest: Keyframe = { transform: 'translateX(0)', opacity: 1 }
+  const opts = { duration: TURN.ms, easing: EASE.out }
   return [
-    oldEl.animate([rest, swing(-10 * dir, 26 * dir)], {
-      duration: TURN.out,
-      easing: EASE.out,
-      fill: 'both',
-    }),
-    newEl.animate([swing(10 * dir, -26 * dir), rest], {
-      duration: TURN.in,
-      delay: TURN.delay,
-      easing: EASE.out,
-      fill: 'backwards',
-    }),
+    oldEl.animate([rest, away(-TURN.shift * dir)], { ...opts, fill: 'both' }),
+    newEl.animate([away(TURN.shift * dir), rest], { ...opts, fill: 'backwards' }),
   ]
 }
 

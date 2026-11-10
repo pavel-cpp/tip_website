@@ -595,8 +595,6 @@
   overflow: hidden;
   border-radius: 10px;
   background: var(--bg-input);
-  /* Depth for the page-turn between tickets (TicketPanel turnTicket). */
-  perspective: 1100px;
 }
 .tk-canvas {
   position: absolute;

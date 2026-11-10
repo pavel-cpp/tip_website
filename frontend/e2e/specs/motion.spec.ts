@@ -63,8 +63,8 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
         .map((a) => String((a.effect as KeyframeEffect).getKeyframes()[0]?.transform)),
     )
   await expect.poll(async () => (await turn()).length).toBe(2)
-  // Next: the new card arrives from the right, so it starts shifted right and turned the other way.
-  expect((await turn()).some((t) => t.includes('translateX(10%)'))).toBe(true)
+  // Next: the new card arrives from the right, so it starts shifted right.
+  expect((await turn()).some((t) => t.includes('translateX(32px)'))).toBe(true)
 
   // A burst of steps cancels the running turn each time: never more than the current pair.
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
@@ -74,7 +74,7 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
   // Back: mirrored.
   await page.keyboard.press('ArrowLeft')
   await expect(who).toContainText('Person 4')
-  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-10%)'))).toBe(true)
+  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-32px)'))).toBe(true)
   await expect.poll(async () => (await turn()).length, { timeout: 3000 }).toBeLessThanOrEqual(2)
 })
 
