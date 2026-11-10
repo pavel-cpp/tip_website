@@ -55,6 +55,7 @@ import { useTicketActions } from '../features/workspace/useTicketActions'
 import { WorkspaceTopbar } from '../features/workspace/WorkspaceTopbar'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
+import { prefersReducedMotion } from '../lib/motion'
 import type { TicketPlaceholders } from '../lib/ticket'
 import { useImageElement } from '../lib/ticket'
 import '../features/workspace/workspace.css'
@@ -392,6 +393,19 @@ function WorkspaceView({ project }: { project: Project }) {
   const [split, setSplit] = useState<SplitState>(() => loadSplit(userId))
   const [dragging, setDragging] = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
+  // A drag that crosses the collapse point snaps the panel away or back with a short ease instead of teleporting.
+  const [snap, setSnap] = useState(false)
+  const lastCollapsed = useRef(split.collapsed)
+  const snapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => {
+    if (lastCollapsed.current === split.collapsed) return
+    lastCollapsed.current = split.collapsed
+    if (!dragging || prefersReducedMotion()) return
+    setSnap(true)
+    clearTimeout(snapTimer.current)
+    snapTimer.current = setTimeout(() => setSnap(false), 240)
+  }, [split.collapsed, dragging])
+  useEffect(() => () => clearTimeout(snapTimer.current), [])
   // Persisted once a drag is over, not on every pointer move.
   useEffect(() => {
     if (!dragging) saveSplit(userId, split)
@@ -405,8 +419,11 @@ function WorkspaceView({ project }: { project: Project }) {
   const shownRows = useMemo(() => filterRows(rows, query), [rows, query])
   const prevRow = stepRow(shownRows, current?.id ?? null, -1)
   const nextRow = stepRow(shownRows, current?.id ?? null, 1)
-  const stepTo = useCallback((row: Participant | null) => {
+  // True while a held arrow key repeats: the ticket then swaps with no page-turn.
+  const instantStep = useRef(false)
+  const stepTo = useCallback((row: Participant | null, instant = false) => {
     if (!row) return
+    instantStep.current = instant
     setCurrentId(row.id)
     setSelected(new Set([row.id]))
     setReveal(row.id)
@@ -434,7 +451,7 @@ function WorkspaceView({ project }: { project: Project }) {
         return
       }
       e.preventDefault()
-      stepRef.current.go(e.key === 'ArrowLeft' ? stepRef.current.prev : stepRef.current.next)
+      stepRef.current.go(e.key === 'ArrowLeft' ? stepRef.current.prev : stepRef.current.next, e.repeat)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -657,6 +674,7 @@ function WorkspaceView({ project }: { project: Project }) {
         emptyReason={list.isError ? 'error' : rows.length === 0 && !list.isPending ? 'no-rows' : 'select'}
         onRetry={() => void list.refetch()}
         settingsTo={canSettings ? `/projects/${project.id}/settings` : undefined}
+        instantRef={instantStep}
         nav={
           pictureOnly
             ? {
@@ -862,6 +880,7 @@ function WorkspaceView({ project }: { project: Project }) {
         className="ws-grid"
         ref={gridRef}
         data-dragging={dragging || undefined}
+        data-snap={snap || undefined}
         data-collapsed={narrow ? undefined : (split.collapsed ?? undefined)}
         style={
           narrow

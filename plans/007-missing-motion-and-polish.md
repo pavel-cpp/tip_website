@@ -1,6 +1,6 @@
 # 007 — Panel-collapse snap, colour picker unfold, crossfade and will-change polish
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: LOW (additive)
 - **Category**: Missed opportunities, Cohesion

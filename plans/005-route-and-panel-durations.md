@@ -1,6 +1,6 @@
 # 005 — Shorten sibling route transitions; stop animating layout for the panel collapse
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: MEDIUM
 - **Category**: Easing & duration, Performance
