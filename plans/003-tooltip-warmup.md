@@ -1,6 +1,6 @@
 # 003 — Tooltips: instant after the first one (skip-delay group)
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: MEDIUM
 - **Category**: Easing & duration (tooltip delay), Purpose & frequency

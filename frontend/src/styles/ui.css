@@ -439,7 +439,10 @@
   font-size: var(--fs-sm);
   line-height: var(--lh-tight);
   pointer-events: none;
-  animation: pop-open var(--dur-fast) var(--ease-standard) both;
+  animation: pop-open var(--dur-fast) var(--ease-out) both;
+}
+.tooltip[data-instant="true"] {
+  animation: none;
 }
 
 /* ---------- toast ---------- */
