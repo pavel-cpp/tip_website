@@ -1,6 +1,6 @@
 # 006 — Reduced motion: keep short opacity fades, drop movement
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: MEDIUM
 - **Category**: Accessibility

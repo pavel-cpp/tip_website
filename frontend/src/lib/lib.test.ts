@@ -55,6 +55,20 @@ describe('usePresence', () => {
     act(() => vi.advanceTimersByTime(141))
     expect(result.current.mounted).toBe(false)
   })
+
+  it('keeps a 100 ms exit under reduced motion so the opacity fade can play', () => {
+    vi.useFakeTimers()
+    localStorage.setItem('tip.reduceMotion', '1')
+    const { result, rerender } = renderHook(({ open }) => usePresence(open, 400), {
+      initialProps: { open: true },
+    })
+    rerender({ open: false })
+    act(() => vi.advanceTimersByTime(99))
+    expect(result.current.mounted).toBe(true)
+    act(() => vi.advanceTimersByTime(2))
+    expect(result.current.mounted).toBe(false)
+    localStorage.removeItem('tip.reduceMotion')
+  })
 })
 
 describe('withViewTransition', () => {

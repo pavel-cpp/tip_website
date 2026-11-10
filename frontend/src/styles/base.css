@@ -384,6 +384,34 @@ main:focus {
   ::view-transition-new(*) {
     animation: none !important;
   }
+  /* Opacity-only fades keep state changes legible; they out-rank the global kill above by specificity. */
+  .overlay {
+    animation: fade-in 120ms linear both !important;
+  }
+  .overlay[data-state="closed"] {
+    animation: fade-out 100ms linear both !important;
+  }
+  .modal {
+    animation: fade-in 120ms linear both !important;
+  }
+  .overlay[data-state="closed"] .modal {
+    animation: fade-out 100ms linear both !important;
+  }
+  .popover {
+    animation: fade-in 120ms linear both !important;
+  }
+  .popover[data-state="closed"] {
+    animation: fade-out 100ms linear both !important;
+  }
+  .toast {
+    animation: fade-in 120ms linear both !important;
+  }
+  .toast[data-state="closed"] {
+    animation: fade-out 100ms linear both !important;
+  }
+  .tooltip {
+    animation: fade-in 100ms linear both !important;
+  }
 }
 :root[data-reduce-motion="true"] *,
 :root[data-reduce-motion="true"] *::before,
@@ -399,4 +427,32 @@ main:focus {
 :root[data-reduce-motion="true"]::view-transition-old(*),
 :root[data-reduce-motion="true"]::view-transition-new(*) {
   animation: none !important;
+}
+/* The in-app setting selector is more specific than the global kill, so the fades are prefixed to win. */
+:root[data-reduce-motion="true"] .overlay {
+  animation: fade-in 120ms linear both !important;
+}
+:root[data-reduce-motion="true"] .overlay[data-state="closed"] {
+  animation: fade-out 100ms linear both !important;
+}
+:root[data-reduce-motion="true"] .modal {
+  animation: fade-in 120ms linear both !important;
+}
+:root[data-reduce-motion="true"] .overlay[data-state="closed"] .modal {
+  animation: fade-out 100ms linear both !important;
+}
+:root[data-reduce-motion="true"] .popover {
+  animation: fade-in 120ms linear both !important;
+}
+:root[data-reduce-motion="true"] .popover[data-state="closed"] {
+  animation: fade-out 100ms linear both !important;
+}
+:root[data-reduce-motion="true"] .toast {
+  animation: fade-in 120ms linear both !important;
+}
+:root[data-reduce-motion="true"] .toast[data-state="closed"] {
+  animation: fade-out 100ms linear both !important;
+}
+:root[data-reduce-motion="true"] .tooltip {
+  animation: fade-in 100ms linear both !important;
 }
