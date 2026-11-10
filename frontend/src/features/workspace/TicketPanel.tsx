@@ -2,6 +2,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { AppLink } from '../../components/AppLink'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
+import { prefersReducedMotion } from '../../lib/motion'
 import {
   imageSize,
   loadFonts,
@@ -15,6 +16,36 @@ import { ticketValues } from './ticketActions'
 
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
 const DEFAULT_ZOOM = 1
+
+/** Page-turn timing in ms: the old ticket leaves first, the new one follows a beat later. */
+const TURN = { out: 260, in: 340, delay: 70 } as const
+
+/**
+ * Turns the card: the outgoing canvas swings away in the direction of travel (slight rotateY, fade), the
+ * incoming one arrives from the other side. Only transform and opacity, so it stays on the compositor.
+ * Returns the animations so a quick next step can cancel them instead of queueing up.
+ */
+export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1): Animation[] {
+  const swing = (x: number, deg: number): Keyframe => ({
+    transform: `translateX(${x}%) rotateY(${deg}deg) scale(0.94)`,
+    opacity: 0,
+  })
+  const rest: Keyframe = { transform: 'translateX(0) rotateY(0deg) scale(1)', opacity: 1 }
+  const ease = 'cubic-bezier(0.2, 0, 0, 1)'
+  return [
+    oldEl.animate([rest, swing(-14 * dir, 38 * dir)], {
+      duration: TURN.out,
+      easing: 'cubic-bezier(0.3, 0, 1, 1)',
+      fill: 'both',
+    }),
+    newEl.animate([swing(14 * dir, -38 * dir), rest], {
+      duration: TURN.in,
+      delay: TURN.delay,
+      easing: ease,
+      fill: 'backwards',
+    }),
+  ]
+}
 
 export function nextZoom(current: number, dir: 1 | -1): number {
   if (dir > 0) return ZOOM_STEPS.find((z) => z > current) ?? current
@@ -68,6 +99,10 @@ export function TicketPanel({
   const [drawn, setDrawn] = useState(false)
   const frontRef = useRef<0 | 1>(0)
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+  // The ticket shown last, and the turn still running: a quick next step cancels it instead of queueing.
+  const shownNumber = useRef<number | null>(null)
+  const turning = useRef<Animation[]>([])
+  const animate = nav !== undefined
 
   const values = useMemo(() => (participant ? ticketValues(participant) : null), [participant])
   const { number, name, phone } = values ?? { number: '', name: '', phone: '' }
@@ -83,11 +118,28 @@ export function TicketPanel({
       if (!live) return
       requestAnimationFrame(() => {
         const back = canvases[frontRef.current === 0 ? 1 : 0]?.current
+        const old = canvases[frontRef.current]?.current
         if (!live || !back) return
         renderTicket(back, image, placeholders, { number, name, phone })
         frontRef.current = frontRef.current === 0 ? 1 : 0
         setFront(frontRef.current)
         setDrawn(true)
+        const shown = Number(number)
+        const prev = shownNumber.current
+        shownNumber.current = shown
+        for (const a of turning.current) a.cancel()
+        turning.current = []
+        if (
+          animate &&
+          old &&
+          prev !== null &&
+          prev !== shown &&
+          !prefersReducedMotion() &&
+          typeof back.animate === 'function'
+        ) {
+          // The stage clips to its rounded frame, so the swing reads as a card turning inside it.
+          turning.current = turnTicket(old, back, shown > prev ? 1 : -1)
+        }
       })
     })
     return () => {
