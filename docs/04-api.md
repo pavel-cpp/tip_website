@@ -154,6 +154,17 @@
 ```
 Все записи в завершённый проект → `409 PROJECT_FINISHED`. Занятость строки (обводка цветом редактирующего и подсказка «Редактирует Азам») берётся не из этого API, а из presence (WebSocket).
 
+### Шрифты билета
+
+| Метод и путь | Право | Описание |
+|---|---|---|
+| `GET /fonts` | `project.view` | → список загруженных своих шрифтов `[{id, family, format, sizeBytes}]` |
+| `POST /fonts` | `project.update` | multipart: файл `.ttf`/`.otf`/`.woff2` (проверка сигнатуры, ≤ 2 МиБ, не более 50 шрифтов и 20 МиБ суммарно) + подтверждение лицензии; хранится в blobfs по хэшу; запись аудита `font.upload` |
+| `GET /fonts/{id}/file` | `project.view` | → файл шрифта, `ETag`, `immutable` |
+| `DELETE /fonts/{id}` | `project.update` | 409, пока шрифт используется проектом; запись аудита `font.delete` |
+
+Плейсхолдер ссылается на свой шрифт как `custom:<uuid>`; встроенные шрифты (41 семейство, SIL OFL / Apache 2.0, подмножества latin + cyrillic) перечислены в allow-list `domain/project.go` и в `frontend/src/features/projects/catalog.gen.ts` (генерируется `frontend/scripts/gen-fonts.mjs`, Go-список синхронизируется вручную).
+
 ## 6. Служебные
 
 | Путь | Доступ | Назначение |
