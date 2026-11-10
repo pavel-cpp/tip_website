@@ -175,6 +175,14 @@ main:focus {
   main.page {
     view-transition-name: page;
   }
+  /* A project card and the workspace it opens are one shared element ("hero"): lib/viewTransition.ts marks
+     the card (data-hero) and the root (data-morph) for the running transition only. */
+  :root[data-morph] main.page[data-rank="1"] {
+    view-transition-name: hero;
+  }
+  :root[data-morph] .project-card[data-hero] {
+    view-transition-name: hero;
+  }
 }
 ::view-transition-group(topbar),
 ::view-transition-group(page) {
@@ -239,6 +247,110 @@ main:focus {
   from {
     opacity: 0;
     transform: scale(1.012);
+  }
+}
+
+/* Siblings (admin, system, account): depth cross-fade, the old screen recedes and softens, the new one settles in. */
+:root[data-nav="sibling"]::view-transition-old(page) {
+  animation: vt-out-depth var(--dur-fast) var(--ease-in) both;
+}
+:root[data-nav="sibling"]::view-transition-new(page) {
+  animation: vt-in-depth var(--dur-slow) var(--ease-standard) both;
+  animation-delay: 60ms;
+}
+@keyframes vt-out-depth {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+    filter: blur(6px);
+  }
+}
+@keyframes vt-in-depth {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+    filter: blur(6px);
+  }
+}
+
+/* Project <-> list: the card grows into the workspace and shrinks back into the card. The group box is
+   animated by the browser (position and size of snapshots, no layout); it clips, so the tall workspace
+   image never spills out of the growing card. */
+::view-transition-group(hero) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-standard);
+  overflow: clip;
+  border-radius: var(--radius-lg);
+}
+::view-transition-old(hero),
+::view-transition-new(hero) {
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-standard);
+}
+/* Without a partner (the card scrolled away, a list still loading) the workspace just grows in or settles out. */
+::view-transition-new(hero):only-child {
+  animation-name: vt-in-drill;
+}
+::view-transition-old(hero):only-child {
+  animation-name: vt-out-back;
+}
+
+/* Project <-> settings: settings is a sheet that rises over the workspace; the workspace steps back and dims. */
+:root[data-sheet] {
+  --sheet-shadow: 0 -20px 56px rgb(0 0 0 / 0.32);
+}
+:root[data-sheet]::view-transition-old(page),
+:root[data-sheet]::view-transition-new(page) {
+  background: var(--bg);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  animation-duration: var(--dur-slow);
+  animation-timing-function: var(--ease-standard);
+  animation-delay: 0ms;
+}
+:root[data-sheet="open"]::view-transition-old(page) {
+  animation-name: vt-under;
+}
+:root[data-sheet="open"]::view-transition-new(page) {
+  animation-name: vt-rise;
+  box-shadow: var(--sheet-shadow);
+}
+:root[data-sheet="close"]::view-transition-old(page) {
+  animation-name: vt-sink;
+  box-shadow: var(--sheet-shadow);
+  z-index: 2;
+}
+:root[data-sheet="close"]::view-transition-new(page) {
+  animation-name: vt-surface;
+}
+@keyframes vt-under {
+  to {
+    opacity: 0.45;
+    transform: scale(0.965) translateY(-10px);
+  }
+}
+/* The sheet is solid for almost the whole move (a see-through sheet shows the screen beneath as a ghost). */
+@keyframes vt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(9vh);
+  }
+  22% {
+    opacity: 1;
+  }
+}
+@keyframes vt-sink {
+  65% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(9vh);
+  }
+}
+@keyframes vt-surface {
+  from {
+    opacity: 0.45;
+    transform: scale(0.965) translateY(-10px);
   }
 }
 

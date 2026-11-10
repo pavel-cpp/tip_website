@@ -2,7 +2,7 @@ import { Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { Outlet, useLocation, useNavigationType } from 'react-router'
 import { useI18n } from '../i18n'
 import { cx } from '../lib/cx'
-import { routeCommitted, routeTransitionsActive } from '../lib/viewTransition'
+import { routeCommitted, routeRank, routeTransitionsActive } from '../lib/viewTransition'
 import { Skeleton } from './Skeleton'
 import { Topbar } from './Topbar'
 import { TopbarSlotProvider } from './TopbarSlot'
@@ -113,6 +113,7 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
             id="main"
             tabIndex={-1}
             key={pathname}
+            data-rank={routeRank(pathname) ?? undefined}
             className={cx('page', !routeTransitionsActive() && 'route-enter')}
           >
             <Outlet />

@@ -66,22 +66,64 @@ export function routeTransitionsActive(): boolean {
 let committedPath = typeof location === 'undefined' ? '/' : location.pathname
 let waiting: (() => void) | undefined
 
+/** Project whose card is morphing into (or back from) the workspace in the running transition. */
+let heroId: string | null = null
+let navSeq = 0
+
+const projectIdOf = (path: string): string | null => /^\/projects\/([^/]+)/.exec(path)?.[1] ?? null
+
+/** The list card of a project, only when it is on screen (a morph from outside the viewport looks like a glitch). */
+function visibleCard(id: string): HTMLElement | null {
+  const el = document.querySelector<HTMLElement>(`.project-card[data-flip-id="${CSS.escape(id)}"]`)
+  const r = el?.getBoundingClientRect()
+  return el && r && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth ? el : null
+}
+
 /**
  * The shell calls this after each route commit: it is the base for the next direction and it releases
- * a held back/forward transition.
+ * a held back/forward transition. When a project is shrinking back into its list card, the card gets its
+ * transition name here, right after the list has rendered and before the new frame is captured.
  */
 export function routeCommitted(path: string): void {
   committedPath = path
+  if (heroId && routeRank(path) === 0) visibleCard(heroId)?.setAttribute('data-hero', '')
   waiting?.()
   waiting = undefined
 }
 
 function startNav(native: Document['startViewTransition'], cb: () => void | Promise<void>): ViewTransition {
   const root = document.documentElement
-  root.dataset.nav = navKind(committedPath, location.pathname)
+  const from = committedPath
+  const to = location.pathname
+  const a = routeRank(from)
+  const b = routeRank(to)
+  delete root.dataset.sheet
+  delete root.dataset.morph
+  for (const el of document.querySelectorAll('[data-hero]')) el.removeAttribute('data-hero')
+  root.dataset.nav = navKind(from, to)
+  // Project <-> settings is a sheet rising over, or sinking back to, the workspace.
+  if ((a === 1 && b === 2) || (a === 2 && b === 1)) root.dataset.sheet = b === 2 ? 'open' : 'close'
+  // List <-> project: the card and the workspace are one shared element.
+  if (a === 0 && b === 1) {
+    heroId = projectIdOf(to)
+    const card = heroId ? visibleCard(heroId) : null
+    if (card) {
+      card.setAttribute('data-hero', '')
+      root.dataset.morph = 'open'
+    } else heroId = null
+  } else if (a === 1 && b === 0) {
+    heroId = projectIdOf(from)
+    if (heroId) root.dataset.morph = 'close'
+  }
+  const mine = ++navSeq
   const t = native.call(document, cb)
   void t.finished.finally(() => {
+    if (mine !== navSeq) return // a newer transition owns the flags now
     delete root.dataset.nav
+    delete root.dataset.sheet
+    delete root.dataset.morph
+    heroId = null
+    for (const el of document.querySelectorAll('[data-hero]')) el.removeAttribute('data-hero')
   })
   return t
 }
