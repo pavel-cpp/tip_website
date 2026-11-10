@@ -86,7 +86,8 @@ test('unsaved changes ask for confirmation before leaving', async ({ admin, sign
     .getByRole('dialog', { name: t('settings.leave.title') })
     .getByRole('button', { name: t('settings.leave.leave') })
     .click()
-  await expect(page).toHaveURL(/\/$/)
+  // A direct visit has no previous screen, so Close falls back to the project's workspace.
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
 })
 
 test('finish, reopen and delete a project from the list', async ({ admin, signedIn }) => {

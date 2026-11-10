@@ -7,73 +7,63 @@
 }
 .settings-head {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: var(--space-3);
 }
 .st-title-wrap {
   position: relative;
   flex: 1;
   min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+/* The title is a real field: a visible box with a pencil, so it reads as editable at first glance. */
+.st-title-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.st-title-box > svg {
+  flex: none;
+  color: var(--accent);
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .st-title-box:hover:not(:has(:disabled)) {
+    border-color: var(--accent);
+  }
+}
+.st-title-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.st-title-box[data-invalid] {
+  border-color: var(--danger);
 }
 .st-title {
-  display: block;
-  width: 100%;
-  padding: 6px 30px 6px 0;
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
   border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: var(--fs-2xl);
+  font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);
   line-height: 1.25;
   text-overflow: ellipsis;
 }
+.st-title:focus-visible {
+  outline: none;
+}
 .st-title:disabled {
   opacity: 1;
   cursor: default;
-}
-.st-title:hover:not(:disabled) {
-  border-bottom-color: var(--border-strong);
-}
-.st-title:focus-visible {
-  outline: none;
-  border-bottom-color: var(--accent);
-}
-.st-title[aria-invalid="true"] {
-  border-bottom-color: var(--danger);
-}
-/* The pencil only says "this is editable"; it follows the text where the browser can size an input to its
-   content, and otherwise sits at the end of the title row. */
-.st-title-wrap > svg {
-  position: absolute;
-  right: 4px;
-  top: 50%;
-  translate: 0 -50%;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-@supports (field-sizing: content) {
-  .st-title-wrap {
-    display: flex;
-    align-items: center;
-  }
-  .st-title {
-    field-sizing: content;
-    flex: 0 1 auto;
-    width: auto;
-    min-width: 8ch;
-    padding-right: 36px;
-  }
-  .st-title-wrap > svg {
-    right: auto;
-    left: auto;
-    margin-left: -30px;
-    position: static;
-    translate: none;
-    flex: none;
-  }
 }
 .st-title-error {
   position: absolute;
@@ -433,8 +423,11 @@
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: none;
   cursor: pointer;
+}
+.input .color-swatch[aria-expanded="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 @media (pointer: coarse) {
   /* Bigger swatch inside the 44 px field on touch screens. */
@@ -442,6 +435,84 @@
     width: 36px;
     height: 36px;
   }
+}
+/* In-page colour picker: square (saturation x brightness), hue slider, ready-made colours. */
+.cp {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+}
+.cp-square {
+  position: relative;
+  height: 150px;
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(var(--cp-hue) 100% 50%));
+  cursor: crosshair;
+  touch-action: none;
+}
+.cp-square:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cp-knob {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+}
+.cp-hue {
+  width: 100%;
+  height: 14px;
+  margin: 0;
+  appearance: none;
+  border-radius: 7px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  cursor: pointer;
+}
+.cp-hue::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+}
+.cp-hue::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.5);
+}
+.cp-presets {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.cp-preset {
+  aspect-ratio: 1;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.cp-preset[aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.cp[data-disabled] {
+  opacity: 0.6;
 }
 /* The three toggles share the width of the fields above, so the column reads as one block. */
 .style-toggles {

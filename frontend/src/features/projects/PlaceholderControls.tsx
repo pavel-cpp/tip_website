@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
 import { PLACEHOLDER_LIMITS, type TicketPlaceholder } from '../../lib/ticket'
+import { ColorPicker } from './ColorPicker'
 import { clampInt, isHexColor } from './draft'
 import { FontPicker } from './FontPicker'
 import './settings.css'
@@ -94,13 +95,18 @@ function ColorField({
   label,
   value,
   onChange,
+  open,
+  onToggle,
   disabled,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
+  open: boolean
+  onToggle: () => void
   disabled?: boolean
 }) {
+  const { t } = useI18n()
   const id = useId()
   const [text, setText] = useState(value.toUpperCase())
   useEffect(() => setText(value.toUpperCase()), [value])
@@ -110,13 +116,14 @@ function ColorField({
         {label}
       </label>
       <div className="input color-field">
-        <input
-          type="color"
+        <button
+          type="button"
           className="color-swatch"
-          aria-label={label}
-          value={isHexColor(value) ? value.toLowerCase() : '#000000'}
+          aria-label={`${label}: ${t('settings.colorChoose')}`}
+          aria-expanded={open}
           disabled={disabled}
-          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          style={{ background: isHexColor(value) ? value : '#000000' }}
+          onClick={onToggle}
         />
         <input
           id={id}
@@ -147,6 +154,8 @@ interface Props {
 export function PlaceholderControls({ value: p, image, onChange, disabled }: Props) {
   const { t } = useI18n()
   const styleId = useId()
+  // Only one colour picker is open at a time; it unfolds under the pair of colour fields.
+  const [openColor, setOpenColor] = useState<'color' | 'strokeColor' | null>(null)
   const { minSize, maxSize, minStroke, maxStroke } = PLACEHOLDER_LIMITS
   const toggles = [
     { key: 'bold', short: t('settings.boldShort'), label: t('settings.bold') },
@@ -185,15 +194,26 @@ export function PlaceholderControls({ value: p, image, onChange, disabled }: Pro
           label={t('settings.color')}
           value={p.color}
           disabled={disabled}
+          open={openColor === 'color'}
+          onToggle={() => setOpenColor((o) => (o === 'color' ? null : 'color'))}
           onChange={(color) => onChange({ color })}
         />
         <ColorField
           label={t('settings.strokeColor')}
           value={p.strokeColor}
           disabled={disabled}
+          open={openColor === 'strokeColor'}
+          onToggle={() => setOpenColor((o) => (o === 'strokeColor' ? null : 'strokeColor'))}
           onChange={(strokeColor) => onChange({ strokeColor })}
         />
       </div>
+      {openColor && (
+        <ColorPicker
+          value={p[openColor]}
+          disabled={disabled}
+          onChange={(c) => onChange({ [openColor]: c })}
+        />
+      )}
       <div className="field">
         <span className="field-label" id={styleId}>
           {t('settings.style')}

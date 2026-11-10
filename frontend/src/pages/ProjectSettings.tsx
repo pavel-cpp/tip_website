@@ -185,20 +185,25 @@ function SettingsEditor({
         <h1 className="sr-only">{t('settings.title')}</h1>
         <div className="settings-head">
           <div className="st-title-wrap">
-            <input
-              className="st-title"
-              name="title"
-              aria-label={t('settings.name')}
-              title={t('settings.titleHint')}
-              value={draft.title}
-              maxLength={200}
-              autoComplete="off"
-              disabled={readOnly}
-              aria-invalid={titleEmpty || undefined}
-              aria-describedby={titleEmpty ? 'st-title-error' : undefined}
-              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
-            />
-            <Icon name="pencil" size={18} />
+            <label className="field-label" htmlFor="st-title">
+              {t('settings.name')}
+            </label>
+            <div className="st-title-box" data-invalid={titleEmpty || undefined}>
+              <input
+                id="st-title"
+                className="st-title"
+                name="title"
+                title={t('settings.titleHint')}
+                value={draft.title}
+                maxLength={200}
+                autoComplete="off"
+                disabled={readOnly}
+                aria-invalid={titleEmpty || undefined}
+                aria-describedby={titleEmpty ? 'st-title-error' : undefined}
+                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+              />
+              {!readOnly && <Icon name="pencil" size={18} />}
+            </div>
             {titleEmpty && (
               <span id="st-title-error" className="field-error st-title-error" role="alert">
                 {t('validation.required')}
