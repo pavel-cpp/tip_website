@@ -30,8 +30,9 @@ func TestProjectPositionBackfill(t *testing.T) {
 	if got != "new,mid,old" {
 		t.Fatalf("order by position = %q, want new,mid,old", got)
 	}
-	if err := goose.Down(db, "."); err != nil {
-		t.Fatalf("goose down: %v", err)
+	// Down to the version before 00008, not "one step": later migrations must not change what is checked.
+	if err := goose.DownTo(db, ".", 7); err != nil {
+		t.Fatalf("goose down to 7: %v", err)
 	}
 	n := scalarString(t, db, `SELECT count(*)::text FROM information_schema.columns WHERE table_name = 'projects' AND column_name = 'position'`)
 	if n != "0" {
