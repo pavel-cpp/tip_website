@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>TIP</title><style>
+.bg{fill:#ffffff}.e{stop-color:#ffffff}.m{stop-color:#8a1c8a}.a{stop-color:#bd78c8}.b{stop-color:#7a1a86}
+@media (prefers-color-scheme:dark){.bg{fill:#131418}.e{stop-color:#2a2030}.m{stop-color:#d79be3}.a{stop-color:#e6b5ef}.b{stop-color:#b46bc4}}
+</style><defs><linearGradient id="f" x1="0" y1="0" x2="1" y2="1"><stop class="e" offset="0"/><stop class="m" offset=".5"/><stop class="e" offset="1"/></linearGradient>
+<linearGradient id="l" gradientUnits="userSpaceOnUse" x1="6" y1="6" x2="52" y2="58"><stop class="a" offset="0"/><stop class="b" offset="1"/></linearGradient></defs><rect class="bg" x="2" y="2" width="60" height="60" stroke="url(#f)" stroke-width="4"/><g fill="url(#l)"><path d="M5.3 5.3H23.6V11H17.4V45L11.8 42.3V11H5.3Z"/>
+<path d="M27.7 5.3H33.1V54.3L27.7 51.6Z"/>
+<path fill-rule="evenodd" d="M39.5 5.3H49C55.6 5.3 58.8 10 58.8 17C58.8 25 55 33.4 48 33.4H44.8V58.7H39.5ZM44.8 11H48C51 11 52.4 13 52.4 17.5C52.4 22 51 27.8 48 27.8H44.8Z"/></g></svg>

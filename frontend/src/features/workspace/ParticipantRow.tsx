@@ -9,7 +9,7 @@ import { useI18n } from '../../i18n'
 import type { Participant } from './api'
 import { WsIcon } from './icons'
 import type { RowCursor, RowLockOwner } from './presence'
-import { COLUMNS, type Column, isSuspiciousPhone } from './tableLogic'
+import { COLUMNS, type Column } from './tableLogic'
 
 export const ROW_HEIGHT = 44
 
@@ -151,7 +151,6 @@ function ParticipantRowImpl({
           const isEditing = editing?.id === row.id && editing.col === col
           const isFailed = failed?.col === col
           const value = isFailed && failed ? failed.value : c === 'number' ? String(row.number) : row[c]
-          const suspicious = c === 'phone' && !isFailed && isSuspiciousPhone(row.phone)
           return (
             <div
               key={c}
@@ -165,7 +164,6 @@ function ParticipantRowImpl({
               data-active={activeCol === col || undefined}
               data-editing={isEditing || undefined}
               data-failed={isFailed || undefined}
-              data-suspicious={suspicious || undefined}
               aria-readonly={c === 'number' || owner ? true : undefined}
             >
               {isEditing && editing ? (
@@ -205,12 +203,6 @@ function ParticipantRowImpl({
                       title={`${t('workspace.row.unsent')}: ${t('workspace.row.unsentTitle')}`}
                     >
                       <WsIcon name="clock" size={14} />
-                    </span>
-                  )}
-                  {suspicious && (
-                    <span className="pt-warn" title={t('workspace.phone.suspicious')}>
-                      <Icon name="alert" size={16} />
-                      <span className="sr-only">{t('workspace.phone.suspicious')}</span>
                     </span>
                   )}
                   {isFailed && (

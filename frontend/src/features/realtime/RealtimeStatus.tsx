@@ -13,8 +13,15 @@ interface Shown {
   leaving: boolean
 }
 
+interface OnlineAvatarsProps {
+  /** When set, avatars are buttons: clicking one jumps to what that colleague is doing. */
+  onSelect?: (peerId: string) => void
+  /** The colleague currently being watched. */
+  activeId?: string | null
+}
+
 /** Colleagues online right now; avatars pop in and out as they come and go. */
-export function OnlineAvatars() {
+export function OnlineAvatars({ onSelect, activeId }: OnlineAvatarsProps = {}) {
   const rt = useRealtime()
   const { t } = useI18n()
   const you = rt?.snapshot.you
@@ -55,7 +62,21 @@ export function OnlineAvatars() {
     <ul className="rt-online" aria-label={t('realtime.online.label', { count: others.length })}>
       {visible.map(({ peer, leaving }) => (
         <li key={peer.id} className="rt-online-item" data-leaving={leaving || undefined}>
-          <UserAvatar user={peer} size={26} />
+          {onSelect ? (
+            <button
+              type="button"
+              className="rt-online-btn"
+              aria-pressed={activeId === peer.id}
+              aria-label={t('realtime.follow.jump', { name: peer.displayName })}
+              title={t('realtime.follow.jump', { name: peer.displayName })}
+              style={{ '--peer': peer.color } as CSSProperties}
+              onClick={() => onSelect(peer.id)}
+            >
+              <UserAvatar user={peer} size={28} />
+            </button>
+          ) : (
+            <UserAvatar user={peer} size={26} />
+          )}
         </li>
       ))}
       {extra > 0 && (

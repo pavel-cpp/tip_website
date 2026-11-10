@@ -13,14 +13,20 @@ export interface Cell {
 
 const digits = (s: string) => s.replace(/\D/g, '')
 
-/** Case-insensitive substring match on name and phone; digits-only queries also match formatted phones. */
+/**
+ * Case-insensitive substring match on name and phone; digits-only queries also match formatted phones.
+ * A numeric query ("12", "#12", "№12") additionally finds the row with exactly that number.
+ */
 export function filterRows(rows: readonly Participant[], query: string): readonly Participant[] {
   const q = query.trim().toLowerCase()
   if (!q) return rows
   const qd = digits(q)
   const phoneByDigits = qd.length > 0 && qd === q.replace(/[\s()+-]/g, '')
+  const asNumber = /^[#№]?\s*(\d{1,9})$/.exec(q)
+  const number = asNumber ? Number(asNumber[1]) : -1
   return rows.filter(
     (r) =>
+      r.number === number ||
       r.name.toLowerCase().includes(q) ||
       r.phone.toLowerCase().includes(q) ||
       (phoneByDigits && digits(r.phone).includes(qd)),
@@ -100,6 +106,42 @@ export function applyClick(
   return { selected: new Set([id]), anchor: index }
 }
 
+/** Row ids from index `from` to `to` (either order) in the visible list, added to `base`. */
+export function rangeSelection(
+  ids: readonly string[],
+  from: number,
+  to: number,
+  base: ReadonlySet<string> = new Set(),
+): ReadonlySet<string> {
+  const [a, b] = from < to ? [from, to] : [to, from]
+  const next = new Set(base)
+  for (let i = Math.max(0, a); i <= Math.min(ids.length - 1, b); i++) next.add(ids[i] as string)
+  return next
+}
+
+/** Index of the row under a pointer at `clientY`, clamped to the list; rows have a fixed height. */
+export function rowIndexAt(
+  clientY: number,
+  viewportTop: number,
+  scrollTop: number,
+  rowHeight: number,
+  count: number,
+): number {
+  if (count <= 0) return -1
+  const i = Math.floor((clientY - viewportTop + scrollTop) / rowHeight)
+  return Math.min(count - 1, Math.max(0, i))
+}
+
+/**
+ * Pixels to scroll per frame while a drag is near (or beyond) the top or bottom edge of the list:
+ * negative scrolls up, 0 in the middle, growing with the distance past the edge zone up to `max`.
+ */
+export function autoScrollStep(clientY: number, top: number, bottom: number, edge = 48, max = 28): number {
+  if (clientY < top + edge) return -Math.min(max, Math.max(4, Math.round((top + edge - clientY) / 3)))
+  if (clientY > bottom - edge) return Math.min(max, Math.max(4, Math.round((clientY - (bottom - edge)) / 3)))
+  return 0
+}
+
 export function selectAllVisible(ids: readonly string[]): SelectionState {
   return { selected: new Set(ids), anchor: ids.length ? 0 : null }
 }
@@ -120,74 +162,10 @@ export function pruneSelection(selected: ReadonlySet<string>, ids: readonly stri
   return dropped ? next : selected
 }
 
-/** True when the pasted text looks like spreadsheet data (several cells or several rows). */
-export function isTabular(text: string): boolean {
-  return /[\t\n]/.test(text.replace(/[\r\n]+$/, ''))
-}
-
-function unquote(cell: string): string {
-  const c = cell.trim()
-  return c.length >= 2 && c.startsWith('"') && c.endsWith('"') ? c.slice(1, -1).replace(/""/g, '"') : c
-}
-
-/**
- * Parses tab-separated clipboard text from Excel/Sheets into rows. Columns are name and phone; a
- * leading all-digit column (a copied "No." column) is dropped. Blank lines are skipped.
- */
-export function parsePaste(text: string): ParticipantInput[] {
-  const out: ParticipantInput[] = []
-  for (const line of text.split(/\r?\n/)) {
-    if (line.trim() === '') continue
-    let cells = line.split('\t').map(unquote)
-    if (cells.length >= 3 && /^\d+$/.test(cells[0] ?? '')) cells = cells.slice(1)
-    out.push({ name: cells[0] ?? '', phone: cells[1] ?? '' })
-  }
-  return out
-}
-
 export function clampCount(raw: string): number | null {
   if (!/^\d+$/.test(raw.trim())) return null
   const n = Number(raw)
   return n >= 1 && n <= MAX_ADD_ROWS ? n : null
-}
-
-/**
- * Soft phone check: only digits, spaces and + ( ) - . are plausible, with 7 to 15 digits in total.
- * An empty phone is not flagged (the row is simply not filled in yet). Saving is never blocked by this.
- */
-export function isSuspiciousPhone(phone: string): boolean {
-  const p = phone.trim()
-  if (p === '') return false
-  if (!/^[+\d\s().-]+$/.test(p)) return true
-  const n = digits(p).length
-  return n < 7 || n > 15
-}
-
-export const countSuspiciousPhones = (rows: readonly Pick<Participant, 'phone'>[]): number =>
-  rows.reduce((n, r) => n + (isSuspiciousPhone(r.phone) ? 1 : 0), 0)
-
-export const isBlankRow = (r: Pick<Participant, 'name' | 'phone'>): boolean =>
-  r.name.trim() === '' && r.phone.trim() === ''
-
-/**
- * Splits pasted items between existing blank rows (filled first, starting at `startId` when it is
- * blank, otherwise in table order) and rows that still have to be created.
- */
-export function planPaste(
-  rows: readonly Participant[],
-  items: readonly ParticipantInput[],
-  startId?: string | null,
-): { fills: Array<{ row: Participant; item: ParticipantInput }>; rest: ParticipantInput[] } {
-  const blanks = rows.filter(isBlankRow)
-  const at = startId ? blanks.findIndex((r) => r.id === startId) : -1
-  const ordered = at > 0 ? [...blanks.slice(at), ...blanks.slice(0, at)] : blanks
-  const fills: Array<{ row: Participant; item: ParticipantInput }> = []
-  for (const [i, row] of ordered.entries()) {
-    const item = items[i]
-    if (!item) break
-    fills.push({ row, item })
-  }
-  return { fills, rest: items.slice(fills.length) }
 }
 
 /** File-system safe fragment: letters, digits, `_` and `-` only, capped in length. */
@@ -197,4 +175,106 @@ export function safeFilePart(s: string, max = 40): string {
     .replace(/^_+|_+$/g, '')
     .slice(0, max)
     .replace(/_+$/g, '')
+}
+
+export type PasteField = 'name' | 'phone'
+const FIELD_LIMIT: Record<PasteField, number> = { name: 200, phone: 40 }
+
+/** Pasted text as rows of cells plus the fields they fill. */
+export interface PasteGrid {
+  fields: PasteField[]
+  lines: string[][]
+}
+
+function unquote(cell: string): string {
+  const c = cell.trim()
+  return c.length >= 2 && c.startsWith('"') && c.endsWith('"') ? c.slice(1, -1).replace(/""/g, '"') : c
+}
+
+/**
+ * Parses clipboard text (tab-separated cells from Excel/Sheets, or plain lines). One column fills the
+ * column the cursor is in; two or more fill name and phone. A leading all-digit column (a copied
+ * "No." column) is dropped. Empty lines are kept (they are empty cells); one trailing newline is not a line.
+ */
+export function parsePasteGrid(text: string, col: number): PasteGrid {
+  const raw = text.replace(/\r\n?/g, '\n')
+  const lines = (raw.endsWith('\n') ? raw.slice(0, -1) : raw)
+    .split('\n')
+    .map((l) => l.split('\t').map(unquote))
+  let width = lines.reduce((w, l) => Math.max(w, l.length), 1)
+  if (width >= 3 && lines.every((l) => l[0] === undefined || l[0] === '' || /^\d+$/.test(l[0]))) {
+    for (const l of lines) l.shift()
+    width--
+  }
+  const one: PasteField = COLUMNS[col] === 'phone' ? 'phone' : 'name'
+  return { fields: width === 1 ? [one] : ['name', 'phone'], lines }
+}
+
+/** True when a paste is more than one plain value: several lines or cells. */
+export const isMultiCell = (text: string): boolean => /[\t\n]/.test(text.replace(/[\r\n]+$/, ''))
+
+export interface PasteUpdate {
+  row: Participant
+  name?: string
+  phone?: string
+}
+
+export interface PastePlan {
+  /** Existing rows to overwrite; cells that already hold the value are left out. */
+  updates: PasteUpdate[]
+  /** Lines that fall below the last row; they become new rows. */
+  creates: ParticipantInput[]
+  /** Lines (or selected rows, for a single value) written. */
+  applied: number
+  /** Row the paste starts at, for the "starting from" message. */
+  first: Participant | null
+}
+
+/**
+ * Plans a paste over the visible rows. Lines fill the selected rows top to bottom (or start at the
+ * cursor row when at most one row is selected) and continue below the last targeted row; lines past
+ * the end of the table become new rows. Fewer lines than selected rows fill the first rows only, and a
+ * single line pasted onto several selected rows fills all of them.
+ */
+export function planPaste(
+  visible: readonly Participant[],
+  selected: ReadonlySet<string>,
+  activeRow: number | null,
+  col: number,
+  text: string,
+): PastePlan {
+  const grid = parsePasteGrid(text, col)
+  const picked: number[] = []
+  visible.forEach((r, i) => {
+    if (selected.has(r.id)) picked.push(i)
+  })
+  const targets = picked.length > 1 ? picked : [activeRow ?? picked[0] ?? 0]
+  const last = targets[targets.length - 1] as number
+  const everyone = grid.lines.length === 1 && targets.length > 1
+  const count = everyone ? targets.length : grid.lines.length
+
+  const plan: PastePlan = {
+    updates: [],
+    creates: [],
+    applied: count,
+    first: visible[targets[0] as number] ?? null,
+  }
+  for (let i = 0; i < count; i++) {
+    const cells = grid.lines[everyone ? 0 : i] as string[]
+    const index = i < targets.length ? (targets[i] as number) : last + (i - targets.length + 1)
+    const values: Partial<Record<PasteField, string>> = {}
+    grid.fields.forEach((f, k) => {
+      values[f] = (cells[k] ?? '').trim().slice(0, FIELD_LIMIT[f])
+    })
+    const row = visible[index]
+    if (!row) {
+      plan.creates.push({ name: values.name ?? '', phone: values.phone ?? '' })
+      continue
+    }
+    const update: PasteUpdate = { row }
+    if (values.name !== undefined && values.name !== row.name) update.name = values.name
+    if (values.phone !== undefined && values.phone !== row.phone) update.phone = values.phone
+    if (update.name !== undefined || update.phone !== undefined) plan.updates.push(update)
+  }
+  return plan
 }

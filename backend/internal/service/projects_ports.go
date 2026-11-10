@@ -28,8 +28,12 @@ type ProjectRepository interface {
 	Save(ctx context.Context, p domain.Project, expectedVersion int) error
 	// Delete removes the project; domain.ErrNotFound when it does not exist.
 	Delete(ctx context.Context, id string) error
-	// List returns matching projects, newest first.
+	// List returns matching projects in the team order (see Reorder; new projects go first).
 	List(ctx context.Context, f domain.ProjectFilter) ([]domain.Project, error)
+	// Reorder gives the listed projects, in the listed order, the positions they occupy now.
+	// Unknown and repeated ids are skipped; with activeOnly, finished projects are skipped too.
+	// Call it inside Tx.Do.
+	Reorder(ctx context.Context, ids []string, activeOnly bool) error
 	// Details returns contributors (most recent first, at most maxContributors each) and
 	// participant counts for the given projects.
 	Details(ctx context.Context, ids []string, maxContributors int) (map[string]domain.ProjectDetails, error)
@@ -65,7 +69,7 @@ type ImageProcessor interface {
 // ProjectAuditEntry is one auditable project action.
 type ProjectAuditEntry struct {
 	Actor     domain.Actor
-	Action    string // project.create, project.update, project.finish, project.reopen, project.delete, image.upload
+	Action    string // project.create, project.reorder, project.update, project.finish, project.reopen, project.delete, image.upload
 	ProjectID string
 	// Meta carries ids and numbers only, never titles of people or other personal data.
 	Meta map[string]any
@@ -74,6 +78,12 @@ type ProjectAuditEntry struct {
 // ProjectAudit records audit entries (implemented by the audit service).
 type ProjectAudit interface {
 	Record(ctx context.Context, e ProjectAuditEntry) error
+}
+
+// ProjectPresence reports who is connected to the realtime rooms right now
+// (implemented by repository/memory.Hub). Projects with nobody online may be absent.
+type ProjectPresence interface {
+	Online(ctx context.Context, projectIDs []string) map[string][]domain.Peer
 }
 
 // ProjectEvents publishes realtime events of a project (implemented by the realtime hub).

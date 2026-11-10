@@ -408,6 +408,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the team-wide order of projects
+         * @description `ids` lists the projects in the wanted order, usually every project the caller can see. The
+         *     listed projects take over, in that order, the positions they occupy now; unknown, hidden and
+         *     duplicate ids are ignored, projects not listed keep their place. Last write wins. The list
+         *     endpoint returns projects in this order and new projects go first.
+         */
+        put: operations["reorderProjects"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}": {
         parameters: {
             query?: never;
@@ -567,7 +590,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{id}/participants/delete": {
+    "/projects/{id}/participants/batch": {
         parameters: {
             query?: never;
             header?: never;
@@ -576,8 +599,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Delete several rows */
-        post: operations["deleteParticipants"];
+        /**
+         * Edit many rows at once
+         * @description The batched form of `PATCH /participants/{id}`, used by bulk paste. Every item carries the row version
+         *     the client edited. Rows with a stale version or locked by another user are not written and are returned
+         *     in `conflicts` with their current state; the other items succeed independently. Written rows are
+         *     announced as `rows.upsert`.
+         */
+        post: operations["batchUpdateParticipants"];
         delete?: never;
         options?: never;
         head?: never;
@@ -594,8 +623,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Delete all rows of a project
-         * @description `confirmTitle` must equal the project title, otherwise `400 VALIDATION`.
+         * Clear several rows
+         * @description Empties name and phone of the given rows; the rows and their numbers stay. Rows that are already empty
+         *     or locked by another user are skipped. Rows are never deleted through the API. The changed rows are
+         *     announced as `rows.upsert` and recorded in the audit log as `participants.clear`.
          */
         post: operations["clearParticipants"];
         delete?: never;
@@ -616,7 +647,7 @@ export interface paths {
         /**
          * Import participants from XLSX or CSV
          * @description With `dryRun=1` nothing is written and the response is a preview of the rows and their errors.
-         *     `mode=append` adds rows, `mode=replace` clears the table first.
+         *     `mode=append` adds rows, `mode=replace` overwrites the existing rows in number order (surplus rows are emptied) and appends the rest. Rows are never deleted.
          */
         post: operations["importParticipants"];
         delete?: never;
@@ -1153,6 +1184,8 @@ export interface components {
             image: components["schemas"]["ProjectImage"] | null;
             placeholders: components["schemas"]["Placeholders"];
             contributors: components["schemas"]["UserRef"][];
+            /** @description Users connected to the project's realtime room right now (one entry per user). */
+            online: components["schemas"]["UserRef"][];
             participantCount: number;
             /** Format: date-time */
             createdAt: string;
@@ -1164,8 +1197,12 @@ export interface components {
             title: string;
             status: components["schemas"]["ProjectStatus"];
             image: components["schemas"]["CardImage"] | null;
-            contributors: components["schemas"]["UserRef"][];
+            /** @description Users connected to the project's realtime room right now (one entry per user). */
+            online: components["schemas"]["UserRef"][];
             participantCount: number;
+        };
+        ReorderProjectsRequest: {
+            ids: string[];
         };
         ProjectResponse: {
             project: components["schemas"]["Project"];
@@ -1269,12 +1306,21 @@ export interface components {
         ParticipantIds: {
             ids: string[];
         };
-        DeletedCount: {
-            deleted: number;
+        BatchUpdateItem: {
+            /** Format: uuid */
+            id: string;
+            name?: string;
+            phone?: string;
+            version: number;
         };
-        ClearParticipantsRequest: {
-            /** @description Must equal the project title. */
-            confirmTitle: string;
+        BatchUpdateRequest: {
+            items: components["schemas"]["BatchUpdateItem"][];
+        };
+        BatchUpdateResult: {
+            /** @description Rows that were written. */
+            items: components["schemas"]["Participant"][];
+            /** @description Current state of rows that were not written (stale version or locked). */
+            conflicts: components["schemas"]["Participant"][];
         };
         ImportUpload: {
             /**
@@ -2428,6 +2474,33 @@ export interface operations {
             503: components["responses"]["AuthUnavailable"];
         };
     };
+    reorderProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderProjectsRequest"];
+            };
+        };
+        responses: {
+            /** @description The order was saved. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["AuthUnavailable"];
+        };
+    };
     getProject: {
         parameters: {
             query?: never;
@@ -2790,7 +2863,7 @@ export interface operations {
             503: components["responses"]["AuthUnavailable"];
         };
     };
-    deleteParticipants: {
+    batchUpdateParticipants: {
         parameters: {
             query?: never;
             header?: never;
@@ -2802,17 +2875,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ParticipantIds"];
+                "application/json": components["schemas"]["BatchUpdateRequest"];
             };
         };
         responses: {
-            /** @description Number of deleted rows. */
+            /** @description Written rows and rows that could not be written. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeletedCount"];
+                    "application/json": components["schemas"]["BatchUpdateResult"];
                 };
             };
             400: components["responses"]["ValidationFailed"];
@@ -2836,17 +2909,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ClearParticipantsRequest"];
+                "application/json": components["schemas"]["ParticipantIds"];
             };
         };
         responses: {
-            /** @description Number of deleted rows. */
+            /** @description The rows that were changed. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeletedCount"];
+                    "application/json": components["schemas"]["ParticipantItems"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

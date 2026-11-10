@@ -19,6 +19,9 @@ type Contributor struct {
 
 // ProjectDetails holds the data of a project that lives outside the projects table.
 type ProjectDetails struct {
-	Contributors     []Contributor
+	Contributors []Contributor
+	// Online lists the users connected to the project right now; it is live data from the
+	// realtime hub, not stored.
+	Online           []Peer
 	ParticipantCount int
 }

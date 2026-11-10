@@ -43,6 +43,8 @@ type fakeProjects struct {
 	thumb    bool
 	listOut  []service.ProjectView
 	gotActor domain.Actor
+
+	reordered []string
 }
 
 func (f *fakeProjects) List(_ context.Context, a domain.Actor, fl domain.ProjectFilter) ([]service.ProjectView, error) {
@@ -202,7 +204,7 @@ func TestProjectsList(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &cards); err != nil || len(cards) != 1 {
 		t.Fatalf("cards %v %v", cards, err)
 	}
-	if cards[0].Image == nil || cards[0].ParticipantCount != 7 || len(cards[0].Contributors) != 2 {
+	if cards[0].Image == nil || cards[0].ParticipantCount != 7 {
 		t.Fatalf("card %+v", cards[0])
 	}
 	if rec := call(h, "GET", "/projects", nil, nil); rec.Code != 200 || fake.filter.Status != nil {

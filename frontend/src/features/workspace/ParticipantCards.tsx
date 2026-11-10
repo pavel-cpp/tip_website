@@ -7,7 +7,6 @@ import { useI18n } from '../../i18n'
 import type { Participant } from './api'
 import type { ConflictState, FailedState } from './ParticipantRow'
 import type { RowCursor, RowLockOwner } from './presence'
-import { isSuspiciousPhone } from './tableLogic'
 
 /** First-paint height guess for a card (number + one name line + phone + gap); real heights are measured. */
 export const CARD_ESTIMATE = 84
@@ -81,7 +80,6 @@ function ParticipantCardImpl({
   const lastOwner = useRef(lockedBy)
   if (lockedBy) lastOwner.current = lockedBy
   const { name, phone } = shownValues(row, failed)
-  const suspicious = !failed && isSuspiciousPhone(row.phone)
   // One readable sentence for screen readers instead of the glued "5Name+998..." of the child spans.
   const label = [
     t('workspace.card.label', {
@@ -89,7 +87,6 @@ function ParticipantCardImpl({
       name: name || t('workspace.card.noName'),
       phone: phone || t('workspace.card.noPhone'),
     }),
-    suspicious && t('workspace.card.state.suspicious'),
     failed && t('workspace.card.state.failed'),
     unsent && !failed && t('workspace.card.state.unsent'),
     lockedBy && t('workspace.card.state.locked', { name: lockedBy.displayName }),
@@ -193,15 +190,7 @@ function ParticipantCardImpl({
             <span className="pc-name" data-empty={name === '' || undefined}>
               {name || t('workspace.conflict.empty')}
             </span>{' '}
-            <span className="pc-phone" data-suspicious={suspicious || undefined}>
-              {phone || t('workspace.conflict.empty')}
-              {suspicious && (
-                <span className="pt-warn" title={t('workspace.phone.suspicious')}>
-                  <Icon name="alert" size={16} />
-                  <span className="sr-only">{t('workspace.phone.suspicious')}</span>
-                </span>
-              )}
-            </span>
+            <span className="pc-phone">{phone || t('workspace.conflict.empty')}</span>
           </span>
         </button>
         {(failed || (unsent && !failed)) && (

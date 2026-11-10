@@ -185,23 +185,45 @@ func (f *fakeParticipantRepo) UpdateIfVersion(_ context.Context, p domain.Partic
 	return cur, nil
 }
 
-func (f *fakeParticipantRepo) DeleteByIDs(_ context.Context, projectID string, ids []string) ([]string, error) {
-	var out []string
-	for _, id := range ids {
-		if p, ok := f.rows[id]; ok && p.ProjectID == projectID {
-			delete(f.rows, id)
-			out = append(out, id)
+func (f *fakeParticipantRepo) UpdateMany(_ context.Context, projectID string, changes []domain.ParticipantChange, by string, now time.Time) ([]domain.Participant, error) {
+	var out []domain.Participant
+	for _, c := range changes {
+		cur, ok := f.rows[c.ID]
+		if !ok || cur.ProjectID != projectID || cur.Version != c.Version {
+			continue
 		}
+		if c.SetName {
+			cur.Name = c.Name
+		}
+		if c.SetPhone {
+			cur.Phone = c.Phone
+		}
+		cur.Version, cur.UpdatedBy, cur.UpdatedAt = cur.Version+1, by, now
+		f.rows[c.ID] = cur
+		out = append(out, cur)
 	}
+	slices.SortFunc(out, func(a, b domain.Participant) int { return a.Number - b.Number })
 	return out, nil
 }
 
-func (f *fakeParticipantRepo) Clear(_ context.Context, projectID string) ([]string, error) {
-	var out []string
-	for _, p := range f.sorted(projectID, "") {
-		delete(f.rows, p.ID)
-		out = append(out, p.ID)
+func (f *fakeParticipantRepo) ClearByIDs(ctx context.Context, projectID string, ids []string, by string, now time.Time) ([]domain.Participant, error) {
+	var changes []domain.ParticipantChange
+	for _, id := range ids {
+		if p, ok := f.rows[id]; ok && p.ProjectID == projectID && (p.Name != "" || p.Phone != "") {
+			changes = append(changes, domain.ParticipantChange{ID: id, SetName: true, SetPhone: true, Version: p.Version})
+		}
 	}
+	return f.UpdateMany(ctx, projectID, changes, by, now)
+}
+
+func (f *fakeParticipantRepo) ListByIDs(_ context.Context, projectID string, ids []string) ([]domain.Participant, error) {
+	var out []domain.Participant
+	for _, id := range ids {
+		if p, ok := f.rows[id]; ok && p.ProjectID == projectID {
+			out = append(out, p)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Participant) int { return a.Number - b.Number })
 	return out, nil
 }
 

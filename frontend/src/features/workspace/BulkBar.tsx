@@ -1,13 +1,12 @@
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
-import { Menu, type MenuItem } from '../../components/Menu'
 import { useI18n } from '../../i18n'
 import { WsIcon } from './icons'
 
 export interface BulkBarProps {
   /** Rows currently selected (and visible). */
   count: number
-  canDelete: boolean
+  canClear: boolean
   /** Print/copy/save are offered only when the user may print. */
   canPrint: boolean
   /** Why printing is unavailable regardless of the selection (for example, no picture yet). */
@@ -19,34 +18,17 @@ export interface BulkBarProps {
   onPrint: () => void
   onCopy: () => void
   onSave: () => void
-  onDelete: () => void
+  onClear: () => void
   onDone: () => void
 }
 
 /**
  * Bulk actions of selection mode on touch screens. It takes the place of the bottom toolbar (same slot,
- * same height), so it never covers the list: close and count, the primary "Print (N)", delete and a menu.
+ * same height), so it never covers the list: close and count, the primary "Copy (N)", then Save, Print and Clear as icon buttons.
  */
 export function BulkBar(p: BulkBarProps) {
   const { t, formatNumber } = useI18n()
   const none = p.count === 0
-  const items: MenuItem[] = []
-  if (p.canPrint) {
-    items.push(
-      {
-        id: 'copy',
-        label: p.copyReady || p.count <= 1 ? t('workspace.copy') : t('workspace.bulk.copyOne'),
-        disabled: !p.copyReady,
-        onSelect: p.onCopy,
-      },
-      {
-        id: 'save',
-        label: p.count > 1 ? t('workspace.bulk.saveMany', { count: p.count }) : t('workspace.save'),
-        disabled: none || !p.saveReady,
-        onSelect: p.onSave,
-      },
-    )
-  }
   return (
     <div className="pc-bar" role="toolbar" aria-label={t('workspace.bulk.label')}>
       <Button
@@ -63,40 +45,41 @@ export function BulkBar(p: BulkBarProps) {
         <span className="sr-only">{t('workspace.selectedCount', { count: p.count })}</span>
       </span>
       {p.canPrint && (
-        <Button
-          variant="primary"
-          className="ws-main"
-          disabled={none || !!p.printBlocked}
-          disabledReason={p.printBlocked}
-          onClick={p.onPrint}
-        >
-          <WsIcon name="print" />
-          <span className="ws-main-text">
-            {none ? t('workspace.print') : t('workspace.print.withCount', { count: p.count })}
-          </span>
-        </Button>
+        <>
+          <Button variant="primary" className="ws-main" disabled={none || !p.copyReady} onClick={p.onCopy}>
+            <WsIcon name="copy" />
+            <span className="ws-main-text">
+              {none ? t('workspace.copy') : t('workspace.bulk.copyMany', { count: p.count })}
+            </span>
+          </Button>
+          <Button
+            iconOnly
+            disabled={none || !p.saveReady}
+            aria-label={p.count > 1 ? t('workspace.bulk.saveMany', { count: p.count }) : t('workspace.save')}
+            onClick={p.onSave}
+          >
+            <WsIcon name="save" />
+          </Button>
+          <Button
+            iconOnly
+            disabled={none || !!p.printBlocked}
+            disabledReason={p.printBlocked}
+            aria-label={none ? t('workspace.print') : t('workspace.print.withCount', { count: p.count })}
+            onClick={p.onPrint}
+          >
+            <WsIcon name="print" />
+          </Button>
+        </>
       )}
-      {p.canDelete && (
+      {p.canClear && (
         <Button
-          variant="danger"
           iconOnly
           disabled={none}
-          aria-label={t('workspace.bulk.delete', { count: p.count })}
-          onClick={p.onDelete}
+          aria-label={t('workspace.bulk.clear', { count: p.count })}
+          onClick={p.onClear}
         >
-          <Icon name="trash" />
+          <WsIcon name="eraser" />
         </Button>
-      )}
-      {items.length > 0 && (
-        <Menu
-          label={t('workspace.more.label')}
-          items={items}
-          trigger={(props) => (
-            <Button {...props} iconOnly aria-label={t('workspace.more')}>
-              <WsIcon name="more" />
-            </Button>
-          )}
-        />
       )}
     </div>
   )

@@ -225,6 +225,7 @@ export const ruAccess = {
   'admin.audit.act.project.update': '{actor} изменил настройки проекта {project}',
   'admin.audit.act.project.finish': '{actor} завершил проект {project}',
   'admin.audit.act.project.reopen': '{actor} вернул в работу проект {project}',
+  'admin.audit.act.project.reorder': '{actor} изменил порядок проектов',
   'admin.audit.act.project.delete': '{actor} удалил проект {project}',
   'admin.audit.act.image.upload': '{actor} загрузил картинку билета',
   'admin.audit.act.tickets.print': {
@@ -257,6 +258,7 @@ export const ruAccess = {
   'admin.audit.name.project.update': 'Изменение проекта',
   'admin.audit.name.project.finish': 'Завершение проекта',
   'admin.audit.name.project.reopen': 'Возврат проекта в работу',
+  'admin.audit.name.project.reorder': 'Порядок проектов',
   'admin.audit.name.project.delete': 'Удаление проекта',
   'admin.audit.name.image.upload': 'Загрузка картинки',
   'admin.audit.name.tickets.print': 'Печать билетов',

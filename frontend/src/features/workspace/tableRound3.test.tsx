@@ -42,7 +42,6 @@ function Harness(props: Partial<ParticipantsTableProps>) {
       rows={[row(1, 'Timur'), row(2, 'Nadezhda')]}
       loading={false}
       canEdit
-      canDelete
       selected={selected}
       onSelectedChange={setSelected}
       currentId={null}
@@ -50,9 +49,9 @@ function Harness(props: Partial<ParticipantsTableProps>) {
       presence={none}
       onCommit={async () => ({ status: 'ok' })}
       onAdopt={() => undefined}
-      onDelete={() => undefined}
+      onClear={() => undefined}
       onAddRows={() => undefined}
-      onPasteRows={() => undefined}
+      onPaste={() => undefined}
       query=""
       onQueryChange={() => undefined}
       {...props}
@@ -61,12 +60,12 @@ function Harness(props: Partial<ParticipantsTableProps>) {
 }
 
 describe('table toolbar and unsent marker', () => {
-  it('keeps the delete button out of the layout until rows are selected (N7)', () => {
+  it('keeps the clear button out of the layout until rows are selected (N7)', () => {
     render(<Harness />)
-    expect(screen.queryByRole('button', { name: /Удалить/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Очистить/ })).not.toBeInTheDocument()
     const first = document.querySelector('[data-row-id="id1"] [data-col-name="name"]') as HTMLElement
     fireEvent.click(first)
-    expect(screen.getByRole('button', { name: 'Удалить 1 строку' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Очистить 1 строку' })).toBeInTheDocument()
   })
 
   it('shows the unsent marker beside the number, not over the cells (N6)', () => {

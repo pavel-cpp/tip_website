@@ -13,6 +13,8 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   'projects.create.submit': 'Loyiha yaratish',
   'projects.menu.label': 'Amallar: {title}',
   'projects.menu.settings': 'Loyiha sozlamalari',
+  'projects.menu.moveUp': 'Yuqoriga siljitish',
+  'projects.menu.moveDown': 'Pastga siljitish',
   'projects.menu.finish': 'Loyihani yakunlash',
   'projects.menu.reopen': 'Qayta ochish',
   'projects.menu.delete': 'Oʻchirish',
@@ -26,6 +28,9 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
     other: '{count} ishtirokchi',
   },
   'projects.card.finished': 'Yakunlangan',
+  'projects.card.online': 'Hozir loyihada: {names}',
+  'projects.drop.active': 'Loyihani qayta ochish uchun shu yerga qoʻyib yuboring',
+  'projects.drop.finished': 'Loyihani yakunlash uchun shu yerga qoʻyib yuboring',
   'projects.empty.admin.title': 'Hozircha loyihalar yoʻq',
   'projects.empty.admin.hint':
     'Loyiha yarating, chipta rasmini yuklang, ishtirokchilarni qoʻshing va chop eting',
@@ -37,6 +42,7 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   'projects.error.title': 'Loyihalarni yuklab boʻlmadi',
   'projects.toast.finished': '«{title}» loyihasi yakunlandi',
   'projects.toast.reopened': '«{title}» loyihasi qayta ochildi',
+  'projects.toast.moved': '«{title}» loyihasi: {count} tadan {position}-oʻrin',
   'projects.toast.deleted': '«{title}» loyihasi oʻchirildi',
 
   'settings.title': 'Loyiha sozlamalari',

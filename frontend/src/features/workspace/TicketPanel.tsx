@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { AppLink } from '../../components/AppLink'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
@@ -28,8 +28,6 @@ interface TicketPanelProps {
   hasProjectImage: boolean
   placeholders: TicketPlaceholders | null
   participant: Participant | null
-  /** Rendered into a second sibling element slot, e.g. a hint about the 7:4 aspect ratio. */
-  footer?: ReactNode
   /** Why there is no participant to show; picks the wording of the empty state. */
   emptyReason?: 'select' | 'no-rows' | 'error'
   onRetry?: () => void
@@ -37,6 +35,15 @@ interface TicketPanelProps {
   settingsTo?: string
   /** Inside the phone sheet: just the ticket, no zoom controls. */
   compact?: boolean
+  /** Picture-only mode: arrows to the previous/next participant and a "number, name" indicator. */
+  nav?: TicketNav
+}
+
+export interface TicketNav {
+  hasPrev: boolean
+  hasNext: boolean
+  onPrev: () => void
+  onNext: () => void
 }
 
 /**
@@ -49,11 +56,11 @@ export function TicketPanel({
   hasProjectImage,
   placeholders,
   participant,
-  footer,
   emptyReason = 'select',
   onRetry,
   settingsTo,
   compact = false,
+  nav,
 }: TicketPanelProps) {
   const { t, formatNumber } = useI18n()
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
@@ -129,38 +136,54 @@ export function TicketPanel({
   const empty = !participant
   const emptyKey = emptyReason === 'error' ? 'loadError' : emptyReason === 'no-rows' ? 'emptyProject' : null
   return (
-    <div className="tk" data-compact={compact || undefined}>
-      {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add default borders to a toolbar group */}
-      <div className="tk-zoom" role="group" aria-label={t('workspace.zoom.label')} hidden={compact}>
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label={t('workspace.zoom.out')}
-          disabled={zoom <= ZOOM_STEPS[0]}
-          onClick={() => setZoom((z) => nextZoom(z, -1))}
-        >
-          <WsIcon name="zoomOut" size={18} />
-        </Button>
-        <button
-          type="button"
-          className="tk-zoom-value"
-          title={t('workspace.zoom.reset')}
-          aria-label={`${formatNumber(Math.round(zoom * 100))}%, ${t('workspace.zoom.reset')}`}
-          onClick={() => setZoom(DEFAULT_ZOOM)}
-        >
-          {formatNumber(Math.round(zoom * 100))}%
-        </button>
-        <Button
-          variant="ghost"
-          size="sm"
-          iconOnly
-          aria-label={t('workspace.zoom.in')}
-          disabled={zoom >= (ZOOM_STEPS[ZOOM_STEPS.length - 1] ?? 3)}
-          onClick={() => setZoom((z) => nextZoom(z, 1))}
-        >
-          <WsIcon name="zoomIn" size={18} />
-        </Button>
+    <div className="tk" data-compact={compact || undefined} data-nav={nav ? '' : undefined}>
+      <div className="tk-bar" hidden={compact}>
+        {nav && (
+          <output className="tk-who" data-testid="ticket-who" aria-live="polite">
+            {participant ? (
+              <>
+                <span className="tk-who-num">
+                  {t('workspace.ticket.who', { number: participant.number })}
+                </span>
+                <span className="tk-who-name">{participant.name}</span>
+              </>
+            ) : (
+              <span className="muted">{t('workspace.ticket.noRows')}</span>
+            )}
+          </output>
+        )}
+        {/* biome-ignore lint/a11y/useSemanticElements: a fieldset would add default borders to a toolbar group */}
+        <div className="tk-zoom" role="group" aria-label={t('workspace.zoom.label')}>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label={t('workspace.zoom.out')}
+            disabled={zoom <= ZOOM_STEPS[0]}
+            onClick={() => setZoom((z) => nextZoom(z, -1))}
+          >
+            <WsIcon name="zoomOut" size={18} />
+          </Button>
+          <button
+            type="button"
+            className="tk-zoom-value"
+            title={t('workspace.zoom.reset')}
+            aria-label={`${formatNumber(Math.round(zoom * 100))}%, ${t('workspace.zoom.reset')}`}
+            onClick={() => setZoom(DEFAULT_ZOOM)}
+          >
+            {formatNumber(Math.round(zoom * 100))}%
+          </button>
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label={t('workspace.zoom.in')}
+            disabled={zoom >= (ZOOM_STEPS[ZOOM_STEPS.length - 1] ?? 3)}
+            onClick={() => setZoom((z) => nextZoom(z, 1))}
+          >
+            <WsIcon name="zoomIn" size={18} />
+          </Button>
+        </div>
       </div>
 
       {zoom > 1 && (
@@ -214,7 +237,30 @@ export function TicketPanel({
           </div>
         )}
       </div>
-      {footer}
+      {nav && (
+        <>
+          <Button
+            className="tk-step"
+            data-dir="prev"
+            iconOnly
+            aria-label={t('workspace.ticket.prev')}
+            disabled={!nav.hasPrev}
+            onClick={nav.onPrev}
+          >
+            <WsIcon name="chevronLeft" size={22} />
+          </Button>
+          <Button
+            className="tk-step"
+            data-dir="next"
+            iconOnly
+            aria-label={t('workspace.ticket.next')}
+            disabled={!nav.hasNext}
+            onClick={nav.onNext}
+          >
+            <WsIcon name="chevronRight" size={22} />
+          </Button>
+        </>
+      )}
     </div>
   )
 }

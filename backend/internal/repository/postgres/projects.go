@@ -53,8 +53,9 @@ func scanProject(row rowScanner) (domain.Project, error) {
 func (r *ProjectRepo) Create(ctx context.Context, p domain.Project) error {
 	q := Querier(ctx, r.db)
 	_, err := q.ExecContext(ctx, `
-		INSERT INTO projects (id, title, status, next_number, version, created_by, created_at, updated_at)
-		VALUES ($1, $2, $3::project_status, $4, $5, NULLIF($6, '')::uuid, $7, $8)`,
+		INSERT INTO projects (id, title, status, next_number, version, created_by, created_at, updated_at, position)
+		VALUES ($1, $2, $3::project_status, $4, $5, NULLIF($6, '')::uuid, $7, $8,
+			(SELECT COALESCE(MIN(position), 0) - 1 FROM projects))`,
 		p.ID, p.Title, string(p.Status), p.NextNumber, p.Version, p.CreatedBy, p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("insert project: %w", err)
@@ -188,7 +189,7 @@ func (r *ProjectRepo) Delete(ctx context.Context, id string) error {
 // likeEscaper neutralises LIKE wildcards in user input.
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// List returns projects newest first. The placeholders are not loaded: the list only needs the
+// List returns projects in the team order (position, then newest first). The placeholders are not loaded: the list only needs the
 // card fields.
 func (r *ProjectRepo) List(ctx context.Context, f domain.ProjectFilter) ([]domain.Project, error) {
 	var status any
@@ -199,7 +200,7 @@ func (r *ProjectRepo) List(ctx context.Context, f domain.ProjectFilter) ([]domai
 		SELECT `+projectColumns+` FROM projects
 		WHERE ($1::text IS NULL OR status::text = $1)
 		  AND ($2 = '' OR title ILIKE '%' || $2 || '%' ESCAPE '\')
-		ORDER BY created_at DESC, id DESC`, status, likeEscaper.Replace(f.Query))
+		ORDER BY position, created_at DESC, id DESC`, status, likeEscaper.Replace(f.Query))
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
@@ -317,4 +318,52 @@ func (r *ProjectRepo) ReferencedImageHashes(ctx context.Context) (map[string]str
 		out[s] = struct{}{}
 	}
 	return out, rows.Err()
+}
+
+// Reorder gives the listed projects, in the listed order, the positions they hold now. Ids that do
+// not exist (or are finished when activeOnly is set) and repeated ids are skipped. Call it inside
+// Tx.Do: the rows are locked so two reorders cannot interleave.
+func (r *ProjectRepo) Reorder(ctx context.Context, ids []string, activeOnly bool) error {
+	q := Querier(ctx, r.db)
+	rows, err := q.QueryContext(ctx, `
+		SELECT id::text, position FROM projects
+		WHERE id = ANY($1::uuid[]) AND (NOT $2 OR status = 'active')
+		ORDER BY position, created_at DESC, id DESC FOR UPDATE`, ids, activeOnly)
+	if err != nil {
+		return fmt.Errorf("lock projects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var slots []int64
+	exists := map[string]struct{}{}
+	for rows.Next() {
+		var id string
+		var pos int64
+		if err := rows.Scan(&id, &pos); err != nil {
+			return fmt.Errorf("scan position: %w", err)
+		}
+		slots = append(slots, pos)
+		exists[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("lock projects: %w", err)
+	}
+	_ = rows.Close()
+
+	ordered := make([]string, 0, len(slots))
+	for _, id := range ids {
+		if _, ok := exists[id]; ok {
+			ordered = append(ordered, id)
+			delete(exists, id)
+		}
+	}
+	if len(ordered) == 0 {
+		return nil
+	}
+	_, err = q.ExecContext(ctx, `
+		UPDATE projects p SET position = v.pos
+		FROM unnest($1::uuid[], $2::bigint[]) AS v(id, pos) WHERE p.id = v.id`, ordered, slots)
+	if err != nil {
+		return fmt.Errorf("update positions: %w", err)
+	}
+	return nil
 }

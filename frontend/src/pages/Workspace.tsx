@@ -1,11 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { type ReactElement, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactElement, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { isApiError } from '../api/errors'
 import { useAuth } from '../auth/AuthProvider'
 import { useCan } from '../auth/guards'
 import { AppLink } from '../components/AppLink'
-import { AvatarStack } from '../components/Avatar'
 import { Button } from '../components/Button'
 import { Icon } from '../components/Icon'
 import { Menu, type MenuItem } from '../components/Menu'
@@ -15,10 +14,12 @@ import { Skeleton, useSkeleton } from '../components/Skeleton'
 import { Tabs } from '../components/Tabs'
 import { useToast } from '../components/Toast'
 import { Tooltip } from '../components/Tooltip'
+import { TopbarPortal } from '../components/TopbarSlot'
 import { type Project, useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
+import { FollowChip } from '../features/realtime/FollowChip'
+import { followJump, peerStatus, spotlightCss } from '../features/realtime/follow'
 import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeProvider'
-import { OnlineAvatars } from '../features/realtime/RealtimeStatus'
 import {
   downloadExport,
   type ExportFormat,
@@ -26,12 +27,12 @@ import {
   type ParticipantInput,
   participantKeys,
   useCreateParticipants,
-  useDeleteParticipants,
   useParticipants,
   useUpdateParticipant,
 } from '../features/workspace/api'
 import { BulkBar } from '../features/workspace/BulkBar'
 import { AddRowsDialog, CopyFallbackDialog, ImportDialog } from '../features/workspace/Dialogs'
+import { folderSupported } from '../features/workspace/folderSave'
 import { WsIcon, type WsIconName } from '../features/workspace/icons'
 import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineBanner'
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
@@ -40,42 +41,27 @@ import { copyShortcutLabel } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
+import { stepRow } from '../features/workspace/rowStep'
+import { SaveButton } from '../features/workspace/SaveButton'
+import { HANDLE_PX, Splitter } from '../features/workspace/Splitter'
+import { applyArrow, loadSplit, type SplitState, saveSplit, tracks } from '../features/workspace/split'
 import { TicketPanel } from '../features/workspace/TicketPanel'
-import { countSuspiciousPhones, filterRows, planPaste, safeFilePart } from '../features/workspace/tableLogic'
+import { filterRows, safeFilePart } from '../features/workspace/tableLogic'
 import { downloadBlob } from '../features/workspace/ticketActions'
-import { useNarrow } from '../features/workspace/useNarrow'
+import { useNarrow, useStacked } from '../features/workspace/useNarrow'
+import { useParticipantOps } from '../features/workspace/useParticipantOps'
 import { useTicketActions } from '../features/workspace/useTicketActions'
-import { useUndoableDelete } from '../features/workspace/useUndoableDelete'
+import { WorkspaceTopbar } from '../features/workspace/WorkspaceTopbar'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
-import { readStorage, writeStorage } from '../lib/storage'
-import { imageSize, TICKET_ASPECT, type TicketPlaceholders, useImageElement } from '../lib/ticket'
+import type { TicketPlaceholders } from '../lib/ticket'
+import { useImageElement } from '../lib/ticket'
 import '../features/workspace/workspace.css'
 import '../features/workspace/workspace-mobile.css'
 
 type PanelId = 'picture' | 'db'
-interface Layout {
-  max: PanelId | null
-  closed: Record<PanelId, boolean>
-}
-const LAYOUT_KEY = 'tip.workspace.layout'
-const DEFAULT_LAYOUT: Layout = { max: null, closed: { picture: false, db: false } }
 const FRESH_MS = 1400
 const NO_IDS: ReadonlySet<string> = new Set()
-
-function loadLayout(): Layout {
-  try {
-    const raw = readStorage(LAYOUT_KEY)
-    if (!raw) return DEFAULT_LAYOUT
-    const v = JSON.parse(raw) as Partial<Layout>
-    return {
-      max: v.max === 'picture' || v.max === 'db' ? v.max : null,
-      closed: { picture: !!v.closed?.picture, db: !!v.closed?.db },
-    }
-  } catch {
-    return DEFAULT_LAYOUT
-  }
-}
 
 export default function Workspace() {
   const { id = '' } = useParams()
@@ -120,24 +106,33 @@ function ToolButton({
   disabledReason,
   onClick,
   text,
+  className,
 }: {
   /** Visible text next to the icon; the accessible name stays `label`. */
   text?: string
   label: string
   hint?: string
-  icon: WsIconName | 'settings'
+  icon: WsIconName
   variant?: 'primary' | 'secondary' | 'ghost'
   disabled?: boolean
   disabledReason?: string
   onClick: () => void
+  className?: string
 }): ReactElement {
   return (
     <Tooltip
       content={disabled && disabledReason ? disabledReason : hint ? `${label} (${hint})` : label}
       side="bottom"
     >
-      <Button variant={variant} iconOnly={!text} aria-label={label} disabled={disabled} onClick={onClick}>
-        {icon === 'settings' ? <Icon name="settings" /> : <WsIcon name={icon} />}
+      <Button
+        variant={variant}
+        className={className}
+        iconOnly={!text}
+        aria-label={label}
+        disabled={disabled}
+        onClick={onClick}
+      >
+        <WsIcon name={icon} />
         {text && <span className="ws-tool-text">{text}</span>}
       </Button>
     </Tooltip>
@@ -153,13 +148,11 @@ function WorkspaceView({ project }: { project: Project }) {
   const finished = project.status === 'finished'
   const canView = useCan('participant.view')
   const canEditPerm = useCan('participant.edit')
-  const canDeletePerm = useCan('participant.delete')
   const canPrint = useCan('participant.print')
   const canExport = useCan('participant.export')
   const canImportPerm = useCan('participant.import')
   const canSettings = useCan('project.update')
   const canEdit = canEditPerm && !finished
-  const canDelete = canDeletePerm && !finished
   const canImport = canImportPerm && !finished
 
   const narrow = useNarrow()
@@ -177,15 +170,7 @@ function WorkspaceView({ project }: { project: Project }) {
   // ---- data
   const list = useParticipants(project.id, canView)
   const allRows = list.data?.items
-  const del = useDeleteParticipants(project.id)
-  const undoable = useUndoableDelete({
-    commit: (ids) => del.mutateAsync(ids),
-    onFailed: (_ids, e) => toast.show({ message: errorText(e), tone: 'error' }),
-  })
-  const rows = useMemo(
-    () => (allRows ?? []).filter((r) => !undoable.hidden.has(r.id)),
-    [allRows, undoable.hidden],
-  )
+  const rows = useMemo(() => allRows ?? [], [allRows])
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [currentId, setCurrentId] = useState<string | null>(null)
@@ -202,10 +187,6 @@ function WorkspaceView({ project }: { project: Project }) {
   const hasOnline = (rtSnapshot?.peers ?? []).some((p) => p.id !== rtSnapshot?.you)
   const remoteLeaving = useRealtime()?.leaving
   const remoteFresh = useRealtime()?.remoteFresh
-  const leavingAll = useMemo(
-    () => (remoteLeaving?.size ? new Set([...undoable.leaving, ...remoteLeaving]) : undoable.leaving),
-    [undoable.leaving, remoteLeaving],
-  )
   const people = useMemo(() => {
     const m = new Map<string, RowLockOwner>()
     for (const c of project.contributors) m.set(c.id, c)
@@ -393,47 +374,8 @@ function WorkspaceView({ project }: { project: Project }) {
     [create, toast, t, follow],
   )
 
-  // Pasted rows fill blank rows first (starting at the current one) and only the rest is appended.
-  const pasteRows = useCallback(
-    async (items: ParticipantInput[]) => {
-      const plan = planPaste(rows, items, currentId)
-      if (plan.fills.length === 0) {
-        void addRows({ items })
-        return
-      }
-      const results = await Promise.all(
-        plan.fills.map((f) => commit(f.row, { name: f.item.name, phone: f.item.phone })),
-      )
-      const ok = plan.fills.filter((_, i) => results[i]?.status === 'ok')
-      const first = ok[0]?.row
-      const filled = first ? { count: ok.length, firstId: first.id, firstNumber: first.number } : undefined
-      if (plan.rest.length > 0) {
-        await addRows({ items: plan.rest }, filled)
-        if (filled) follow(filled.firstId)
-      } else if (filled) {
-        follow(filled.firstId)
-        toast.show({
-          message: t('workspace.toast.pasted', { count: filled.count, number: filled.firstNumber }),
-          action: { label: t('workspace.toast.show'), onAction: () => follow(filled.firstId) },
-        })
-      }
-    },
-    [rows, currentId, addRows, commit, toast, t, follow],
-  )
-
-  const onDelete = useCallback(
-    (ids: string[]) => {
-      if (ids.length === 0 || !canDelete) return
-      const token = undoable.request(ids)
-      toast.show({
-        message: t('toast.rowsDeleted', { count: ids.length }),
-        action: { label: t('action.undo'), onAction: () => undoable.undo(token) },
-        duration: 5000,
-      })
-      setSelected(new Set())
-    },
-    [canDelete, undoable, toast, t],
-  )
+  // Clearing rows and pasting blocks of text: one batched request each, with Undo.
+  const ops = useParticipantOps({ projectId: project.id, follow })
 
   // ---- dialogs and layout
   const [addOpen, setAddOpen] = useState(false)
@@ -443,22 +385,123 @@ function WorkspaceView({ project }: { project: Project }) {
     pendingFocus.current = false
     setFocusNonce((n) => n + 1)
   }, [addOpen, reveal])
-  const [layout, setLayout] = useState<Layout>(loadLayout)
   const [tab, setTab] = useState<PanelId>('picture')
-  const updateLayout = (fn: (l: Layout) => Layout) =>
-    setLayout((l) => {
-      const next = fn(l)
-      writeStorage(LAYOUT_KEY, JSON.stringify(next))
-      return next
-    })
-  // On phones the tabs decide what is shown; the panel layout state only applies to wider screens.
+  const stacked = useStacked()
+  const userId = user?.id ?? 'anon'
+  const [split, setSplit] = useState<SplitState>(() => loadSplit(userId))
+  const [dragging, setDragging] = useState(false)
+  const gridRef = useRef<HTMLDivElement>(null)
+  // Persisted once a drag is over, not on every pointer move.
+  useEffect(() => {
+    if (!dragging) saveSplit(userId, split)
+  }, [split, dragging, userId])
+  // On phones the tabs decide what is shown; the splitter state only applies to wider screens.
   const visible = (p: PanelId) =>
-    narrow ? tab === p : !layout.closed[p] && (layout.max === null || layout.max === p)
-  const toggleMax = (p: PanelId) => updateLayout((l) => ({ ...l, max: l.max === p ? null : p }))
-  const close = (p: PanelId) =>
-    updateLayout((l) => ({ max: l.max === p ? null : l.max, closed: { ...l.closed, [p]: true } }))
-  const restore = (p: PanelId) =>
-    updateLayout((l) => ({ max: l.max && l.max !== p ? null : l.max, closed: { ...l.closed, [p]: false } }))
+    narrow ? tab === p : split.collapsed !== (p === 'picture' ? 'first' : 'second')
+  const pictureOnly = !narrow && split.collapsed === 'second'
+
+  // Previous/next participant in picture-only mode (the table is hidden, so the arrows replace it).
+  const shownRows = useMemo(() => filterRows(rows, query), [rows, query])
+  const prevRow = stepRow(shownRows, current?.id ?? null, -1)
+  const nextRow = stepRow(shownRows, current?.id ?? null, 1)
+  const stepTo = useCallback((row: Participant | null) => {
+    if (!row) return
+    setCurrentId(row.id)
+    setSelected(new Set([row.id]))
+    setReveal(row.id)
+  }, [])
+  const stepRef = useRef({ prev: prevRow, next: nextRow, go: stepTo })
+  stepRef.current = { prev: prevRow, next: nextRow, go: stepTo }
+  useEffect(() => {
+    if (!pictureOnly) return
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        e.shiftKey
+      ) {
+        return
+      }
+      const el = e.target instanceof HTMLElement ? e.target : null
+      if (
+        el?.closest(
+          'input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"], [role="tablist"]',
+        )
+      ) {
+        return
+      }
+      e.preventDefault()
+      stepRef.current.go(e.key === 'ArrowLeft' ? stepRef.current.prev : stepRef.current.next)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [pictureOnly])
+
+  // ---- colleagues: jump to their row, optionally follow them
+  const [watch, setWatch] = useState<{ id: string; following: boolean } | null>(null)
+  const lastAuto = useRef<string | null>(null)
+  const watchedPeer = watch ? rtSnapshot?.peers.find((p) => p.id === watch.id) : undefined
+  const watchStatus = useMemo(
+    () => (watch && rtSnapshot ? peerStatus(watch.id, rtSnapshot.cursors, rtSnapshot.locks) : null),
+    [watch, rtSnapshot],
+  )
+  const jumpTo = useCallback(
+    (rowId: string) => {
+      lastAuto.current = rowId
+      // A search that hides the row, or a hidden ticket panel, would defeat the jump.
+      if (!filterRows(rows, query).some((r) => r.id === rowId)) setQuery('')
+      setSplit((s) => (s.collapsed === 'first' ? { ...s, collapsed: null } : s))
+      follow(rowId)
+    },
+    [rows, query, follow],
+  )
+  const selectPeer = (id: string) => {
+    if (watch?.id === id) {
+      setWatch(watch.following ? { id, following: false } : null)
+      return
+    }
+    setWatch({ id, following: false })
+    const st = rtSnapshot ? peerStatus(id, rtSnapshot.cursors, rtSnapshot.locks) : null
+    lastAuto.current = null
+    if (st?.rowId && rows.some((r) => r.id === st.rowId)) jumpTo(st.rowId)
+  }
+  const toggleFollow = () => {
+    lastAuto.current = null
+    setWatch((w) => (w ? { ...w, following: !w.following } : w))
+  }
+  const following = !!watch?.following
+  const watchRowId = watchStatus?.rowId ?? null
+  useEffect(() => {
+    if (!following) return
+    const target = followJump(watchRowId, lastAuto.current, (rid) => rows.some((r) => r.id === rid))
+    if (target) jumpTo(target)
+  }, [following, watchRowId, rows, jumpTo])
+  // Moving somewhere else by hand ends the following.
+  const seenCurrent = useRef(currentId)
+  useEffect(() => {
+    // Only a change of the current row counts; our own jump sets `lastAuto` first, so it never matches here.
+    if (currentId === seenCurrent.current) return
+    seenCurrent.current = currentId
+    if (following && currentId !== lastAuto.current) {
+      setWatch((w) => (w ? { ...w, following: false } : w))
+    }
+  }, [following, currentId])
+  // The colleague went offline.
+  const rtOnline = rtSnapshot?.state === 'online'
+  useEffect(() => {
+    if (watch && rtOnline && !watchedPeer) setWatch(null)
+  }, [watch, rtOnline, watchedPeer])
+  useEffect(() => {
+    if (!watch) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      setWatch((w) => (w?.following ? { ...w, following: false } : null))
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [watch])
 
   const exportFile = async (format: ExportFormat) => {
     try {
@@ -472,18 +515,13 @@ function WorkspaceView({ project }: { project: Project }) {
   }
 
   const printTargets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
-  const [printWarn, setPrintWarn] = useState<{ bad: number; total: number } | null>(null)
   const [printBig, setPrintBig] = useState<number | null>(null)
   // A huge batch takes minutes to render, so say so before the page turns into a progress bar.
   const startPrint = () => {
     if (printTargets.length > BIG_PRINT_THRESHOLD) setPrintBig(printTargets.length)
     else actions.print()
   }
-  const onPrint = () => {
-    const bad = countSuspiciousPhones(printTargets)
-    if (bad > 0) setPrintWarn({ bad, total: printTargets.length })
-    else startPrint()
-  }
+  const onPrint = startPrint
 
   const shortcut = copyShortcutLabel()
   const printLabel =
@@ -495,28 +533,21 @@ function WorkspaceView({ project }: { project: Project }) {
     : !current
       ? t('workspace.noRowsReason')
       : undefined
-  // On phones every secondary action sits in one menu so the primary "Print (N)" keeps its full label.
+  const notReadyReason = noPrintReason ?? (source ? undefined : t('workspace.toast.notReady'))
+  const copyLabel =
+    actions.targetCount > 1 ? t('workspace.copy.many', { count: actions.targetCount }) : t('workspace.copy')
+  const saveLabel =
+    actions.targetCount > 1 ? t('workspace.save.many', { count: actions.targetCount }) : t('workspace.save')
+  // On phones Copy and Save sit in the bar; print, import, export and settings are in the menu.
   const phoneItems: MenuItem[] = []
   if (canPrint) {
-    phoneItems.push(
-      {
-        id: 'copy',
-        label: t('workspace.copy'),
-        disabled: !current || !source,
-        disabledReason: noPrintReason ?? t('workspace.toast.notReady'),
-        onSelect: actions.copy,
-      },
-      {
-        id: 'save',
-        label:
-          actions.targetCount > 1
-            ? t('workspace.bulk.saveMany', { count: actions.targetCount })
-            : t('workspace.save'),
-        disabled: !current || !source,
-        disabledReason: noPrintReason ?? t('workspace.toast.notReady'),
-        onSelect: () => void actions.save(),
-      },
-    )
+    phoneItems.push({
+      id: 'print',
+      label: printLabel,
+      disabled: !!noPrintReason,
+      disabledReason: noPrintReason,
+      onSelect: onPrint,
+    })
   }
   if (canImport) {
     phoneItems.push({
@@ -545,16 +576,19 @@ function WorkspaceView({ project }: { project: Project }) {
       onSelect: () => void navigate(`/projects/${project.id}/settings`, { viewTransition: true }),
     })
   }
-  const ratioOff = project.image ? Math.abs(project.image.w / project.image.h - TICKET_ASPECT) > 0.05 : false
-  const picSize = imageEl ? imageSize(imageEl) : null
+  const topbarContent = (
+    <WorkspaceTopbar
+      title={project.title}
+      contributors={project.contributors}
+      hasOnline={hasOnline}
+      watchedId={watch?.id ?? null}
+      onSelectPeer={selectPeer}
+    />
+  )
+  const names = { first: t('workspace.panel.picture'), second: t('workspace.panel.db') }
 
   const dbPanel = (
-    <Panel
-      title={t('workspace.panel.db')}
-      icon="users"
-      className="ws-panel"
-      actions={<PanelButtons id="db" max={layout.max === 'db'} onMax={toggleMax} onClose={close} />}
-    >
+    <Panel title={t('workspace.panel.db')} icon="users" className="ws-panel">
       {canView ? (
         <ParticipantsTable
           rows={rows}
@@ -571,21 +605,20 @@ function WorkspaceView({ project }: { project: Project }) {
             ) : undefined
           }
           canEdit={canEdit}
-          canDelete={canDelete}
           selected={selected}
           onSelectedChange={setSelected}
           currentId={current?.id ?? null}
           onCurrentChange={setCurrentId}
-          leaving={leavingAll}
+          leaving={remoteLeaving}
           freshIds={freshAll}
           freshColor={remoteFresh?.size ? undefined : user?.color}
           presence={presence}
           people={people}
           onCommit={commit}
           onAdopt={adopt}
-          onDelete={onDelete}
+          onClear={(ids) => void ops.clear(ids)}
           onAddRows={() => setAddOpen(true)}
-          onPasteRows={(items) => void pasteRows(items)}
+          onPaste={(plan) => void ops.paste(plan)}
           revealId={reveal}
           focusNonce={focusNonce}
           unsentIds={down ? pending : NO_IDS}
@@ -613,12 +646,7 @@ function WorkspaceView({ project }: { project: Project }) {
   )
 
   const picturePanel = (
-    <Panel
-      title={t('workspace.panel.picture')}
-      icon="pencil"
-      className="ws-panel"
-      actions={<PanelButtons id="picture" max={layout.max === 'picture'} onMax={toggleMax} onClose={close} />}
-    >
+    <Panel title={t('workspace.panel.picture')} icon="pencil" className="ws-panel">
       <TicketPanel
         image={imageEl}
         imageLoading={!!project.image && !imageEl}
@@ -628,50 +656,27 @@ function WorkspaceView({ project }: { project: Project }) {
         emptyReason={list.isError ? 'error' : rows.length === 0 && !list.isPending ? 'no-rows' : 'select'}
         onRetry={() => void list.refetch()}
         settingsTo={canSettings ? `/projects/${project.id}/settings` : undefined}
-        footer={
-          ratioOff && canSettings ? (
-            <p className="tk-hint muted">
-              <Icon name="info" size={14} />
-              {t('workspace.ticket.ratio', { size: picSize ? `${picSize.w}x${picSize.h}` : '' })}
-            </p>
-          ) : null
+        nav={
+          pictureOnly
+            ? {
+                hasPrev: !!prevRow,
+                hasNext: !!nextRow,
+                onPrev: () => stepTo(prevRow),
+                onNext: () => stepTo(nextRow),
+              }
+            : undefined
         }
       />
     </Panel>
   )
 
-  const hiddenPanels: PanelId[] = (['picture', 'db'] as const).filter((p) => layout.closed[p])
-  const anyVisible = visible('picture') || visible('db')
+  const peerColor = watchedPeer?.color ?? ''
 
   return (
     <div className="ws" data-tab={tab}>
-      <div className="ws-head">
-        <nav className="breadcrumb" aria-label={t('workspace.crumbs')}>
-          <AppLink to="/" className="muted">
-            {t('projects.title')}
-          </AppLink>
-          <span className="muted" aria-hidden="true">
-            /
-          </span>
-          <h1 className="breadcrumb-current ws-title" title={project.title}>
-            {project.title}
-          </h1>
-        </nav>
-        <div className="ws-people">
-          {hasOnline && (
-            <div className="ws-people-group">
-              <span className="ws-people-label">{t('workspace.people.online')}</span>
-              <OnlineAvatars />
-            </div>
-          )}
-          {project.contributors.length > 0 && (
-            <div className="ws-people-group">
-              <span className="ws-people-label">{t('workspace.people.contributors')}</span>
-              <AvatarStack users={project.contributors.map((c) => ({ ...c, avatar: null }))} />
-            </div>
-          )}
-        </div>
-      </div>
+      {/* The page heading for assistive technology and the document title; the visible path is in the top bar. */}
+      <h1 className="sr-only">{project.title}</h1>
+      <TopbarPortal fallback={<div className="ws-head">{topbarContent}</div>}>{topbarContent}</TopbarPortal>
       <OfflineBanner down={down} />
 
       {finished && (
@@ -687,14 +692,14 @@ function WorkspaceView({ project }: { project: Project }) {
             count={selectedRows.length}
             canPrint={canPrint}
             printBlocked={project.image ? undefined : t('workspace.noImageReason')}
-            canDelete={canDelete}
-            copyReady={!!source && selectedRows.length === 1}
+            canClear={canEdit}
+            copyReady={!!source && selectedRows.length >= 1}
             saveReady={!!source}
             onPrint={onPrint}
             onCopy={actions.copy}
             onSave={() => void actions.save()}
-            onDelete={() => {
-              onDelete(selectedRows.map((r) => r.id))
+            onClear={() => {
+              void ops.clear(selectedRows.map((r) => r.id))
               setSelectMode(false)
             }}
             onDone={() => {
@@ -705,10 +710,12 @@ function WorkspaceView({ project }: { project: Project }) {
         ) : (
           <PhoneToolbar
             canPrint={canPrint}
-            printLabel={printLabel}
-            printDisabled={noPrintReason}
+            copyLabel={copyLabel}
+            saveLabel={saveLabel}
+            disabledReason={notReadyReason}
             items={phoneItems}
-            onPrint={onPrint}
+            onCopy={actions.copy}
+            onSave={() => void actions.save()}
           />
         )
       ) : (
@@ -716,28 +723,23 @@ function WorkspaceView({ project }: { project: Project }) {
           {canPrint && (
             <>
               <ToolButton
-                icon="print"
-                variant="primary"
-                label={printLabel}
-                text={printLabel}
-                disabled={!current || !project.image}
-                disabledReason={noPrintReason}
-                onClick={onPrint}
-              />
-              <ToolButton
                 icon="copy"
-                label={t('workspace.copy')}
+                variant="primary"
+                label={copyLabel}
+                text={copyLabel}
                 hint={`${shortcut}+C`}
                 disabled={!current || !source}
-                disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
+                disabledReason={notReadyReason}
                 onClick={actions.copy}
               />
-              <ToolButton
-                icon="save"
-                label={t('workspace.save')}
+              <SaveButton
+                count={actions.targetCount}
+                mode={actions.saveMode}
+                folderSupported={folderSupported()}
                 disabled={!current || !source}
-                disabledReason={noPrintReason ?? t('workspace.toast.notReady')}
-                onClick={() => void actions.save()}
+                disabledReason={notReadyReason}
+                onSave={() => void actions.save()}
+                onSaveAs={(m) => void actions.saveAs(m)}
               />
             </>
           )}
@@ -745,6 +747,7 @@ function WorkspaceView({ project }: { project: Project }) {
           {canImport && (
             <ToolButton
               icon="upload"
+              variant="ghost"
               label={t('workspace.import')}
               text={t('workspace.import')}
               onClick={() => setImportOpen(true)}
@@ -759,7 +762,7 @@ function WorkspaceView({ project }: { project: Project }) {
               ]}
               trigger={(props) => (
                 <Tooltip content={t('workspace.export')} side="bottom">
-                  <Button {...props} aria-label={t('workspace.export')}>
+                  <Button {...props} variant="ghost" aria-label={t('workspace.export')}>
                     <WsIcon name="exportTable" />
                     <span className="ws-tool-text">{t('workspace.export')}</span>
                   </Button>
@@ -767,25 +770,33 @@ function WorkspaceView({ project }: { project: Project }) {
               )}
             />
           )}
+          {canPrint && (
+            <>
+              <span className="ws-sep" aria-hidden="true" />
+              <ToolButton
+                icon="print"
+                variant="ghost"
+                className="ws-print"
+                label={printLabel}
+                text={printLabel}
+                disabled={!current || !project.image}
+                disabledReason={noPrintReason}
+                onClick={onPrint}
+              />
+            </>
+          )}
           {canSettings && (
             <>
               <span className="ws-sep" aria-hidden="true" />
               <ToolButton
-                icon="settings"
+                icon="gear"
+                variant="ghost"
                 label={t('workspace.settings')}
+                text={t('workspace.settings.short')}
                 onClick={() => void navigate(`/projects/${project.id}/settings`, { viewTransition: true })}
               />
             </>
           )}
-          {!narrow &&
-            hiddenPanels.map((p) => (
-              <Button key={p} size="sm" variant="ghost" onClick={() => restore(p)}>
-                <WsIcon name={p === 'picture' ? 'image' : 'table'} size={16} />
-                {t('workspace.showPanel', {
-                  name: t(p === 'picture' ? 'workspace.panel.picture' : 'workspace.panel.db'),
-                })}
-              </Button>
-            ))}
           <span className="spacer" />
           {canPrint && (
             <span className="ws-hint">
@@ -795,6 +806,18 @@ function WorkspaceView({ project }: { project: Project }) {
         </div>
       )}
 
+      {watch && watchedPeer && watchStatus && (
+        <FollowChip
+          peer={watchedPeer}
+          status={watchStatus}
+          rowNumber={rows.find((r) => r.id === watchStatus.rowId)?.number ?? null}
+          following={following}
+          onToggleFollow={toggleFollow}
+          onClose={() => setWatch(null)}
+        />
+      )}
+      {watchedPeer && watchRowId && <style>{spotlightCss(watchRowId, peerColor)}</style>}
+
       {actions.progress && (
         <div className="ws-progress" role="status">
           <div
@@ -803,7 +826,9 @@ function WorkspaceView({ project }: { project: Project }) {
             aria-valuemin={0}
             aria-valuemax={actions.progress.total}
             aria-valuenow={actions.progress.done}
-            aria-label={t('workspace.progress.save')}
+            aria-label={t(
+              actions.progress.kind === 'copy' ? 'workspace.progress.copy' : 'workspace.progress.save',
+            )}
           >
             <span style={{ transform: `scaleX(${actions.progress.done / actions.progress.total})` }} />
           </div>
@@ -813,6 +838,11 @@ function WorkspaceView({ project }: { project: Project }) {
               total: formatNumber(actions.progress.total),
             })}
           </span>
+          {actions.progress.cancellable && (
+            <Button size="sm" variant="ghost" onClick={actions.cancel}>
+              {t('action.cancel')}
+            </Button>
+          )}
         </div>
       )}
 
@@ -830,8 +860,16 @@ function WorkspaceView({ project }: { project: Project }) {
 
       <div
         className="ws-grid"
-        data-picture={visible('picture') ? 'on' : 'off'}
-        data-db={visible('db') ? 'on' : 'off'}
+        ref={gridRef}
+        data-dragging={dragging || undefined}
+        data-collapsed={narrow ? undefined : (split.collapsed ?? undefined)}
+        style={
+          narrow
+            ? undefined
+            : stacked
+              ? { gridTemplateRows: tracks(split, HANDLE_PX) }
+              : { gridTemplateColumns: tracks(split, HANDLE_PX) }
+        }
       >
         <div
           className="ws-slot"
@@ -841,6 +879,19 @@ function WorkspaceView({ project }: { project: Project }) {
         >
           {picturePanel}
         </div>
+        {!narrow && (
+          <Splitter
+            orientation={stacked ? 'vertical' : 'horizontal'}
+            ratio={split.ratio}
+            collapsed={split.collapsed}
+            gridRef={gridRef}
+            names={names}
+            onRatio={(ratio) => setSplit((s) => ({ ...s, ratio }))}
+            onDragging={setDragging}
+            onArrow={(side) => setSplit((s) => ({ ...s, collapsed: applyArrow(s.collapsed, side) }))}
+            onReset={() => setSplit({ ratio: 0.5, collapsed: null })}
+          />
+        )}
         <div
           className="ws-slot"
           data-panel="db"
@@ -849,11 +900,6 @@ function WorkspaceView({ project }: { project: Project }) {
         >
           {dbPanel}
         </div>
-        {!narrow && !anyVisible && (
-          <p className="muted ws-none" role="status">
-            {t('workspace.allClosed')}
-          </p>
-        )}
       </div>
 
       <AddRowsDialog
@@ -875,29 +921,6 @@ function WorkspaceView({ project }: { project: Project }) {
           void qc.invalidateQueries({ queryKey: ['projects', 'detail', project.id] })
         }}
       />
-      <Modal
-        open={printWarn !== null}
-        onClose={() => setPrintWarn(null)}
-        title={t('workspace.printWarn.title')}
-        actions={
-          <>
-            <Button variant="ghost" data-autofocus onClick={() => setPrintWarn(null)}>
-              {t('workspace.printWarn.cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setPrintWarn(null)
-                startPrint()
-              }}
-            >
-              {t('workspace.printWarn.continue')}
-            </Button>
-          </>
-        }
-      >
-        <p>{t('workspace.printWarn.body', { count: printWarn?.bad ?? 0, total: printWarn?.total ?? 0 })}</p>
-      </Modal>
       <Modal
         open={printBig !== null}
         onClose={() => setPrintBig(null)}
@@ -928,42 +951,5 @@ function WorkspaceView({ project }: { project: Project }) {
       </Modal>
       <CopyFallbackDialog blob={actions.fallback} onClose={actions.closeFallback} />
     </div>
-  )
-}
-
-function PanelButtons({
-  id,
-  max,
-  onMax,
-  onClose,
-}: {
-  id: PanelId
-  max: boolean
-  onMax: (id: PanelId) => void
-  onClose: (id: PanelId) => void
-}): ReactNode {
-  const { t } = useI18n()
-  return (
-    <span className="ws-panel-actions">
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        aria-label={max ? t('workspace.panel.restore') : t('workspace.panel.maximize')}
-        aria-pressed={max}
-        onClick={() => onMax(id)}
-      >
-        <WsIcon name={max ? 'restore' : 'maximize'} size={18} />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        iconOnly
-        aria-label={t('workspace.panel.close')}
-        onClick={() => onClose(id)}
-      >
-        <Icon name="x" size={18} />
-      </Button>
-    </span>
   )
 }

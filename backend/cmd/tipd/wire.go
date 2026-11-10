@@ -188,7 +188,7 @@ func (a *app) wire(ctx context.Context) error {
 	fontRepo := postgres.NewFontRepo(a.conn)
 	projectsSvc := service.NewProjectService(service.ProjectsDeps{
 		Repo: projectRepo, Blobs: blobs, Images: img, Audit: projectAudit{auditSvc}, Events: a.hub,
-		Fonts: fontRepo, Tx: tx, Clock: clk, IDs: a.ids,
+		Fonts: fontRepo, Presence: a.hub, Tx: tx, Clock: clk, IDs: a.ids,
 	})
 	fontsSvc := service.NewFontService(service.FontsDeps{
 		Repo: fontRepo, Blobs: blobs, Audit: projectAudit{auditSvc}, Tx: tx, Clock: clk, IDs: a.ids,

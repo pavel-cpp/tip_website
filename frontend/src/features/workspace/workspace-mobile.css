@@ -19,11 +19,6 @@
     height: var(--touch-target);
   }
 }
-.ws-head .breadcrumb a {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control-h);
-}
 .tk-zoom-value {
   min-height: var(--control-h-sm);
 }
@@ -64,9 +59,9 @@
   flex: 1 1 200px;
   min-width: 160px;
 }
-/* The delete label is long ("Delete 12 rows"): it turns into an icon first, the add button keeps its text longer. */
+/* The clear label is long ("Clear 12 rows"): it turns into an icon first, the add button keeps its text longer. */
 @container pt-tools (max-width: 720px) {
-  .pt-tools .pt-delete .pt-btn-text {
+  .pt-tools .pt-clear .pt-btn-text {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -75,7 +70,7 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .pt-tools .pt-delete {
+  .pt-tools .pt-clear {
     padding: 0;
     width: var(--control-h-sm);
   }
@@ -96,34 +91,8 @@
   }
 }
 
-/* Project title: at most two lines, the full text is in the title attribute. */
-.ws-title {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.ws-head .breadcrumb {
-  min-width: 0;
-}
-
 /* Phone layout (keep the query in sync with NARROW_QUERY in useNarrow.ts). */
 @media (max-width: 699px), (orientation: landscape) and (max-height: 500px) {
-  .ws-title {
-    font-size: var(--fs-lg);
-  }
-  /* "Projects" above the title; the slash would dangle at the end of the first line. */
-  .ws-head .breadcrumb {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
-  }
-  .ws-head .breadcrumb > [aria-hidden="true"] {
-    display: none;
-  }
   /* The tabs already name the panel; the panel header only costs list space. */
   .ws-panel > .panel-head {
     display: none;
@@ -217,19 +186,7 @@
     padding-right: 72px;
     gap: var(--space-1);
   }
-  .ws-head {
-    min-height: var(--touch-target);
-    padding-right: 220px;
-  }
-  .ws-people {
-    display: none;
-  }
-  .ws > .tabs {
-    position: absolute;
-    top: 0;
-    right: 72px;
-    border-bottom: 0;
-  }
+  /* The tabs keep their own row; the top bar already carries the title. */
   .ws-toolbar-phone,
   .pc-bar {
     position: absolute;
@@ -274,19 +231,6 @@
   }
   .ws .pt[data-select] .pt-tools {
     display: none;
-  }
-  .ws-head .breadcrumb {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .ws-head .breadcrumb > [aria-hidden="true"] {
-    display: inline;
-  }
-  .ws-title {
-    display: block;
-    white-space: nowrap;
-    text-overflow: ellipsis;
   }
 }
 
@@ -409,10 +353,6 @@
 }
 .pc-name[data-empty] {
   color: var(--text-faint);
-}
-.pc-phone[data-suspicious] {
-  text-decoration: underline wavy var(--danger);
-  text-underline-offset: 3px;
 }
 .pc-check {
   flex: none;
@@ -621,9 +561,6 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.sheet-input[aria-invalid="true"] {
-  border-color: var(--danger);
-}
 .sheet-phone {
   font-family: var(--font-mono);
 }
@@ -635,11 +572,6 @@
   resize: none;
   overflow: hidden;
   overflow-wrap: anywhere;
-}
-.sheet-warn {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
 }
 .sheet-preview {
   display: flex;

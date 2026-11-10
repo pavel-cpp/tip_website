@@ -56,12 +56,12 @@ export class WorkspacePage {
     else await this.cell(row, 'number').click()
   }
 
-  /** Deletes the current selection through the toolbar button (table) or the bulk bar (cards). */
-  async deleteSelected(count: number): Promise<void> {
+  /** Clears the current selection through the toolbar button (table) or the bulk bar (cards). */
+  async clearSelected(count: number): Promise<void> {
     if (await this.isCards()) {
-      await this.bulkBar.getByRole('button', { name: this.t('workspace.bulk.delete', { count }) }).click()
+      await this.bulkBar.getByRole('button', { name: this.t('workspace.bulk.clear', { count }) }).click()
     } else {
-      await this.button('workspace.deleteSelected', { count }).click()
+      await this.button('workspace.clearSelected', { count }).click()
     }
   }
   /** Phone: the bar of bulk actions shown in selection mode. */

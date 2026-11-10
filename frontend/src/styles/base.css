@@ -161,6 +161,87 @@ main:focus {
   animation-timing-function: var(--ease-standard);
 }
 
+/*
+  Route transitions (desktop pointers only; lib/viewTransition.ts sets data-nav, phones never get it).
+  The top bar and the page are separate transition groups: the bar stays perfectly still and only the page
+  moves. Only opacity and transform are animated; the group box itself never animates (no stretching).
+  Sibling screens: cross-fade with a small rise. Drill-in (list -> project -> settings): the new page
+  grows in from slightly smaller while the old one recedes; back is the mirror image.
+*/
+@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
+  .topbar {
+    view-transition-name: topbar;
+  }
+  main.page {
+    view-transition-name: page;
+  }
+}
+::view-transition-group(topbar),
+::view-transition-group(page) {
+  animation: none;
+}
+:root[data-nav]::view-transition-old(root) {
+  display: none;
+}
+:root[data-nav]::view-transition-new(root) {
+  animation: none;
+}
+:root[data-nav]::view-transition-old(page) {
+  animation: vt-out var(--dur-fast) var(--ease-in) both;
+}
+:root[data-nav]::view-transition-new(page) {
+  animation: vt-in var(--dur-base) var(--ease-standard) both;
+  /* The incoming page starts when the outgoing one is nearly gone, so the two never read as a double image. */
+  animation-delay: 40ms;
+}
+:root[data-nav="drill"]::view-transition-old(page) {
+  animation-name: vt-out-drill;
+}
+:root[data-nav="drill"]::view-transition-new(page) {
+  animation-name: vt-in-drill;
+}
+:root[data-nav="back"]::view-transition-old(page) {
+  animation-name: vt-out-back;
+}
+:root[data-nav="back"]::view-transition-new(page) {
+  animation-name: vt-in-back;
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes vt-out-drill {
+  to {
+    opacity: 0;
+    transform: scale(1.012);
+  }
+}
+@keyframes vt-in-drill {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+@keyframes vt-out-back {
+  to {
+    opacity: 0;
+    transform: scale(0.988);
+  }
+}
+@keyframes vt-in-back {
+  from {
+    opacity: 0;
+    transform: scale(1.012);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

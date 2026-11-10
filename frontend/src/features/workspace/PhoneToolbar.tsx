@@ -5,30 +5,52 @@ import { WsIcon } from './icons'
 
 export interface PhoneToolbarProps {
   canPrint: boolean
-  printLabel: string
-  /** Why printing is unavailable right now (nothing selected yet), shown as the tooltip. */
-  printDisabled?: string
-  /** Secondary actions live in the menu so the primary one keeps its full label. */
+  copyLabel: string
+  saveLabel: string
+  /** Why copying and saving are unavailable right now (nothing selected yet), shown as the tooltip. */
+  disabledReason?: string
+  /** Print, import, export and settings live in the menu, so the two main actions keep their size. */
   items: MenuItem[]
-  onPrint: () => void
+  onCopy: () => void
+  onSave: () => void
 }
 
-/** Bottom bar on phones: the primary "Print (N)" button and one "more" menu, always the same layout. */
-export function PhoneToolbar({ canPrint, printLabel, printDisabled, items, onPrint }: PhoneToolbarProps) {
+/** Bottom bar on phones: primary "Copy", then Save and one "more" menu, always the same layout. */
+export function PhoneToolbar({
+  canPrint,
+  copyLabel,
+  saveLabel,
+  disabledReason,
+  items,
+  onCopy,
+  onSave,
+}: PhoneToolbarProps) {
   const { t } = useI18n()
   return (
     <div className="ws-toolbar ws-toolbar-phone" role="toolbar" aria-label={t('workspace.toolbar')}>
       {canPrint && (
-        <Button
-          variant="primary"
-          className="ws-main"
-          disabled={!!printDisabled}
-          disabledReason={printDisabled}
-          onClick={onPrint}
-        >
-          <WsIcon name="print" />
-          <span className="ws-main-text">{printLabel}</span>
-        </Button>
+        <>
+          <Button
+            variant="primary"
+            className="ws-main"
+            disabled={!!disabledReason}
+            disabledReason={disabledReason}
+            onClick={onCopy}
+          >
+            <WsIcon name="copy" />
+            <span className="ws-main-text">{copyLabel}</span>
+          </Button>
+          <Button
+            className="ws-save-phone"
+            iconOnly
+            aria-label={saveLabel}
+            disabled={!!disabledReason}
+            disabledReason={disabledReason}
+            onClick={onSave}
+          >
+            <WsIcon name="save" />
+          </Button>
+        </>
       )}
       {items.length > 0 && (
         <Menu

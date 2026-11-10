@@ -20,6 +20,7 @@ export const AUDIT_ACTIONS = [
   'project.update',
   'project.finish',
   'project.reopen',
+  'project.reorder',
   'project.delete',
   'image.upload',
   'tickets.print',

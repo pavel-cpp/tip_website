@@ -417,6 +417,28 @@ type AvatarUpload struct {
 	File openapi_types.File `json:"file"`
 }
 
+// BatchUpdateItem defines model for BatchUpdateItem.
+type BatchUpdateItem struct {
+	Id      openapi_types.UUID `json:"id"`
+	Name    *string            `json:"name,omitempty"`
+	Phone   *string            `json:"phone,omitempty"`
+	Version int                `json:"version"`
+}
+
+// BatchUpdateRequest defines model for BatchUpdateRequest.
+type BatchUpdateRequest struct {
+	Items []BatchUpdateItem `json:"items"`
+}
+
+// BatchUpdateResult defines model for BatchUpdateResult.
+type BatchUpdateResult struct {
+	// Conflicts Current state of rows that were not written (stale version or locked).
+	Conflicts []Participant `json:"conflicts"`
+
+	// Items Rows that were written.
+	Items []Participant `json:"items"`
+}
+
 // CardImage defines model for CardImage.
 type CardImage struct {
 	// ThumbUrl Small preview to show on the card instead of the full original.
@@ -432,12 +454,6 @@ type ChangePasswordRequest struct {
 
 // CheckStatus defines model for CheckStatus.
 type CheckStatus string
-
-// ClearParticipantsRequest defines model for ClearParticipantsRequest.
-type ClearParticipantsRequest struct {
-	// ConfirmTitle Must equal the project title.
-	ConfirmTitle string `json:"confirmTitle"`
-}
 
 // ClientError defines model for ClientError.
 type ClientError struct {
@@ -494,11 +510,6 @@ type CreateUserResponse struct {
 	// TempPassword Generated password, shown exactly once.
 	TempPassword string `json:"tempPassword"`
 	User         User   `json:"user"`
-}
-
-// DeletedCount defines model for DeletedCount.
-type DeletedCount struct {
-	Deleted int `json:"deleted"`
 }
 
 // Error defines model for Error.
@@ -753,7 +764,10 @@ type Project struct {
 	Id           openapi_types.UUID `json:"id"`
 
 	// Image Ticket image metadata, or null while no image is uploaded.
-	Image            *ProjectImage `json:"image"`
+	Image *ProjectImage `json:"image"`
+
+	// Online Users connected to the project's realtime room right now (one entry per user).
+	Online           []UserRef     `json:"online"`
 	ParticipantCount int           `json:"participantCount"`
 	Placeholders     Placeholders  `json:"placeholders"`
 	Status           ProjectStatus `json:"status"`
@@ -763,12 +777,14 @@ type Project struct {
 
 // ProjectCard Compact project subset for the project list.
 type ProjectCard struct {
-	Contributors     []UserRef          `json:"contributors"`
-	Id               openapi_types.UUID `json:"id"`
-	Image            *CardImage         `json:"image"`
-	ParticipantCount int                `json:"participantCount"`
-	Status           ProjectStatus      `json:"status"`
-	Title            string             `json:"title"`
+	Id    openapi_types.UUID `json:"id"`
+	Image *CardImage         `json:"image"`
+
+	// Online Users connected to the project's realtime room right now (one entry per user).
+	Online           []UserRef     `json:"online"`
+	ParticipantCount int           `json:"participantCount"`
+	Status           ProjectStatus `json:"status"`
+	Title            string        `json:"title"`
 }
 
 // ProjectImage defines model for ProjectImage.
@@ -805,6 +821,11 @@ type ReadinessResponse struct {
 
 // ReadinessResponseStatus defines model for ReadinessResponse.Status.
 type ReadinessResponseStatus string
+
+// ReorderProjectsRequest defines model for ReorderProjectsRequest.
+type ReorderProjectsRequest struct {
+	Ids []openapi_types.UUID `json:"ids"`
+}
 
 // Role defines model for Role.
 type Role struct {
@@ -1161,6 +1182,9 @@ type UpdateParticipantJSONRequestBody = UpdateParticipantRequest
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = CreateProjectRequest
 
+// ReorderProjectsJSONRequestBody defines body for ReorderProjects for application/json ContentType.
+type ReorderProjectsJSONRequestBody = ReorderProjectsRequest
+
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = UpdateProjectRequest
 
@@ -1170,11 +1194,11 @@ type PutProjectImageMultipartRequestBody = ImageUpload
 // CreateParticipantsJSONRequestBody defines body for CreateParticipants for application/json ContentType.
 type CreateParticipantsJSONRequestBody = CreateParticipantsRequest
 
-// ClearParticipantsJSONRequestBody defines body for ClearParticipants for application/json ContentType.
-type ClearParticipantsJSONRequestBody = ClearParticipantsRequest
+// BatchUpdateParticipantsJSONRequestBody defines body for BatchUpdateParticipants for application/json ContentType.
+type BatchUpdateParticipantsJSONRequestBody = BatchUpdateRequest
 
-// DeleteParticipantsJSONRequestBody defines body for DeleteParticipants for application/json ContentType.
-type DeleteParticipantsJSONRequestBody = ParticipantIds
+// ClearParticipantsJSONRequestBody defines body for ClearParticipants for application/json ContentType.
+type ClearParticipantsJSONRequestBody = ParticipantIds
 
 // ImportParticipantsMultipartRequestBody defines body for ImportParticipants for multipart/form-data ContentType.
 type ImportParticipantsMultipartRequestBody = ImportUpload
@@ -1449,6 +1473,9 @@ type ServerInterface interface {
 	// CreateProject Create a project
 	// (POST /projects)
 	CreateProject(w http.ResponseWriter, r *http.Request)
+	// ReorderProjects Set the team-wide order of projects
+	// (PUT /projects/order)
+	ReorderProjects(w http.ResponseWriter, r *http.Request)
 	// DeleteProject Delete a project
 	// (DELETE /projects/{id})
 	DeleteProject(w http.ResponseWriter, r *http.Request, id ProjectId)
@@ -1479,12 +1506,12 @@ type ServerInterface interface {
 	// CreateParticipants Add participants
 	// (POST /projects/{id}/participants)
 	CreateParticipants(w http.ResponseWriter, r *http.Request, id ProjectId)
-	// ClearParticipants Delete all rows of a project
+	// BatchUpdateParticipants Edit many rows at once
+	// (POST /projects/{id}/participants/batch)
+	BatchUpdateParticipants(w http.ResponseWriter, r *http.Request, id ProjectId)
+	// ClearParticipants Clear several rows
 	// (POST /projects/{id}/participants/clear)
 	ClearParticipants(w http.ResponseWriter, r *http.Request, id ProjectId)
-	// DeleteParticipants Delete several rows
-	// (POST /projects/{id}/participants/delete)
-	DeleteParticipants(w http.ResponseWriter, r *http.Request, id ProjectId)
 	// ImportParticipants Import participants from XLSX or CSV
 	// (POST /projects/{id}/participants/import)
 	ImportParticipants(w http.ResponseWriter, r *http.Request, id ProjectId, params ImportParticipantsParams)
@@ -1686,6 +1713,12 @@ func (_ Unimplemented) CreateProject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// ReorderProjects Set the team-wide order of projects
+// (PUT /projects/order)
+func (_ Unimplemented) ReorderProjects(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // DeleteProject Delete a project
 // (DELETE /projects/{id})
 func (_ Unimplemented) DeleteProject(w http.ResponseWriter, r *http.Request, id ProjectId) {
@@ -1746,15 +1779,15 @@ func (_ Unimplemented) CreateParticipants(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// ClearParticipants Delete all rows of a project
-// (POST /projects/{id}/participants/clear)
-func (_ Unimplemented) ClearParticipants(w http.ResponseWriter, r *http.Request, id ProjectId) {
+// BatchUpdateParticipants Edit many rows at once
+// (POST /projects/{id}/participants/batch)
+func (_ Unimplemented) BatchUpdateParticipants(w http.ResponseWriter, r *http.Request, id ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// DeleteParticipants Delete several rows
-// (POST /projects/{id}/participants/delete)
-func (_ Unimplemented) DeleteParticipants(w http.ResponseWriter, r *http.Request, id ProjectId) {
+// ClearParticipants Clear several rows
+// (POST /projects/{id}/participants/clear)
+func (_ Unimplemented) ClearParticipants(w http.ResponseWriter, r *http.Request, id ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2452,6 +2485,20 @@ func (siw *ServerInterfaceWrapper) CreateProject(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ReorderProjects operation middleware
+func (siw *ServerInterfaceWrapper) ReorderProjects(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReorderProjects(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // DeleteProject operation middleware
 func (siw *ServerInterfaceWrapper) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
@@ -2786,6 +2833,32 @@ func (siw *ServerInterfaceWrapper) CreateParticipants(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// BatchUpdateParticipants operation middleware
+func (siw *ServerInterfaceWrapper) BatchUpdateParticipants(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BatchUpdateParticipants(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ClearParticipants operation middleware
 func (siw *ServerInterfaceWrapper) ClearParticipants(w http.ResponseWriter, r *http.Request) {
 
@@ -2803,32 +2876,6 @@ func (siw *ServerInterfaceWrapper) ClearParticipants(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ClearParticipants(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteParticipants operation middleware
-func (siw *ServerInterfaceWrapper) DeleteParticipants(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: r.URL.RawPath == ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteParticipants(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3188,6 +3235,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects", wrapper.CreateProject)
 	})
 	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/order", wrapper.ReorderProjects)
+	})
+	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/projects/{id}", wrapper.DeleteProject)
 	})
 	r.Group(func(r chi.Router) {
@@ -3221,7 +3271,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{id}/participants/printed", wrapper.LogPrinted)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/projects/{id}/participants/delete", wrapper.DeleteParticipants)
+		r.Post(options.BaseURL+"/projects/{id}/participants/batch", wrapper.BatchUpdateParticipants)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{id}/participants/clear", wrapper.ClearParticipants)

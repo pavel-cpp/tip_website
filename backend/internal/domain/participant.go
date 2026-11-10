@@ -74,3 +74,25 @@ func AllocateNumbers(nextNumber, count int) (first, newNext int, err error) {
 	}
 	return nextNumber, nextNumber + count, nil
 }
+
+// ParticipantChange is one row of a bulk edit. A field is written only when its Set flag is
+// true; Version is the row version the client edited.
+type ParticipantChange struct {
+	ID                string
+	SetName, SetPhone bool
+	Name, Phone       string
+	Version           int
+}
+
+// Normalized trims the written fields and validates their length, mirroring Participant.Edited.
+func (c ParticipantChange) Normalized() (ParticipantChange, error) {
+	var errs []error
+	c.Name, c.Phone = strings.TrimSpace(c.Name), strings.TrimSpace(c.Phone)
+	if c.SetName && utf8.RuneCountInString(c.Name) > MaxParticipantNameLen {
+		errs = append(errs, fieldError("name", "must be at most 200 characters"))
+	}
+	if c.SetPhone && utf8.RuneCountInString(c.Phone) > MaxParticipantPhoneLen {
+		errs = append(errs, fieldError("phone", "must be at most 40 characters"))
+	}
+	return c, collect(errs...)
+}

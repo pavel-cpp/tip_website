@@ -111,7 +111,8 @@
 |---|---|---|
 | `GET /projects?status=active\|finished&q=` | `project.view` (`finished` — ещё `project.view_finished`) | → `[ProjectCard]`; без `project.view_finished` возвращаются только `active` |
 | `POST /projects` | `project.create` | `{title}` → `201 {project}` (плейсхолдеры по умолчанию) |
-| `GET /projects/{id}` | `project.view` | → `{project}`; также регистрирует пользователя в `contributors` |
+| `GET /projects/{id}` | `project.view` | → `{project}` (в нём `contributors` — кто правил раньше и `online` — кто сейчас подключён к проекту) |
+| `PUT /projects/order` | `project.update` | `{ids:[…]}` — общий для команды порядок проектов (last write wins; чужие и скрытые id игнорируются); запись аудита `project.reorder` |
 | `PATCH /projects/{id}` | `project.update` | `{title?, placeholders?}` + `version` → `{project}` |
 | `PUT /projects/{id}/image` | `project.update` | `multipart` `file` → `{project}`; 413/415/422/507 при ошибках |
 | `GET /projects/{id}/image` | `project.view` | → оригинал, `ETag=sha256`, `immutable`; `?size=thumb` — миниатюра 480 px JPEG (создаётся при загрузке, лежит рядом как `<sha>.thumb`); в JSON проекта поле `image.thumbUrl` — для карточек списка, чтобы не качать оригиналы |
@@ -128,7 +129,7 @@
     "name":   { "…": "…" }, "phone": { "…": "…" } },
   "contributors": [ { "id":"…", "displayName":"Азам Турсунов", "color":"#ffb84d", "avatarUrl":null } ],
   "participantCount": 12, "createdAt":"2026-11-01T09:00:00Z" }
-// ProjectCard = краткое подмножество (id, title, status, image.url, contributors, counts)
+// ProjectCard = краткое подмножество (id, title, status, image.url, online, counts); online — только пользователи, подключённые к проекту прямо сейчас
 ```
 
 ## 5. Участники
@@ -139,9 +140,11 @@
 | `POST /projects/{id}/participants` | `participant.edit` | `{count}` (1…5000 пустых) **или** `{items:[{name,phone}]}` → `201 {items}` |
 | `PATCH /participants/{id}` | `participant.edit` | `{name?, phone?, version}` → `{item}`; `409 ROW_LOCKED/VERSION_CONFLICT` |
 | `POST /projects/{id}/participants/printed` | `participant.print` | `{ids:[…]}` → `204`: запись в аудит «напечатано» (только ID); состояние строк не меняется |
-| `POST /projects/{id}/participants/delete` | `participant.delete` | `{ids:[…]}` → `{deleted:n}` |
-| `POST /projects/{id}/participants/clear` | `participant.clear` | `{confirmTitle}` (должно совпасть с названием) → `{deleted:n}` |
-| `POST /projects/{id}/participants/import` | `participant.import` | `multipart` XLSX/CSV, `mode=append\|replace`; `?dryRun=1` → предпросмотр ошибок |
+| `POST /projects/{id}/participants/batch` | `participant.edit` | `{items:[{id, version, name?, phone?}]}` (до 20 000) → `{items, conflicts}`: пакетная правка (вставка блока). Строки с устаревшей `version` или занятые другим пользователем не пишутся и возвращаются в `conflicts` в текущем виде; остальные применяются независимо. Одно событие `rows.upsert` |
+| `POST /projects/{id}/participants/clear` | `participant.edit` | `{ids:[…]}` → `{items}`: **очистка** — имя и телефон выбранных строк становятся пустыми, строка и её номер остаются; пустые и занятые другим пользователем пропускаются. Событие `rows.upsert`, аудит `participants.clear` |
+| `POST /projects/{id}/participants/import` | `participant.import` | `multipart` XLSX/CSV, `mode=append\|replace` (`replace` перезаписывает существующие строки по порядку номеров, лишние очищает, остаток добавляет); `?dryRun=1` → предпросмотр ошибок |
+
+Строки участников **не удаляются через API** (только вместе с проектом, `CASCADE`): вместо удаления есть очистка. События `rows.delete` в клиент не приходят, права `participant.delete` и `participant.clear` в API больше не используются (очистка требует `participant.edit`).
 | `GET /projects/{id}/export.xlsx` · `export.csv` | `participant.export` | → файл (номер, имя, телефон) |
 
 ```json
