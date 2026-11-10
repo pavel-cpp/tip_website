@@ -100,7 +100,10 @@ export function routeCommitted(path: string): void {
  */
 function whenCrumbsReady(path: string, done: () => void): void {
   const rank = routeRank(path)
-  if (!rank) return done()
+  if (!rank) {
+    done()
+    return
+  }
   const started = performance.now()
   const poll = () => {
     if (document.querySelector('header.topbar .wsbar-title') || performance.now() - started > 120) done()
