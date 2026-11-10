@@ -11,6 +11,7 @@ Source: `improve-animations` audit of `frontend/` at commit c8d7b7a. Phones are 
 | 005 | Shorten sibling route transitions; stop animating layout for the panel collapse | MEDIUM | DONE |
 | 006 | Reduced motion keeps short opacity fades | MEDIUM | DONE |
 | 007 | Panel-collapse snap, colour picker unfold, crossfade and will-change polish | LOW | DONE |
+| 008 | Measured lag fixes; 1:1 splitter, flat ticket slide, morph route transitions | HIGH | DONE |
 
 ## Order and dependencies
 
