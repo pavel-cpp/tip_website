@@ -97,6 +97,12 @@
   -webkit-user-select: none;
   cursor: col-resize;
 }
+/* Crossing the collapse point while dragging: the panel eases away or back, the rest of the drag stays 1:1. */
+.ws-grid[data-dragging][data-snap] {
+  transition:
+    grid-template-columns var(--dur-base) var(--ease-in-out),
+    grid-template-rows var(--dur-base) var(--ease-in-out);
+}
 .ws-slot {
   min-width: 0;
   min-height: 0;

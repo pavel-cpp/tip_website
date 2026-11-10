@@ -107,6 +107,35 @@ test('a held arrow key swaps tickets without the page-turn', async ({ admin, sig
   expect(n).toBe(0)
 })
 
+test('dragging the handle past the collapse point eases the panel away', async ({
+  admin,
+  signedIn,
+  viewport,
+}) => {
+  test.skip(!desktop(viewport), 'desktop layout')
+  const project = await seeded(admin)
+  const page = await signedIn(adminCreds())
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  const ws = new WorkspacePage(page)
+  await ws.open(project.id)
+  const split = page.getByRole('separator', { name: ws.t('workspace.split.label') })
+  const b = await split.boundingBox()
+  const grid = page.locator('.ws-grid')
+  const g = await grid.boundingBox()
+  if (!b || !g) throw new Error('no splitter')
+  const y = b.y + b.height / 2
+  await page.mouse.move(b.x + b.width / 2, y)
+  await page.mouse.down()
+  await page.mouse.move(g.x + g.width - 2, y, { steps: 10 })
+  // The flip turns the transition on for a moment, mid-drag; it switches itself off again.
+  await expect(grid).toHaveAttribute('data-snap', /.*/)
+  await page.mouse.up()
+  await expect(page.locator('.ws-slot[data-panel="db"]')).toHaveAttribute('inert', '')
+  await expect(grid).not.toHaveAttribute('data-snap', /.*/, { timeout: 400 })
+  expect(errors).toEqual([])
+})
+
 test('no ticket animation with reduced motion', async ({ admin, signedIn, viewport }) => {
   test.skip(!desktop(viewport), 'desktop layout')
   const project = await seeded(admin)
