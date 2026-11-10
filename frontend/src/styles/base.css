@@ -255,21 +255,21 @@ main:focus {
   animation: vt-out-depth var(--dur-fast) var(--ease-out) both;
 }
 :root[data-nav="sibling"]::view-transition-new(page) {
-  animation: vt-in-depth var(--dur-slow) var(--ease-standard) both;
-  animation-delay: 60ms;
+  animation: vt-in-depth var(--dur-base) var(--ease-out) both;
+  animation-delay: 30ms;
 }
 @keyframes vt-out-depth {
   to {
     opacity: 0;
     transform: scale(0.97);
-    filter: blur(6px);
+    filter: blur(4px);
   }
 }
 @keyframes vt-in-depth {
   from {
     opacity: 0;
     transform: scale(1.03);
-    filter: blur(6px);
+    filter: blur(4px);
   }
 }
 
@@ -278,14 +278,14 @@ main:focus {
    image never spills out of the growing card. */
 ::view-transition-group(hero) {
   animation-duration: var(--dur-slow);
-  animation-timing-function: var(--ease-standard);
+  animation-timing-function: var(--ease-drawer);
   overflow: clip;
   border-radius: var(--radius-lg);
 }
 ::view-transition-old(hero),
 ::view-transition-new(hero) {
   animation-duration: var(--dur-slow);
-  animation-timing-function: var(--ease-standard);
+  animation-timing-function: var(--ease-drawer);
 }
 /* Without a partner (the card scrolled away, a list still loading) the workspace just grows in or settles out. */
 ::view-transition-new(hero):only-child {
@@ -304,7 +304,7 @@ main:focus {
   background: var(--bg);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   animation-duration: var(--dur-slow);
-  animation-timing-function: var(--ease-standard);
+  animation-timing-function: var(--ease-drawer);
   animation-delay: 0ms;
 }
 :root[data-sheet="open"]::view-transition-old(page) {
