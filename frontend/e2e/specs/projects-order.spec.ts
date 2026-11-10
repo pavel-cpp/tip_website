@@ -164,3 +164,27 @@ test('the tab icon follows the app theme and falls back to the OS-adaptive file 
   await bar.chooseTheme('system')
   await expect.poll(href).toBe('/favicon.svg')
 })
+
+test('the create-project card steps aside while a card is dragged and comes back after the drop', async ({
+  admin,
+  signedIn,
+  viewport,
+}) => {
+  test.skip(!desktopOnly(viewport), 'mouse drag')
+  const prefix = uniq('Crt')
+  await admin.createProject(`${prefix} A`)
+  await admin.createProject(`${prefix} B`)
+  const page = await signedIn(adminCreds())
+  const create = page.locator('.project-create')
+  await expect(create).toBeVisible()
+  const a = await card(page, `${prefix} A`).boundingBox()
+  const b = await card(page, `${prefix} B`).boundingBox()
+  if (!a || !b) throw new Error('missing box')
+  await page.mouse.move(a.x + a.width / 2, a.y + 40)
+  await page.mouse.down()
+  await page.mouse.move(a.x + a.width / 2 + 12, a.y + 52, { steps: 3 })
+  await page.mouse.move(b.x + 12, b.y + 60, { steps: 8 })
+  await expect(create).toHaveCount(0)
+  await page.mouse.up()
+  await expect(create).toBeVisible()
+})

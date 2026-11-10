@@ -183,7 +183,8 @@ export default function Projects() {
     )
   }
 
-  const createCard = canCreate && !searching && (
+  // The card is part of the grid, so it would read as a drop slot; it steps aside while a project is dragged.
+  const createCard = canCreate && !searching && !isDragging && (
     <button
       type="button"
       className="project-card project-create"

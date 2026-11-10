@@ -1,6 +1,7 @@
 import { AppLink } from '../../components/AppLink'
 import { AvatarStack } from '../../components/Avatar'
 import { useI18n } from '../../i18n'
+import { useRealtime } from '../realtime/RealtimeProvider'
 import { OnlineAvatars } from '../realtime/RealtimeStatus'
 import './workspace-topbar.css'
 
@@ -21,6 +22,12 @@ export function WorkspaceTopbar({
   onSelectPeer,
 }: WorkspaceTopbarProps) {
   const { t } = useI18n()
+  const rt = useRealtime()
+  const onlineIds = new Set(
+    (rt?.snapshot.peers ?? []).filter((p) => p.id !== rt?.snapshot.you).map((p) => p.id),
+  )
+  // A member who is online is shown once, in the green group.
+  const offline = contributors.filter((c) => !onlineIds.has(c.id))
   return (
     <>
       <nav className="wsbar-crumbs" aria-label={t('workspace.crumbs')}>
@@ -35,16 +42,14 @@ export function WorkspaceTopbar({
         </span>
       </nav>
       <div className="wsbar-people">
-        {hasOnline && (
+        {(hasOnline || offline.length > 0) && (
           <div className="wsbar-group" data-testid="online-users">
-            <span className="wsbar-label">{t('workspace.people.online')}</span>
-            <OnlineAvatars onSelect={onSelectPeer} activeId={watchedId} />
-          </div>
-        )}
-        {contributors.length > 0 && (
-          <div className="wsbar-group wsbar-contrib">
             <span className="wsbar-label">{t('workspace.people.contributors')}</span>
-            <AvatarStack users={contributors.map((c) => ({ ...c, avatar: null }))} />
+            {/* Colleagues online now come first: green ring, a click jumps to what they are editing. */}
+            {hasOnline && <OnlineAvatars onSelect={onSelectPeer} activeId={watchedId} />}
+            {offline.length > 0 && (
+              <AvatarStack users={offline.map((c) => ({ ...c, avatar: null }))} max={hasOnline ? 3 : 4} />
+            )}
           </div>
         )}
       </div>
