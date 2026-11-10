@@ -64,7 +64,7 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
     )
   await expect.poll(async () => (await turn()).length).toBe(2)
   // Next: the new card arrives from the right, so it starts shifted right and turned the other way.
-  expect((await turn()).some((t) => t.includes('translateX(14%)'))).toBe(true)
+  expect((await turn()).some((t) => t.includes('translateX(10%)'))).toBe(true)
 
   // A burst of steps cancels the running turn each time: never more than the current pair.
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
@@ -74,8 +74,37 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
   // Back: mirrored.
   await page.keyboard.press('ArrowLeft')
   await expect(who).toContainText('Person 4')
-  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-14%)'))).toBe(true)
+  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-10%)'))).toBe(true)
   await expect.poll(async () => (await turn()).length, { timeout: 3000 }).toBeLessThanOrEqual(2)
+})
+
+test('a held arrow key swaps tickets without the page-turn', async ({ admin, signedIn, viewport }) => {
+  test.skip(!desktop(viewport), 'desktop layout')
+  const project = await seeded(admin)
+  const page = await signedIn(adminCreds())
+  const ws = new WorkspacePage(page)
+  await ws.open(project.id)
+  await pictureOnly(page, ws)
+  const who = page.getByTestId('ticket-who')
+  // The first keydown turns; the auto-repeats (a held key) must cancel it and swap instantly.
+  await page.keyboard.down('ArrowRight')
+  await page.keyboard.down('ArrowRight')
+  await page.keyboard.down('ArrowRight')
+  await page.keyboard.up('ArrowRight')
+  await expect(who).toContainText('Person 4')
+  const n = await page.evaluate(
+    () =>
+      document
+        .getAnimations()
+        .filter(
+          (a) =>
+            !(a instanceof CSSTransition) &&
+            ((a.effect as KeyframeEffect | null)?.target as HTMLElement | null)?.classList.contains(
+              'tk-canvas',
+            ),
+        ).length,
+  )
+  expect(n).toBe(0)
 })
 
 test('no ticket animation with reduced motion', async ({ admin, signedIn, viewport }) => {

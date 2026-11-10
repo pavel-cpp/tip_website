@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, type RefObject, useEffect, useMemo, useRef, useState } from 'react'
 import { AppLink } from '../../components/AppLink'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
@@ -17,8 +17,8 @@ import { ticketValues } from './ticketActions'
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
 const DEFAULT_ZOOM = 1
 
-/** Page-turn timing in ms: the old ticket leaves first, the new one follows a beat later. */
-const TURN = { out: 260, in: 340, delay: 70 } as const
+/** Page-turn timing in ms: keyboard-driven and repeated, so the whole turn stays within 240 ms. */
+const TURN = { out: 160, in: 240, delay: 0 } as const
 
 /**
  * Turns the card: the outgoing canvas swings away in the direction of travel (slight rotateY, fade), the
@@ -27,21 +27,20 @@ const TURN = { out: 260, in: 340, delay: 70 } as const
  */
 export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1): Animation[] {
   const swing = (x: number, deg: number): Keyframe => ({
-    transform: `translateX(${x}%) rotateY(${deg}deg) scale(0.94)`,
+    transform: `translateX(${x}%) rotateY(${deg}deg) scale(0.96)`,
     opacity: 0,
   })
   const rest: Keyframe = { transform: 'translateX(0) rotateY(0deg) scale(1)', opacity: 1 }
-  const ease = EASE.out
   return [
-    oldEl.animate([rest, swing(-14 * dir, 38 * dir)], {
+    oldEl.animate([rest, swing(-10 * dir, 26 * dir)], {
       duration: TURN.out,
       easing: EASE.out,
       fill: 'both',
     }),
-    newEl.animate([swing(14 * dir, -38 * dir), rest], {
+    newEl.animate([swing(10 * dir, -26 * dir), rest], {
       duration: TURN.in,
       delay: TURN.delay,
-      easing: ease,
+      easing: EASE.out,
       fill: 'backwards',
     }),
   ]
@@ -68,6 +67,8 @@ interface TicketPanelProps {
   compact?: boolean
   /** Picture-only mode: arrows to the previous/next participant and a "number, name" indicator. */
   nav?: TicketNav
+  /** Set while a held key repeats: tickets swap with no turn (read when the new ticket is drawn). */
+  instantRef?: RefObject<boolean>
 }
 
 export interface TicketNav {
@@ -92,6 +93,7 @@ export function TicketPanel({
   settingsTo,
   compact = false,
   nav,
+  instantRef,
 }: TicketPanelProps) {
   const { t, formatNumber } = useI18n()
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
@@ -131,6 +133,7 @@ export function TicketPanel({
         turning.current = []
         if (
           animate &&
+          !instantRef?.current &&
           old &&
           prev !== null &&
           prev !== shown &&

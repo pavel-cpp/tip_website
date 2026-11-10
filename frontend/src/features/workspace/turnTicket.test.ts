@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { EASE } from '../../lib/motion'
 import { turnTicket } from './TicketPanel'
 
 const fake = () => {
@@ -17,10 +18,16 @@ describe('turnTicket', () => {
       const [oldFrames] = oldEl.animate.mock.calls[0] as unknown as [Keyframe[]]
       const [newFrames] = newEl.animate.mock.calls[0] as unknown as [Keyframe[]]
       // Next (dir 1): the old card leaves to the left and the new one comes from the right.
-      expect(String(oldFrames[1]?.transform)).toContain(`translateX(${-14 * dir}%)`)
-      expect(String(newFrames[0]?.transform)).toContain(`translateX(${14 * dir}%)`)
+      expect(String(oldFrames[1]?.transform)).toContain(`translateX(${-10 * dir}%)`)
+      expect(String(newFrames[0]?.transform)).toContain(`translateX(${10 * dir}%)`)
       expect(oldFrames[1]?.opacity).toBe(0)
       expect(newFrames[1]?.opacity).toBe(1)
+      const [, oldOpts] = oldEl.animate.mock.calls[0] as unknown as [unknown, KeyframeAnimationOptions]
+      const [, newOpts] = newEl.animate.mock.calls[0] as unknown as [unknown, KeyframeAnimationOptions]
+      expect([oldOpts.duration, newOpts.duration]).toEqual([160, 240])
+      expect(newOpts.delay).toBe(0)
+      expect(oldOpts.easing).toBe(EASE.out)
+      expect(newOpts.easing).toBe(EASE.out)
     }
   })
 })

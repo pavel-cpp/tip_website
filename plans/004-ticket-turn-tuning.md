@@ -1,6 +1,6 @@
 # 004 — Page-turn of the ticket: faster, ease-out, skipped on key repeat
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: MEDIUM
 - **Category**: Purpose & frequency, Easing & duration
