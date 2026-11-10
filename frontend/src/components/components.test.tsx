@@ -394,6 +394,42 @@ describe('Tooltip', () => {
     fireEvent.pointerDown(document.body, { pointerType: 'touch' })
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
+
+  it('opens at once after a recent close, and with the delay once the window has passed', () => {
+    vi.useFakeTimers()
+    render(
+      <>
+        <Tooltip content="A">
+          <button type="button">a</button>
+        </Tooltip>
+        <Tooltip content="B">
+          <button type="button">b</button>
+        </Tooltip>
+      </>,
+    )
+    const a = screen.getByRole('button', { name: 'a' }).parentElement as HTMLElement
+    const b = screen.getByRole('button', { name: 'b' }).parentElement as HTMLElement
+    // Cold: the delay applies, and the tooltip animates.
+    act(() => vi.advanceTimersByTime(1000))
+    fireEvent.pointerEnter(a, { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(300))
+    expect(screen.getByRole('tooltip')).not.toHaveAttribute('data-instant')
+
+    // Warm: sliding to the neighbour opens it with no delay and no animation.
+    fireEvent.pointerLeave(a, { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(100))
+    fireEvent.pointerEnter(b, { pointerType: 'mouse' })
+    expect(screen.getByRole('tooltip')).toHaveTextContent('B')
+    expect(screen.getByRole('tooltip')).toHaveAttribute('data-instant', 'true')
+
+    // Cold again after the window.
+    fireEvent.pointerLeave(b, { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(600))
+    fireEvent.pointerEnter(a, { pointerType: 'mouse' })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(300))
+    expect(screen.getByRole('tooltip')).toHaveTextContent('A')
+  })
 })
 
 describe('Panel', () => {

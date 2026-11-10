@@ -58,7 +58,7 @@ function useSeen(): [React.RefObject<HTMLDivElement | null>, boolean] {
 
 interface ProjectCardProps {
   project: ProjectCardData
-  /** Position in the list; drives the entrance stagger (capped to 8 steps). */
+  /** Position in the list; currently unused since the entrance stagger was dropped. */
   index: number
   actions: ProjectAction[]
   onAction: (action: ProjectAction, project: ProjectCardData) => void
@@ -67,7 +67,7 @@ interface ProjectCardProps {
   dragging?: boolean
 }
 
-export function ProjectCard({ project, index, actions, onAction, dragProps, dragging }: ProjectCardProps) {
+export function ProjectCard({ project, actions, onAction, dragProps, dragging }: ProjectCardProps) {
   const { t } = useI18n()
   const [ref, seen] = useSeen()
   const image = useAuthedImage(project.image?.thumbUrl, seen)
@@ -98,7 +98,6 @@ export function ProjectCard({ project, index, actions, onAction, dragProps, drag
       data-flip-id={project.id}
       style={
         {
-          '--i': Math.min(index, 7),
           '--aside-w': `${asideWidth(online.length, items.length > 0) + 8}px`,
         } as CSSProperties
       }

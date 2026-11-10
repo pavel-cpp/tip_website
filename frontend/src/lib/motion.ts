@@ -77,7 +77,7 @@ export function usePresence(
       setMounted(true)
       return
     }
-    const id = setTimeout(() => setMounted(false), prefersReducedMotion() ? 0 : exitMs)
+    const id = setTimeout(() => setMounted(false), prefersReducedMotion() ? 100 : exitMs)
     return () => clearTimeout(id)
   }, [open, exitMs])
   return { mounted: open || mounted, state: open ? 'open' : 'closed' }

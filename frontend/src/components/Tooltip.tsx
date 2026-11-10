@@ -11,12 +11,16 @@ interface TooltipProps {
 
 const HOVER_DELAY = 300
 const TOUCH_HIDE = 2500
+/** Moving to a neighbouring control within this window skips the delay and the entrance animation. */
+const WARM_WINDOW = 500
+let lastClosedAt = Number.NEGATIVE_INFINITY
 
 /** Hover/focus on desktop, tap on touch devices. Esc or an outside tap dismisses it. */
 export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
   const id = useId()
   const [anchor, setAnchor] = useState<HTMLSpanElement | null>(null)
   const [open, setOpen] = useState(false)
+  const [instant, setInstant] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { ref, style } = useFloating<HTMLDivElement>(open, anchor, { side, align: 'center' })
 
@@ -25,11 +29,14 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
 
   useEffect(() => {
     if (!open) return
+    // Recorded on close so a pass-over that never opened a tooltip does not warm the next one.
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
     const onOutside = (e: PointerEvent) => !anchor?.contains(e.target as Node) && setOpen(false)
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onOutside)
     return () => {
+      lastClosedAt = performance.now()
+      setInstant(false)
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('pointerdown', onOutside)
     }
@@ -44,6 +51,12 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
         onPointerEnter={(e) => {
           if (e.pointerType === 'touch') return
           clear()
+          const sinceClose = performance.now() - lastClosedAt
+          if (sinceClose >= 0 && sinceClose < WARM_WINDOW) {
+            setInstant(true)
+            setOpen(true)
+            return
+          }
           timer.current = setTimeout(() => setOpen(true), HOVER_DELAY)
         }}
         onPointerLeave={(e) => {
@@ -57,7 +70,10 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
           setOpen((v) => !v)
           timer.current = setTimeout(() => setOpen(false), TOUCH_HIDE)
         }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => {
+          setInstant(true)
+          setOpen(true)
+        }}
         onBlur={() => setOpen(false)}
       >
         {cloneElement(children, { 'aria-describedby': open ? id : undefined })}
@@ -65,7 +81,14 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
       {open &&
         content &&
         createPortal(
-          <div ref={ref} id={id} role="tooltip" className="tooltip" style={style}>
+          <div
+            ref={ref}
+            id={id}
+            role="tooltip"
+            className="tooltip"
+            data-instant={instant || undefined}
+            style={style}
+          >
             {content}
           </div>,
           document.body,

@@ -236,8 +236,8 @@ td.cell-actions {
 
 /* Rows slide in on mount (initial list: staggered by --i, at most 8 steps of 30 ms). */
 .row-enter {
-  animation: row-in var(--dur-base) var(--ease-standard) both;
-  animation-delay: calc(var(--i, 0) * 30ms);
+  animation: row-in var(--dur-base) var(--ease-out) both;
+  animation-delay: min(calc(var(--i, 0) * 30ms), 180ms);
 }
 @keyframes row-in {
   from {
