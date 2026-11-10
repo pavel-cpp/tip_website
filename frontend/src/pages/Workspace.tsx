@@ -428,7 +428,7 @@ function WorkspaceView({ project }: { project: Project }) {
       const el = e.target instanceof HTMLElement ? e.target : null
       if (
         el?.closest(
-          'input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"], [role="tablist"]',
+          'input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"], [role="tablist"], [role="separator"]',
         )
       ) {
         return
