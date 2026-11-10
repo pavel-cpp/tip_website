@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 import { type Api, adminCreds, uniq } from '../support/api'
+import { Topbar } from '../support/pages'
 import { expect, test } from '../support/test'
 import { WorkspacePage } from '../support/workspace'
 
@@ -254,19 +255,22 @@ test('frames', async ({ admin, signedIn, viewport, browserName }) => {
     await page.waitForTimeout(300)
   }
   const card = page.locator(`.project-card[data-flip-id="${project.id}"] a.project-card-link`)
-  await shot('open', 'view-transition', [60, 140, 240, 340], () => card.click())
-  await shot('sheet-open', 'view-transition', [80, 180, 300], () =>
+  await shot('open', 'view-transition', [40, 100, 160, 240, 320], () => card.click())
+  await shot('sheet-open', 'view-transition', [40, 100, 160, 240, 320], () =>
     page.getByRole('button', { name: ws(page, 'workspace.settings') }).click(),
   )
-  await shot('sheet-close', 'view-transition', [80, 180, 300], () =>
+  await shot('sheet-close', 'view-transition', [40, 100, 160, 240, 320], () =>
     page.getByRole('button', { name: ws(page, 'action.close') }).click(),
   )
-  await shot('close', 'view-transition', [60, 140, 240, 340], () =>
+  await shot('close', 'view-transition', [40, 100, 160, 240, 320], () =>
     page
       .getByRole('link', { name: ws(page, 'projects.title') })
       .first()
       .click(),
   )
+
+  await shot('sibling', 'view-transition', [40, 100, 180, 260], () => new Topbar(page).goTo('adminUsers'))
+  await page.goto('/')
 
   // Page-turn between tickets (picture-only mode).
   await card.click()
@@ -285,7 +289,7 @@ test('frames', async ({ admin, signedIn, viewport, browserName }) => {
           ),
       ),
   )
-  for (const t of [60, 140, 230, 320]) {
+  for (const t of [30, 60, 100, 150]) {
     await page.evaluate((ms) => {
       for (const a of document.getAnimations()) {
         a.pause()

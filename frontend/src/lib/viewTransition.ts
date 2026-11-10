@@ -87,8 +87,26 @@ function visibleCard(id: string): HTMLElement | null {
 export function routeCommitted(path: string): void {
   committedPath = path
   if (heroId && routeRank(path) === 0) visibleCard(heroId)?.setAttribute('data-hero', '')
-  waiting?.()
+  const release = waiting
   waiting = undefined
+  if (release) whenCrumbsReady(path, release)
+}
+
+/**
+ * The project crumbs in the top bar are set by the page's own effects, right after the route commit. The new
+ * frame is captured when the transition callback resolves, so hold it back until they exist (named elements
+ * such as the project title must be there to find their partner), at most 120 ms. Timers, not animation
+ * frames: rendering is suspended while a transition waits for its callback, so rAF would not fire at all.
+ */
+function whenCrumbsReady(path: string, done: () => void): void {
+  const rank = routeRank(path)
+  if (!rank) return done()
+  const started = performance.now()
+  const poll = () => {
+    if (document.querySelector('header.topbar .wsbar-title') || performance.now() - started > 120) done()
+    else setTimeout(poll, 4)
+  }
+  poll()
 }
 
 function startNav(native: Document['startViewTransition'], cb: () => void | Promise<void>): ViewTransition {
