@@ -606,12 +606,12 @@
   z-index: 1;
   opacity: 0;
   /* The outgoing canvas stays opaque until the incoming one has finished fading in. */
-  transition: opacity 0s linear var(--dur-fast);
+  transition: opacity 0s var(--ease-out) var(--dur-fast);
 }
 .tk-canvas[data-front] {
   z-index: 2;
   opacity: 1;
-  transition: opacity var(--dur-fast) linear;
+  transition: opacity var(--dur-fast) var(--ease-out);
 }
 .tk-stage:not([data-ready]) .tk-canvas {
   opacity: 0;
