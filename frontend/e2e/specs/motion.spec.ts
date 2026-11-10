@@ -107,7 +107,7 @@ test('a held arrow key swaps tickets without the page-turn', async ({ admin, sig
   expect(n).toBe(0)
 })
 
-test('dragging the handle past the collapse point eases the panel away', async ({
+test('the splitter follows the pointer 1:1, dims the panel that would hide, and settles on release', async ({
   admin,
   signedIn,
   viewport,
@@ -120,19 +120,45 @@ test('dragging the handle past the collapse point eases the panel away', async (
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
   const split = page.getByRole('separator', { name: ws.t('workspace.split.label') })
-  const b = await split.boundingBox()
   const grid = page.locator('.ws-grid')
+  const picture = page.locator('.ws-slot[data-panel="picture"]')
+  const db = page.locator('.ws-slot[data-panel="db"]')
+  const b = await split.boundingBox()
   const g = await grid.boundingBox()
   if (!b || !g) throw new Error('no splitter')
   const y = b.y + b.height / 2
   await page.mouse.move(b.x + b.width / 2, y)
   await page.mouse.down()
-  await page.mouse.move(g.x + g.width - 2, y, { steps: 10 })
-  // The flip turns the transition on for a moment, mid-drag; it switches itself off again.
-  await expect(grid).toHaveAttribute('data-snap', /.*/)
+  await expect(grid).toHaveAttribute('data-dragging', '')
+
+  // 1:1: the picture panel is as wide as the pointer travelled, with no easing lag (30 % of the grid).
+  await page.mouse.move(g.x + g.width * 0.3, y, { steps: 6 })
+  await expect.poll(async () => ((await picture.boundingBox())?.width ?? 0) / g.width).toBeCloseTo(0.3, 1)
+  await expect(grid).not.toHaveAttribute('data-hide', /.*/)
+
+  // Past the hide point the panel that would disappear dims; nothing has been hidden yet.
+  await page.mouse.move(g.x + g.width - 2, y, { steps: 8 })
+  await expect(grid).toHaveAttribute('data-hide', 'second')
+  await expect
+    .poll(async () => Number(await db.evaluate((el) => getComputedStyle(el).opacity)))
+    .toBeLessThan(0.6)
+  await expect(db).not.toHaveAttribute('inert', '')
+
   await page.mouse.up()
-  await expect(page.locator('.ws-slot[data-panel="db"]')).toHaveAttribute('inert', '')
-  await expect(grid).not.toHaveAttribute('data-snap', /.*/, { timeout: 400 })
+  await expect(db).toHaveAttribute('inert', '')
+  await expect(grid).not.toHaveAttribute('data-dragging', /.*/)
+  await expect(grid).not.toHaveAttribute('data-hide', /.*/)
+
+  // Dragging the hidden panel's handle back out is 1:1 from the edge: the panel grows under the pointer.
+  const b2 = await split.boundingBox()
+  if (!b2) throw new Error('no splitter')
+  await page.mouse.move(b2.x + b2.width / 2, y)
+  await page.mouse.down()
+  await page.mouse.move(g.x + g.width * 0.6, y, { steps: 8 })
+  await expect(db).not.toHaveAttribute('data-hide', /.*/)
+  await expect.poll(async () => ((await picture.boundingBox())?.width ?? 0) / g.width).toBeCloseTo(0.6, 1)
+  await page.mouse.up()
+  await expect(db).not.toHaveAttribute('inert', '')
   expect(errors).toEqual([])
 })
 

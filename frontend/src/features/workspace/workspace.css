@@ -97,12 +97,6 @@
   -webkit-user-select: none;
   cursor: col-resize;
 }
-/* Crossing the collapse point while dragging: the panel eases away or back, the rest of the drag stays 1:1. */
-.ws-grid[data-dragging][data-snap] {
-  transition:
-    grid-template-columns var(--dur-base) var(--ease-in-out),
-    grid-template-rows var(--dur-base) var(--ease-in-out);
-}
 .ws-slot {
   min-width: 0;
   min-height: 0;
@@ -119,6 +113,17 @@
   transition:
     opacity var(--dur-fast) var(--ease-out),
     visibility 0s linear var(--dur-slow);
+}
+/* While the handle is dragged the tracks follow the pointer 1:1 (no easing); the panel that would hide on release dims. */
+.ws-grid[data-hide="first"] > .ws-slot[data-panel="picture"],
+.ws-grid[data-hide="second"] > .ws-slot[data-panel="db"] {
+  opacity: 0.35;
+}
+/* A hidden panel is shown while its handle is dragged out, so the panel grows from the edge under the pointer. */
+.ws-grid[data-dragging] > .ws-slot[inert] {
+  opacity: 1;
+  visibility: visible;
+  transition: none;
 }
 .ws-panel {
   flex: 1;
@@ -906,7 +911,7 @@ body[data-workspace] .toast-region {
   flex: none;
 }
 
-/* Splitter between the table and the picture. */
+/* Splitter between the table and the picture. The column is 16 px wide; the invisible ::before widens the grab area. */
 .ws-split {
   position: relative;
   z-index: 3;
@@ -919,8 +924,16 @@ body[data-workspace] .toast-region {
   touch-action: none;
   outline: none;
 }
+.ws-split::before {
+  content: "";
+  position: absolute;
+  inset: 0 -8px;
+}
 .ws-split[data-orientation="vertical"] {
   cursor: row-resize;
+}
+.ws-split[data-orientation="vertical"]::before {
+  inset: -8px 0;
 }
 .ws-split-grip {
   position: absolute;
@@ -929,24 +942,54 @@ body[data-workspace] .toast-region {
   width: 4px;
   border-radius: 2px;
   background: var(--border-strong);
-  transition: background-color var(--dur-fast) var(--ease-standard);
+  transition: background-color var(--dur-fast) var(--ease-out);
 }
 .ws-split[data-orientation="vertical"] .ws-split-grip {
   width: auto;
   height: 4px;
+}
+/* Three dots on a small pill: says "grab here" without hovering. Opacity and transform only. */
+.ws-split-dots {
+  position: relative;
+  width: 12px;
+  height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background:
+    radial-gradient(circle, var(--text-muted) 1.3px, transparent 1.8px) center / 12px 10px repeat-y,
+    var(--bg-elev);
+  opacity: 0.85;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.ws-split[data-orientation="vertical"] .ws-split-dots {
+  width: 36px;
+  height: 12px;
+  background:
+    radial-gradient(circle, var(--text-muted) 1.3px, transparent 1.8px) center / 10px 12px repeat-x,
+    var(--bg-elev);
 }
 /* A hidden panel leaves the handle on the edge; it stays visible so it can be pulled back out. */
 .ws-split[data-collapsed] .ws-split-grip {
   background: var(--accent);
 }
 @media (hover: hover) {
-  .ws-split:not([data-collapsed]):hover .ws-split-grip {
+  .ws-split:hover .ws-split-grip {
     background: var(--accent);
+  }
+  .ws-split:hover .ws-split-dots {
+    opacity: 1;
+    transform: scale(1.08);
   }
 }
 .ws-split:focus-visible .ws-split-grip,
 .ws-grid[data-dragging] .ws-split-grip {
   background: var(--accent);
+}
+.ws-grid[data-dragging] .ws-split-dots {
+  opacity: 1;
+  transform: scale(1.12);
 }
 .ws-split:focus-visible {
   outline: 2px solid var(--accent);
