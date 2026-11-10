@@ -32,17 +32,34 @@ export function ratioFromPointer(pos: number, start: number, size: number, handl
   return (pos - start - handle / 2) / room
 }
 
+/** Which panel a handle released at `raw` would hide (with a little hysteresis while one is already hidden). */
+export function hideSide(raw: number, collapsed: Collapsed = null): Collapsed {
+  if (!Number.isFinite(raw)) return collapsed
+  const first = collapsed === 'first' ? REOPEN_AT : COLLAPSE_AT
+  const second = collapsed === 'second' ? 1 - REOPEN_AT : 1 - COLLAPSE_AT
+  if (raw < first) return 'first'
+  if (raw > second) return 'second'
+  return null
+}
+
 /**
- * State after the handle was dragged to `raw`. The visible ratio is remembered while a panel is hidden,
+ * State after the handle was released at `raw`. The visible ratio is remembered while a panel is hidden,
  * so keyboard restore (and the next drag out) returns to a sensible size.
  */
 export function dragState(raw: number, prev: SplitState): SplitState {
   if (!Number.isFinite(raw)) return prev
-  const hideFirst = prev.collapsed === 'first' ? REOPEN_AT : COLLAPSE_AT
-  const hideSecond = prev.collapsed === 'second' ? 1 - REOPEN_AT : 1 - COLLAPSE_AT
-  if (raw < hideFirst) return { ratio: prev.ratio, collapsed: 'first' }
-  if (raw > hideSecond) return { ratio: prev.ratio, collapsed: 'second' }
-  return { ratio: clampRatio(raw), collapsed: null }
+  const side = hideSide(raw, prev.collapsed)
+  return side ? { ratio: prev.ratio, collapsed: side } : { ratio: clampRatio(raw), collapsed: null }
+}
+
+/** Where the handle sits now, as the share of the first panel (a hidden panel counts as 0 or 1). */
+export const handleRatio = ({ ratio, collapsed }: SplitState): number =>
+  collapsed === 'first' ? 0 : collapsed === 'second' ? 1 : ratio
+
+/** Grid track list while the handle follows the pointer: the share is free (0..1), not clamped to the limits. */
+export function liveTracks(raw: number, handlePx: number): string {
+  const r = Math.min(1, Math.max(0, raw))
+  return `${r}fr ${handlePx}px ${1 - r}fr`
 }
 
 /**

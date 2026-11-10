@@ -55,7 +55,6 @@ import { useTicketActions } from '../features/workspace/useTicketActions'
 import { WorkspaceTopbar } from '../features/workspace/WorkspaceTopbar'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
-import { prefersReducedMotion } from '../lib/motion'
 import type { TicketPlaceholders } from '../lib/ticket'
 import { useImageElement } from '../lib/ticket'
 import '../features/workspace/workspace.css'
@@ -391,25 +390,11 @@ function WorkspaceView({ project }: { project: Project }) {
   const stacked = useStacked()
   const userId = user?.id ?? 'anon'
   const [split, setSplit] = useState<SplitState>(() => loadSplit(userId))
-  const [dragging, setDragging] = useState(false)
   const gridRef = useRef<HTMLDivElement>(null)
-  // A drag that crosses the collapse point snaps the panel away or back with a short ease instead of teleporting.
-  const [snap, setSnap] = useState(false)
-  const lastCollapsed = useRef(split.collapsed)
-  const snapTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // The drag itself never touches React state (the Splitter drives the grid directly); only the settled split is saved.
   useEffect(() => {
-    if (lastCollapsed.current === split.collapsed) return
-    lastCollapsed.current = split.collapsed
-    if (!dragging || prefersReducedMotion()) return
-    setSnap(true)
-    clearTimeout(snapTimer.current)
-    snapTimer.current = setTimeout(() => setSnap(false), 240)
-  }, [split.collapsed, dragging])
-  useEffect(() => () => clearTimeout(snapTimer.current), [])
-  // Persisted once a drag is over, not on every pointer move.
-  useEffect(() => {
-    if (!dragging) saveSplit(userId, split)
-  }, [split, dragging, userId])
+    saveSplit(userId, split)
+  }, [split, userId])
   // On phones the tabs decide what is shown; the splitter state only applies to wider screens.
   const visible = (p: PanelId) =>
     narrow ? tab === p : split.collapsed !== (p === 'picture' ? 'first' : 'second')
@@ -879,15 +864,15 @@ function WorkspaceView({ project }: { project: Project }) {
       <div
         className="ws-grid"
         ref={gridRef}
-        data-dragging={dragging || undefined}
-        data-snap={snap || undefined}
         data-collapsed={narrow ? undefined : (split.collapsed ?? undefined)}
+        // The tracks live in a variable so the Splitter can drive them frame by frame during a drag.
         style={
           narrow
             ? undefined
-            : stacked
-              ? { gridTemplateRows: tracks(split, HANDLE_PX) }
-              : { gridTemplateColumns: tracks(split, HANDLE_PX) }
+            : ({
+                '--ws-tracks': tracks(split, HANDLE_PX),
+                [stacked ? 'gridTemplateRows' : 'gridTemplateColumns']: 'var(--ws-tracks)',
+              } as React.CSSProperties)
         }
       >
         <div
@@ -905,7 +890,6 @@ function WorkspaceView({ project }: { project: Project }) {
             gridRef={gridRef}
             names={names}
             onSplit={setSplit}
-            onDragging={setDragging}
           />
         )}
         <div

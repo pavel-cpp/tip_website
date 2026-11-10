@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
 import { type Api, adminCreds, uniq } from '../support/api'
+import { Topbar } from '../support/pages'
 import { expect, test } from '../support/test'
 import { WorkspacePage } from '../support/workspace'
 
@@ -63,8 +64,8 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
         .map((a) => String((a.effect as KeyframeEffect).getKeyframes()[0]?.transform)),
     )
   await expect.poll(async () => (await turn()).length).toBe(2)
-  // Next: the new card arrives from the right, so it starts shifted right and turned the other way.
-  expect((await turn()).some((t) => t.includes('translateX(10%)'))).toBe(true)
+  // Next: the new card arrives from the right, so it starts shifted right.
+  expect((await turn()).some((t) => t.includes('translateX(32px)'))).toBe(true)
 
   // A burst of steps cancels the running turn each time: never more than the current pair.
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
@@ -74,7 +75,7 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
   // Back: mirrored.
   await page.keyboard.press('ArrowLeft')
   await expect(who).toContainText('Person 4')
-  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-10%)'))).toBe(true)
+  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-32px)'))).toBe(true)
   await expect.poll(async () => (await turn()).length, { timeout: 3000 }).toBeLessThanOrEqual(2)
 })
 
@@ -107,7 +108,7 @@ test('a held arrow key swaps tickets without the page-turn', async ({ admin, sig
   expect(n).toBe(0)
 })
 
-test('dragging the handle past the collapse point eases the panel away', async ({
+test('the splitter follows the pointer 1:1, dims the panel that would hide, and settles on release', async ({
   admin,
   signedIn,
   viewport,
@@ -120,19 +121,45 @@ test('dragging the handle past the collapse point eases the panel away', async (
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
   const split = page.getByRole('separator', { name: ws.t('workspace.split.label') })
-  const b = await split.boundingBox()
   const grid = page.locator('.ws-grid')
+  const picture = page.locator('.ws-slot[data-panel="picture"]')
+  const db = page.locator('.ws-slot[data-panel="db"]')
+  const b = await split.boundingBox()
   const g = await grid.boundingBox()
   if (!b || !g) throw new Error('no splitter')
   const y = b.y + b.height / 2
   await page.mouse.move(b.x + b.width / 2, y)
   await page.mouse.down()
-  await page.mouse.move(g.x + g.width - 2, y, { steps: 10 })
-  // The flip turns the transition on for a moment, mid-drag; it switches itself off again.
-  await expect(grid).toHaveAttribute('data-snap', /.*/)
+  await expect(grid).toHaveAttribute('data-dragging', '')
+
+  // 1:1: the picture panel is as wide as the pointer travelled, with no easing lag (30 % of the grid).
+  await page.mouse.move(g.x + g.width * 0.3, y, { steps: 6 })
+  await expect.poll(async () => ((await picture.boundingBox())?.width ?? 0) / g.width).toBeCloseTo(0.3, 1)
+  await expect(grid).not.toHaveAttribute('data-hide', /.*/)
+
+  // Past the hide point the panel that would disappear dims; nothing has been hidden yet.
+  await page.mouse.move(g.x + g.width - 2, y, { steps: 8 })
+  await expect(grid).toHaveAttribute('data-hide', 'second')
+  await expect
+    .poll(async () => Number(await db.evaluate((el) => getComputedStyle(el).opacity)))
+    .toBeLessThan(0.6)
+  await expect(db).not.toHaveAttribute('inert', '')
+
   await page.mouse.up()
-  await expect(page.locator('.ws-slot[data-panel="db"]')).toHaveAttribute('inert', '')
-  await expect(grid).not.toHaveAttribute('data-snap', /.*/, { timeout: 400 })
+  await expect(db).toHaveAttribute('inert', '')
+  await expect(grid).not.toHaveAttribute('data-dragging', /.*/)
+  await expect(grid).not.toHaveAttribute('data-hide', /.*/)
+
+  // Dragging the hidden panel's handle back out is 1:1 from the edge: the panel grows under the pointer.
+  const b2 = await split.boundingBox()
+  if (!b2) throw new Error('no splitter')
+  await page.mouse.move(b2.x + b2.width / 2, y)
+  await page.mouse.down()
+  await page.mouse.move(g.x + g.width * 0.6, y, { steps: 8 })
+  await expect(db).not.toHaveAttribute('data-hide', /.*/)
+  await expect.poll(async () => ((await picture.boundingBox())?.width ?? 0) / g.width).toBeCloseTo(0.6, 1)
+  await page.mouse.up()
+  await expect(db).not.toHaveAttribute('inert', '')
   expect(errors).toEqual([])
 })
 
@@ -228,19 +255,22 @@ test('frames', async ({ admin, signedIn, viewport, browserName }) => {
     await page.waitForTimeout(300)
   }
   const card = page.locator(`.project-card[data-flip-id="${project.id}"] a.project-card-link`)
-  await shot('open', 'view-transition', [60, 140, 240, 340], () => card.click())
-  await shot('sheet-open', 'view-transition', [80, 180, 300], () =>
+  await shot('open', 'view-transition', [40, 100, 160, 240, 320], () => card.click())
+  await shot('sheet-open', 'view-transition', [40, 100, 160, 240, 320], () =>
     page.getByRole('button', { name: ws(page, 'workspace.settings') }).click(),
   )
-  await shot('sheet-close', 'view-transition', [80, 180, 300], () =>
+  await shot('sheet-close', 'view-transition', [40, 100, 160, 240, 320], () =>
     page.getByRole('button', { name: ws(page, 'action.close') }).click(),
   )
-  await shot('close', 'view-transition', [60, 140, 240, 340], () =>
+  await shot('close', 'view-transition', [40, 100, 160, 240, 320], () =>
     page
       .getByRole('link', { name: ws(page, 'projects.title') })
       .first()
       .click(),
   )
+
+  await shot('sibling', 'view-transition', [40, 100, 180, 260], () => new Topbar(page).goTo('adminUsers'))
+  await page.goto('/')
 
   // Page-turn between tickets (picture-only mode).
   await card.click()
@@ -259,7 +289,7 @@ test('frames', async ({ admin, signedIn, viewport, browserName }) => {
           ),
       ),
   )
-  for (const t of [60, 140, 230, 320]) {
+  for (const t of [30, 60, 100, 150]) {
     await page.evaluate((ms) => {
       for (const a of document.getAnimations()) {
         a.pause()

@@ -5,6 +5,9 @@ import {
   clampRatio,
   DEFAULT_SPLIT,
   dragState,
+  handleRatio,
+  hideSide,
+  liveTracks,
   MAX_RATIO,
   MIN_RATIO,
   nudgeState,
@@ -71,6 +74,27 @@ describe('splitter math', () => {
     expect(parseSplit('{nope')).toEqual(DEFAULT_SPLIT)
     expect(parseSplit('{"ratio":0.3,"collapsed":"second"}')).toEqual({ ratio: 0.3, collapsed: 'second' })
     expect(parseSplit('{"ratio":9,"collapsed":"x"}')).toEqual({ ratio: MAX_RATIO, collapsed: null })
+  })
+})
+
+describe('live drag helpers', () => {
+  it('says which panel a release would hide, with hysteresis for an already hidden one', () => {
+    expect(hideSide(0.5)).toBeNull()
+    expect(hideSide(COLLAPSE_AT - 0.01)).toBe('first')
+    expect(hideSide(1 - COLLAPSE_AT + 0.01)).toBe('second')
+    // Already hidden: a small pull is not enough to bring it back.
+    expect(hideSide(COLLAPSE_AT + 0.02, 'first')).toBe('first')
+    expect(hideSide(0.3, 'first')).toBeNull()
+    expect(hideSide(Number.NaN, 'second')).toBe('second')
+  })
+
+  it('reports where the handle is and builds free (unclamped) live tracks', () => {
+    expect(handleRatio({ ratio: 0.4, collapsed: null })).toBe(0.4)
+    expect(handleRatio({ ratio: 0.4, collapsed: 'first' })).toBe(0)
+    expect(handleRatio({ ratio: 0.4, collapsed: 'second' })).toBe(1)
+    expect(liveTracks(0.05, 16)).toBe('0.05fr 16px 0.95fr')
+    expect(liveTracks(-1, 16)).toBe('0fr 16px 1fr')
+    expect(liveTracks(2, 16)).toBe('1fr 16px 0fr')
   })
 })
 
