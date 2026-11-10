@@ -54,17 +54,7 @@
   overflow: hidden;
   background: var(--bg-elev);
   box-shadow: var(--shadow-card);
-  transition: transform var(--dur-fast) var(--ease-standard);
-  /* backwards: the end state must not stay pinned, or it would override the hover transform */
-  animation: card-in var(--dur-base) var(--ease-standard) backwards;
-  /* The stagger is capped so the last card of a long list does not appear seconds later. */
-  animation-delay: min(calc(var(--i, 0) * 30ms), 180ms);
-}
-@keyframes card-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
+  transition: transform var(--dur-fast) var(--ease-out);
 }
 @media (hover: hover) {
   .project-card:hover {

@@ -220,7 +220,6 @@
   font-weight: var(--fw-bold);
   font-size: calc(var(--size) * 0.38);
   border: 2px solid var(--bg-elev);
-  animation: pop-in var(--dur-base) var(--ease-standard) both;
 }
 .avatar-stack {
   display: flex;

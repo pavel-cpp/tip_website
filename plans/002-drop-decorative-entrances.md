@@ -1,6 +1,6 @@
 # 002 — Remove decorative entrance motion that fires constantly
 
-- **Status**: TODO
+- **Status**: DONE
 - **Commit**: c8d7b7a
 - **Severity**: HIGH
 - **Category**: Purpose & frequency
