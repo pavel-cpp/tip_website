@@ -5,6 +5,7 @@ version: "3"
 vars:
   DEV_COMPOSE: deploy/docker-compose.dev.yml
   LOCAL_COMPOSE: deploy/docker-compose.local.yml
+  LOCAL_OBS_COMPOSE: deploy/docker-compose.local.obs.yml
 
 tasks:
   dev:up:
@@ -21,6 +22,16 @@ tasks:
     desc: Build and start the whole app in Docker (tipd + Postgres + Redis) on http://localhost:8080
     cmds:
       - docker compose -f {{.LOCAL_COMPOSE}} up -d --build --wait
+
+  local:obs:up:
+    desc: Same as local:up plus Prometheus, Loki, Vector and Grafana (http://localhost:3000, admin / admin-dev-password)
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} -f {{.LOCAL_OBS_COMPOSE}} up -d --build --wait
+
+  local:obs:down:
+    desc: Stop the local stack together with its observability services; pass -- -v to also delete data
+    cmds:
+      - docker compose -f {{.LOCAL_COMPOSE}} -f {{.LOCAL_OBS_COMPOSE}} down {{.CLI_ARGS}}
 
   local:down:
     desc: Stop the local Docker stack; pass -- -v to also delete its data

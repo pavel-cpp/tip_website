@@ -1,0 +1,132 @@
+# Observability for the local stack: Prometheus (metrics), Loki + Vector (logs) and Grafana (dashboards).
+# It is an overlay: it adds services to docker-compose.local.yml and points tipd at them, so always pass both files:
+#
+#   docker compose -f deploy/docker-compose.local.yml -f deploy/docker-compose.local.obs.yml up -d --build
+#
+#   Grafana     http://localhost:3000   (login: admin / admin-dev-password; dashboards are in the "TIP" folder)
+#   Prometheus  http://localhost:9091
+#   Loki        http://localhost:3100   (queried through Grafana: Explore -> Loki)
+#
+# The same configs and dashboards as production (deploy/prometheus, loki, vector, grafana) are used, minus
+# node_exporter, the backup job and alert delivery, which only make sense on the server. Everything listens on
+# 127.0.0.1 only. Needs about 600 MB of RAM on top of the base stack. Data lives in named volumes and is cleaned
+# by `down -v` together with the rest of the local stack; retention is 3 days like in production.
+services:
+  tipd:
+    environment:
+      # Admin menu links (Grafana) and the Loki probe on the status page.
+      GRAFANA_URL: http://localhost:${GRAFANA_PORT:-3000}
+      LOKI_URL: http://loki:3100
+    labels:
+      tip.logs: "true"
+
+  postgres:
+    labels:
+      tip.logs: "true"
+
+  redis:
+    labels:
+      tip.logs: "true"
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d
+      - --storage.tsdb.retention.size=300MB
+    volumes:
+      # Local variant: no node_exporter target, so nothing shows up red on the targets page.
+      - ./prometheus/prometheus.local.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9091}:9090"
+    depends_on:
+      tipd:
+        condition: service_healthy
+    labels:
+      tip.logs: "true"
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    environment:
+      OBS_RETENTION_DAYS: "3"
+    command:
+      - -config.file=/etc/loki/loki.yml
+      - -config.expand-env=true
+      - -target=all
+    volumes:
+      - ./loki/loki.yml:/etc/loki/loki.yml:ro
+      - lokidata:/loki
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      tip.logs: "true"
+
+  vector:
+    image: timberio/vector:0.43.1-alpine
+    restart: unless-stopped
+    command: ["--config", "/etc/vector/vector.yaml"]
+    environment:
+      VECTOR_LOG: warn
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      # Vector lists containers and reads their logs through the Docker socket (Docker Desktop exposes it too).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    labels:
+      tip.logs: "true"
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin-dev-password}
+      GF_SERVER_ROOT_URL: http://localhost:${GRAFANA_PORT:-3000}/
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_LOG_LEVEL: warn
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_ANALYTICS_FEEDBACK_LINKS_ENABLED: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 5s
+    volumes:
+      - grafanadata:/var/lib/grafana
+      # Datasources and dashboards only; alert rules need a mail server or webhook that a laptop does not have.
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana-dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      tip.logs: "true"
+
+volumes:
+  promdata:
+  lokidata:
+  grafanadata:

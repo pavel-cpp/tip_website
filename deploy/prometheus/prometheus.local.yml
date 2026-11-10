@@ -1,0 +1,22 @@
+# Prometheus for the local Docker stack (docker-compose.local.obs.yml): the production scrape jobs minus node_exporter.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: tipd
+    static_configs:
+      - targets: ["tipd:9090"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+
+  - job_name: vector
+    static_configs:
+      - targets: ["vector:9598"]
