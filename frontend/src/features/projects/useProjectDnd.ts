@@ -1,5 +1,5 @@
 import { type PointerEvent as ReactPointerEvent, type RefObject, useEffect, useRef, useState } from 'react'
-import { DURATION, prefersReducedMotion } from '../../lib/motion'
+import { DURATION, EASE, prefersReducedMotion } from '../../lib/motion'
 import type { ProjectStatus } from './api'
 import { insertionIndex } from './order'
 
@@ -169,7 +169,7 @@ export function useProjectDnd(options: Options) {
       if (!prefersReducedMotion() && typeof el.animate === 'function') {
         el.animate([{ transform: from }, { transform: 'none' }], {
           duration: DURATION.base,
-          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+          easing: EASE.out,
         })
       }
     }

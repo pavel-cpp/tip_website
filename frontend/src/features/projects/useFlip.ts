@@ -1,5 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef } from 'react'
-import { DURATION, prefersReducedMotion } from '../../lib/motion'
+import { DURATION, EASE, prefersReducedMotion } from '../../lib/motion'
 import { flipDelta } from './logic'
 
 export interface FlipApi {
@@ -44,7 +44,7 @@ export function useFlip(container: RefObject<HTMLElement | null>, paused = false
       if (!delta) continue
       el.animate(
         [{ transform: `translate(${delta.dx}px, ${delta.dy}px)` }, { transform: 'translate(0, 0)' }],
-        { duration: DURATION.slow, easing: 'cubic-bezier(0.2, 0, 0, 1)' },
+        { duration: DURATION.slow, easing: EASE.inOut },
       )
     }
     previous.current = next

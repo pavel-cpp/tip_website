@@ -3,6 +3,12 @@ import { readStorage, writeStorage } from './storage'
 
 // Mirrors the CSS motion tokens in styles/tokens.css (docs/06-frontend.md, section 10.2).
 export const DURATION = { press: 80, fast: 140, base: 220, slow: 360 } as const
+// Mirrors --ease-out, --ease-in-out and --ease-drawer for Web Animations API calls.
+export const EASE = {
+  out: 'cubic-bezier(0.23, 1, 0.32, 1)',
+  inOut: 'cubic-bezier(0.77, 0, 0.175, 1)',
+  drawer: 'cubic-bezier(0.32, 0.72, 0, 1)',
+} as const
 export const SPRING = { stiffness: 420, damping: 34 } as const
 
 const KEY = 'tip.reduceMotion'

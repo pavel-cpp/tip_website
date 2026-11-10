@@ -2,7 +2,7 @@ import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { AppLink } from '../../components/AppLink'
 import { Button } from '../../components/Button'
 import { useI18n } from '../../i18n'
-import { prefersReducedMotion } from '../../lib/motion'
+import { EASE, prefersReducedMotion } from '../../lib/motion'
 import {
   imageSize,
   loadFonts,
@@ -31,11 +31,11 @@ export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1):
     opacity: 0,
   })
   const rest: Keyframe = { transform: 'translateX(0) rotateY(0deg) scale(1)', opacity: 1 }
-  const ease = 'cubic-bezier(0.2, 0, 0, 1)'
+  const ease = EASE.out
   return [
     oldEl.animate([rest, swing(-14 * dir, 38 * dir)], {
       duration: TURN.out,
-      easing: 'cubic-bezier(0.3, 0, 1, 1)',
+      easing: EASE.out,
       fill: 'both',
     }),
     newEl.animate([swing(14 * dir, -38 * dir), rest], {

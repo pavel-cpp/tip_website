@@ -11,7 +11,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { DURATION, prefersReducedMotion } from '../lib/motion'
+import { DURATION, EASE, prefersReducedMotion } from '../lib/motion'
 import { Button } from './Button'
 
 export interface ToastOptions {
@@ -96,7 +96,7 @@ function ToastRegion({ children }: { children: ReactNode }) {
       if (before !== undefined && Math.abs(before - top) > 1 && !prefersReducedMotion()) {
         slot.animate([{ transform: `translateY(${before - top}px)` }, { transform: 'none' }], {
           duration: DURATION.base,
-          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+          easing: EASE.inOut,
         })
       }
     }

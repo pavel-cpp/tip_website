@@ -195,7 +195,7 @@ main:focus {
   animation: none;
 }
 :root[data-nav]::view-transition-old(page) {
-  animation: vt-out var(--dur-fast) var(--ease-in) both;
+  animation: vt-out var(--dur-fast) var(--ease-out) both;
 }
 :root[data-nav]::view-transition-new(page) {
   animation: vt-in var(--dur-base) var(--ease-standard) both;
@@ -252,7 +252,7 @@ main:focus {
 
 /* Siblings (admin, system, account): depth cross-fade, the old screen recedes and softens, the new one settles in. */
 :root[data-nav="sibling"]::view-transition-old(page) {
-  animation: vt-out-depth var(--dur-fast) var(--ease-in) both;
+  animation: vt-out-depth var(--dur-fast) var(--ease-out) both;
 }
 :root[data-nav="sibling"]::view-transition-new(page) {
   animation: vt-in-depth var(--dur-slow) var(--ease-standard) both;
