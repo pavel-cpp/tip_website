@@ -19,6 +19,11 @@
 .wsbar-slash {
   flex: none;
 }
+/* A text link still needs a 24 px target; the padding is taken back with margins so the bar stays compact. */
+.wsbar-parent {
+  padding-block: 6px;
+  margin-block: -6px;
+}
 .wsbar-crumb .wsbar-parent {
   flex: 0 1 auto;
   min-width: 0;

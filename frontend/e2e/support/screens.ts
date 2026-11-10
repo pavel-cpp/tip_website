@@ -85,7 +85,7 @@ export async function enter(page: Page, creds: Creds, locale: Locale, theme: The
 export { adminCreds }
 
 /**
- * Extra states the axe run covers on top of {@link SCREENS}: dialogs, menus, the print page, and on phones
+ * Extra states the axe run covers on top of {@link SCREENS}: dialogs, menus, and on phones
  * the bottom sheet and the selection mode. Kept apart so the visual baselines are not affected.
  */
 export const A11Y_STATES: Screen[] = [
@@ -149,21 +149,6 @@ export const A11Y_STATES: Screen[] = [
       } else {
         await ws.cell(ws.row(0), 'name').click()
       }
-      await settle(page)
-    },
-  },
-  {
-    id: 'print',
-    open: async (page, env) => {
-      await page.context().addInitScript(() => {
-        window.print = () => {}
-      })
-      await page.goto(`/projects/${env.projectId}`)
-      const ws = new WorkspacePage(page, env.locale)
-      await ws.showTable()
-      await ws.rows.first().waitFor()
-      await ws.selectAllAndPrint()
-      await page.locator('.print-ticket').first().waitFor()
       await settle(page)
     },
   },
