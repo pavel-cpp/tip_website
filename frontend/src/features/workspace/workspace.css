@@ -915,9 +915,6 @@ body[data-workspace] .toast-region {
 .ws-split[data-orientation="vertical"] {
   cursor: row-resize;
 }
-.ws-split[data-collapsed] {
-  cursor: default;
-}
 .ws-split-grip {
   position: absolute;
   inset: 0;
@@ -931,8 +928,9 @@ body[data-workspace] .toast-region {
   width: auto;
   height: 4px;
 }
+/* A hidden panel leaves the handle on the edge; it stays visible so it can be pulled back out. */
 .ws-split[data-collapsed] .ws-split-grip {
-  display: none;
+  background: var(--accent);
 }
 @media (hover: hover) {
   .ws-split:not([data-collapsed]):hover .ws-split-grip {
@@ -948,43 +946,6 @@ body[data-workspace] .toast-region {
   outline-offset: -2px;
   border-radius: var(--radius-sm);
 }
-/* The arrows are 40 px round buttons centred on the 16 px handle, so they overlap the panel edges a little. */
-.ws-split-arrows {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.ws-split[data-orientation="vertical"] .ws-split-arrows {
-  flex-direction: row;
-}
-.ws-split-arrow {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 50%;
-  background: var(--bg-elev);
-  color: var(--text-muted);
-  box-shadow: var(--shadow-pop);
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .ws-split-arrow:hover {
-    color: var(--accent-contrast);
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-}
-@media (pointer: coarse) {
-  .ws-split-arrow {
-    width: var(--touch-target);
-    height: var(--touch-target);
-  }
-}
-
 /* Tablets: the quiet buttons shrink to icons (they keep their tooltips) so the toolbar stays on one row. */
 @media (max-width: 1099px) {
   .ws-hint {

@@ -9,7 +9,6 @@ const KEY_STEP_BIG = 0.1
 
 /** Which panel is hidden; the other one fills the space and the handle stays on the edge. */
 export type Collapsed = 'first' | 'second' | null
-export type Side = 'first' | 'second'
 
 export interface SplitState {
   ratio: number
@@ -21,32 +20,41 @@ export const DEFAULT_SPLIT: SplitState = { ratio: DEFAULT_RATIO, collapsed: null
 export const clampRatio = (r: number): number =>
   Number.isFinite(r) ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, r)) : DEFAULT_RATIO
 
-/** Pointer position along the container -> ratio of the first panel, with the handle's own width excluded. */
+/** Dragging the handle closer than this to an edge hides that panel; pulling it back out shows it again. */
+export const COLLAPSE_AT = 0.1
+/** A hidden panel comes back only past this, so the edge does not flicker under a shaky hand. */
+const REOPEN_AT = COLLAPSE_AT + 0.04
+
+/** Pointer position along the container -> unclamped ratio of the first panel, handle width excluded. */
 export function ratioFromPointer(pos: number, start: number, size: number, handle: number): number {
   const room = size - handle
   if (room <= 0) return DEFAULT_RATIO
-  return clampRatio((pos - start - handle / 2) / room)
-}
-
-/** Arrow keys: `dir` -1 moves the handle towards the first panel, +1 towards the second. */
-export function nudgeRatio(ratio: number, dir: -1 | 1, big = false): number {
-  return clampRatio(ratio + dir * (big ? KEY_STEP_BIG : KEY_STEP))
+  return (pos - start - handle / 2) / room
 }
 
 /**
- * What an arrow on the handle does. The arrow pointing at a panel hides it; once the other panel is
- * hidden, the same arrow brings that one back. Nothing to do for the arrow pointing at a hidden panel.
+ * State after the handle was dragged to `raw`. The visible ratio is remembered while a panel is hidden,
+ * so keyboard restore (and the next drag out) returns to a sensible size.
  */
-export function arrowAction(collapsed: Collapsed, side: Side): 'hide' | 'show' | null {
-  if (collapsed === null) return 'hide'
-  return collapsed === side ? null : 'show'
+export function dragState(raw: number, prev: SplitState): SplitState {
+  if (!Number.isFinite(raw)) return prev
+  const hideFirst = prev.collapsed === 'first' ? REOPEN_AT : COLLAPSE_AT
+  const hideSecond = prev.collapsed === 'second' ? 1 - REOPEN_AT : 1 - COLLAPSE_AT
+  if (raw < hideFirst) return { ratio: prev.ratio, collapsed: 'first' }
+  if (raw > hideSecond) return { ratio: prev.ratio, collapsed: 'second' }
+  return { ratio: clampRatio(raw), collapsed: null }
 }
 
-export function applyArrow(collapsed: Collapsed, side: Side): Collapsed {
-  const act = arrowAction(collapsed, side)
-  if (act === 'hide') return side
-  if (act === 'show') return null
-  return collapsed
+/**
+ * Arrow keys: `dir` -1 moves the handle towards the first panel, +1 towards the second. Pushing past the
+ * limit hides the panel, and a step away from a hidden panel shows it again.
+ */
+export function nudgeState(s: SplitState, dir: -1 | 1, big = false): SplitState {
+  if (s.collapsed) return (dir === 1) === (s.collapsed === 'first') ? { ratio: s.ratio, collapsed: null } : s
+  const raw = s.ratio + dir * (big ? KEY_STEP_BIG : KEY_STEP)
+  if (raw < MIN_RATIO && s.ratio <= MIN_RATIO) return { ratio: s.ratio, collapsed: 'first' }
+  if (raw > MAX_RATIO && s.ratio >= MAX_RATIO) return { ratio: s.ratio, collapsed: 'second' }
+  return { ratio: clampRatio(raw), collapsed: null }
 }
 
 /** Grid track list; the hidden panel collapses to 0fr so the size change can animate. */

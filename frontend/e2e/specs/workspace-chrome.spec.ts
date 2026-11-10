@@ -132,7 +132,7 @@ test('online colleagues are in the top bar and a click follows their row', async
   await expect(me.getByRole('button', { name: ws.t('realtime.follow.start') })).toBeVisible()
 })
 
-test('splitter: drag, keyboard, double click, hide, picture-only arrows and restore', async ({
+test('splitter: drag, keyboard, double click, drag to the edge hides a panel, drag back restores', async ({
   admin,
   signedIn,
   viewport,
@@ -148,8 +148,8 @@ test('splitter: drag, keyboard, double click, hide, picture-only arrows and rest
     await expect(page.getByRole('button', { name: /Закрыть панель/ })).toHaveCount(0)
     return
   }
-  await expect(page.getByRole('button', { name: /Закрыть панель/ })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /Развернуть панель/ })).toHaveCount(0)
+  // The handle itself is the only control: no arrow buttons on it.
+  await expect(page.locator('.ws-split button')).toHaveCount(0)
 
   const picture = page.locator('.ws-slot[data-panel="picture"]')
   const split = page.getByRole('separator', { name: ws.t('workspace.split.label') })
@@ -158,9 +158,8 @@ test('splitter: drag, keyboard, double click, hide, picture-only arrows and rest
 
   const box = await split.boundingBox()
   if (!box) throw new Error('no splitter')
-  // Grab the handle away from its arrows.
   const x = box.x + box.width / 2
-  const y = box.y + 60
+  const y = box.y + box.height / 2
   await page.mouse.move(x, y)
   await page.mouse.down()
   await page.mouse.move(x - 200, y, { steps: 8 })
@@ -182,14 +181,21 @@ test('splitter: drag, keyboard, double click, hide, picture-only arrows and rest
   // Double click resets.
   const b2 = await split.boundingBox()
   if (!b2) throw new Error('no splitter')
-  await page.mouse.dblclick(b2.x + b2.width / 2, b2.y + 60)
+  await page.mouse.dblclick(b2.x + b2.width / 2, b2.y + b2.height / 2)
   await expect(split).toHaveAttribute('aria-valuenow', '50')
 
-  // Hide the table: the picture fills the space and shows who is on it.
-  await page
-    .getByRole('button', { name: ws.t('workspace.split.hide', { name: ws.t('workspace.panel.db') }) })
-    .click()
+  // Drag the handle to the right edge: the table hides and the picture fills the space with who is on it.
+  const b3 = await split.boundingBox()
+  if (!b3) throw new Error('no splitter')
+  const y3 = b3.y + b3.height / 2
+  const grid = await page.locator('.ws-grid').boundingBox()
+  if (!grid) throw new Error('no grid')
+  await page.mouse.move(b3.x + b3.width / 2, y3)
+  await page.mouse.down()
+  await page.mouse.move(grid.x + grid.width - 2, y3, { steps: 10 })
+  await page.mouse.up()
   await expect(page.locator('.ws-slot[data-panel="db"]')).toHaveAttribute('inert', '')
+  await expect(split).toHaveAttribute('aria-valuenow', '100')
   const who = page.getByTestId('ticket-who')
   await expect(who).toContainText('Person 1')
   await page.getByRole('button', { name: ws.t('workspace.ticket.next') }).click()
@@ -199,12 +205,29 @@ test('splitter: drag, keyboard, double click, hide, picture-only arrows and rest
   await page.keyboard.press('ArrowLeft')
   await expect(who).toContainText('Person 2')
 
-  // The small arrow on the edge brings the table back, and the selection followed along.
-  await page
-    .getByRole('button', { name: ws.t('workspace.split.show', { name: ws.t('workspace.panel.db') }) })
-    .click()
+  // The same handle on the edge brings the table back (a click is enough), and the selection followed along.
+  const b4 = await split.boundingBox()
+  if (!b4) throw new Error('no splitter')
+  await page.mouse.click(b4.x + b4.width / 2, b4.y + b4.height / 2)
   await expect(page.locator('.ws-slot[data-panel="db"]')).not.toHaveAttribute('inert', '')
   await expect(ws.rowByText('Person 2')).toHaveAttribute('data-current', 'true')
+
+  // Dragging far to the left hides the picture; dragging back out restores it.
+  const b5 = await split.boundingBox()
+  if (!b5) throw new Error('no splitter')
+  const y5 = b5.y + b5.height / 2
+  await page.mouse.move(b5.x + b5.width / 2, y5)
+  await page.mouse.down()
+  await page.mouse.move(grid.x + 2, y5, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.ws-slot[data-panel="picture"]')).toHaveAttribute('inert', '')
+  const b6 = await split.boundingBox()
+  if (!b6) throw new Error('no splitter')
+  await page.mouse.move(b6.x + b6.width / 2, y5)
+  await page.mouse.down()
+  await page.mouse.move(grid.x + grid.width / 2, y5, { steps: 10 })
+  await page.mouse.up()
+  await expect(page.locator('.ws-slot[data-panel="picture"]')).not.toHaveAttribute('inert', '')
 })
 
 test('several tickets: the Save label shows the count and ZIP, and a ZIP is downloaded', async ({

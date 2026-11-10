@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { stepRow } from './rowStep'
 import {
-  applyArrow,
-  arrowAction,
+  COLLAPSE_AT,
   clampRatio,
   DEFAULT_SPLIT,
+  dragState,
   MAX_RATIO,
   MIN_RATIO,
-  nudgeRatio,
+  nudgeState,
   parseSplit,
   ratioFromPointer,
   tracks,
@@ -20,28 +20,44 @@ describe('splitter math', () => {
     expect(clampRatio(Number.NaN)).toBe(0.5)
   })
 
-  it('maps the pointer to a ratio without the handle width', () => {
+  it('maps the pointer to an unclamped ratio without the handle width', () => {
     // 1000 px container, 20 px handle: the centre of the handle at 500 is the exact middle.
     expect(ratioFromPointer(500, 0, 1000, 20)).toBeCloseTo(0.5)
-    expect(ratioFromPointer(-50, 0, 1000, 20)).toBe(MIN_RATIO)
-    expect(ratioFromPointer(5000, 0, 1000, 20)).toBe(MAX_RATIO)
+    expect(ratioFromPointer(-50, 0, 1000, 20)).toBeLessThan(0)
     expect(ratioFromPointer(10, 0, 10, 20)).toBe(0.5)
   })
 
-  it('nudges by a small or a big step and stays inside the limits', () => {
-    expect(nudgeRatio(0.5, 1)).toBeCloseTo(0.53)
-    expect(nudgeRatio(0.5, -1, true)).toBeCloseTo(0.4)
-    expect(nudgeRatio(MAX_RATIO, 1)).toBe(MAX_RATIO)
+  it('hides a panel when the handle is dragged to its edge and shows it when pulled back', () => {
+    const open = { ratio: 0.4, collapsed: null } as const
+    expect(dragState(0.6, open)).toEqual({ ratio: 0.6, collapsed: null })
+    // Between the collapse point and the minimum the panel keeps its minimum size.
+    expect(dragState(COLLAPSE_AT + 0.01, open)).toEqual({ ratio: MIN_RATIO, collapsed: null })
+    const hidden = dragState(0.02, open)
+    expect(hidden).toEqual({ ratio: 0.4, collapsed: 'first' })
+    // Hysteresis: a small move back keeps it hidden, a real pull reopens it.
+    expect(dragState(COLLAPSE_AT + 0.02, hidden).collapsed).toBe('first')
+    expect(dragState(0.3, hidden)).toEqual({ ratio: 0.3, collapsed: null })
+    expect(dragState(0.99, open)).toEqual({ ratio: 0.4, collapsed: 'second' })
+    expect(dragState(0.7, { ratio: 0.4, collapsed: 'second' })).toEqual({ ratio: 0.7, collapsed: null })
+    expect(dragState(Number.NaN, open)).toBe(open)
   })
 
-  it('hides a panel with the arrow pointing at it and restores it with the opposite arrow', () => {
-    expect(applyArrow(null, 'first')).toBe('first')
-    expect(applyArrow(null, 'second')).toBe('second')
-    expect(applyArrow('first', 'second')).toBeNull()
-    expect(applyArrow('second', 'first')).toBeNull()
-    // The arrow pointing at the already hidden panel does nothing.
-    expect(arrowAction('first', 'first')).toBeNull()
-    expect(applyArrow('first', 'first')).toBe('first')
+  it('nudges by a small or a big step, hides at the limit and restores from a hidden panel', () => {
+    expect(nudgeState(DEFAULT_SPLIT, 1).ratio).toBeCloseTo(0.53)
+    expect(nudgeState(DEFAULT_SPLIT, -1, true).ratio).toBeCloseTo(0.4)
+    expect(nudgeState({ ratio: MAX_RATIO, collapsed: null }, 1)).toEqual({
+      ratio: MAX_RATIO,
+      collapsed: 'second',
+    })
+    expect(nudgeState({ ratio: MIN_RATIO, collapsed: null }, -1)).toEqual({
+      ratio: MIN_RATIO,
+      collapsed: 'first',
+    })
+    // The first push towards the limit only clamps.
+    expect(nudgeState({ ratio: 0.21, collapsed: null }, -1)).toEqual({ ratio: MIN_RATIO, collapsed: null })
+    expect(nudgeState({ ratio: 0.3, collapsed: 'first' }, 1)).toEqual({ ratio: 0.3, collapsed: null })
+    expect(nudgeState({ ratio: 0.3, collapsed: 'first' }, -1)).toEqual({ ratio: 0.3, collapsed: 'first' })
+    expect(nudgeState({ ratio: 0.3, collapsed: 'second' }, -1)).toEqual({ ratio: 0.3, collapsed: null })
   })
 
   it('builds the track list', () => {
