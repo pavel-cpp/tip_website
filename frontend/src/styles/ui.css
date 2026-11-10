@@ -446,8 +446,9 @@
 /* ---------- toast ---------- */
 .toast-region {
   position: fixed;
-  left: 0;
-  right: 0;
+  /* Inset on both sides (notch/safe areas) so the centred stack is symmetric about the viewport. */
+  left: max(var(--space-4), var(--safe-left));
+  right: max(var(--space-4), var(--safe-right));
   /* Top, under the bar: the bottom of a page holds footers, save bars and the phone toolbar. */
   top: calc(var(--topbar-h) + var(--space-3) + var(--safe-top));
   z-index: var(--z-toast);
@@ -455,25 +456,40 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 0 var(--space-4);
   pointer-events: none;
+}
+/* The slot owns the list reflow animation (FLIP), the toast owns its own enter and exit. */
+.toast-slot {
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
 }
 .toast {
   position: relative;
   overflow: hidden;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--space-3);
   min-height: var(--touch-target);
+  width: max-content;
   max-width: min(480px, 100%);
-  padding: 4px 6px 4px 18px;
+  /* Symmetric padding keeps a text-only message optically centred; the action button takes the right side. */
+  padding: 6px 18px;
   background: var(--bg-elev);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-pop);
   font-size: var(--fs-sm);
+  line-height: var(--lh-tight);
+  text-align: center;
+  overflow-wrap: anywhere;
   pointer-events: auto;
   animation: toast-in var(--dur-base) var(--ease-standard) both;
+}
+.toast[data-action="true"] {
+  padding-right: 6px;
+  text-align: start;
 }
 .toast[data-state="closed"] {
   animation: toast-out var(--dur-fast) var(--ease-out) both;

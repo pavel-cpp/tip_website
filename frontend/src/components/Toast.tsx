@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -68,14 +69,43 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
       {createPortal(
-        <div className="toast-region" role="status" aria-live="polite">
+        <ToastRegion>
           {toasts.map((t) => (
-            <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />
+            <div key={t.id} className="toast-slot" data-slot={t.id}>
+              <ToastItem toast={t} onDismiss={() => dismiss(t.id)} />
+            </div>
           ))}
-        </div>,
+        </ToastRegion>,
         document.body,
       )}
     </ToastContext.Provider>
+  )
+}
+
+/** Live region; slides the remaining toasts into place when one enters or leaves (transform only). */
+function ToastRegion({ children }: { children: ReactNode }) {
+  const region = useRef<HTMLDivElement>(null)
+  const tops = useRef(new Map<Element, number>())
+  // Runs after every render: the list is at most three items, so measuring all of them is cheap.
+  useLayoutEffect(() => {
+    const next = new Map<Element, number>()
+    for (const slot of region.current?.children ?? []) {
+      const top = slot.getBoundingClientRect().top
+      const before = tops.current.get(slot)
+      next.set(slot, top)
+      if (before !== undefined && Math.abs(before - top) > 1 && !prefersReducedMotion()) {
+        slot.animate([{ transform: `translateY(${before - top}px)` }, { transform: 'none' }], {
+          duration: DURATION.base,
+          easing: 'cubic-bezier(0.2, 0, 0, 1)',
+        })
+      }
+    }
+    tops.current = next
+  })
+  return (
+    <div ref={region} className="toast-region" role="status" aria-live="polite">
+      {children}
+    </div>
   )
 }
 
@@ -103,6 +133,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastEntry; onDismiss: () => v
       data-tone={toast.tone ?? 'info'}
       // Failures interrupt (assertive); confirmations stay polite inside the region.
       role={toast.tone === 'error' ? 'alert' : undefined}
+      data-action={toast.action ? 'true' : undefined}
       data-paused={paused || undefined}
       style={{ '--toast-ms': `${duration}ms` } as CSSProperties}
       onPointerEnter={() => setPaused(true)}

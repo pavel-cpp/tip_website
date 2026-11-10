@@ -1,8 +1,8 @@
-import { Suspense, useEffect, useRef } from 'react'
-import { Outlet, useLocation } from 'react-router'
+import { Suspense, useEffect, useLayoutEffect, useRef } from 'react'
+import { Outlet, useLocation, useNavigationType } from 'react-router'
 import { useI18n } from '../i18n'
 import { cx } from '../lib/cx'
-import { supportsViewTransitions } from '../lib/viewTransition'
+import { routeCommitted, routeTransitionsActive } from '../lib/viewTransition'
 import { Skeleton } from './Skeleton'
 import { Topbar } from './Topbar'
 import { TopbarSlotProvider } from './TopbarSlot'
@@ -28,6 +28,30 @@ function useHeadingTitle(main: React.RefObject<HTMLElement | null>, appName: str
   }, [main, appName, pathname])
 }
 
+/**
+ * Per-history-entry scroll restoration for client-side navigation: new pages start at the top, back and
+ * forward return to where the entry was left. Runs in a layout effect so a View Transition captures the
+ * final position, and tells the transition layer that the route has been committed.
+ */
+function useRouteScroll(): void {
+  const { pathname, key } = useLocation()
+  const type = useNavigationType()
+  const positions = useRef(new Map<string, number>())
+  const current = useRef({ key, path: pathname })
+  current.current.key = key
+  useEffect(() => {
+    const save = () => positions.current.set(current.current.key, window.scrollY)
+    addEventListener('scroll', save, { passive: true })
+    return () => removeEventListener('scroll', save)
+  }, [])
+  useLayoutEffect(() => {
+    const moved = current.current.path !== pathname
+    current.current.path = pathname
+    routeCommitted(pathname)
+    if (moved) window.scrollTo(0, type === 'POP' ? (positions.current.get(key) ?? 0) : 0)
+  }, [pathname, key, type])
+}
+
 /** App frame: persistent topbar plus the routed page. `minimal` hides user navigation (login). */
 export function Shell({ minimal = false }: { minimal?: boolean }) {
   const { t } = useI18n()
@@ -35,6 +59,7 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
   const main = useRef<HTMLElement>(null)
   const first = useRef(true)
   useHeadingTitle(main, t('app.name'), pathname)
+  useRouteScroll()
 
   // After a client-side navigation keyboard and screen-reader users start at the new page, not at the
   // link they activated (which has just been unmounted).
@@ -43,7 +68,16 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
       first.current = false
       return
     }
-    main.current?.focus({ preventScroll: true })
+    // A lazy screen may still be loading (its boundary hides main), so wait for a visible main, at most 3 s.
+    const started = performance.now()
+    let raf = 0
+    const tryFocus = () => {
+      const el = main.current
+      if (el?.isConnected && (el.checkVisibility?.() ?? true)) el.focus({ preventScroll: true })
+      else if (performance.now() - started < 3000) raf = requestAnimationFrame(tryFocus)
+    }
+    tryFocus()
+    return () => cancelAnimationFrame(raf)
   }, [pathname])
 
   return (
@@ -61,18 +95,29 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
       </a>
       <TopbarSlotProvider>
         <Topbar minimal={minimal} />
-        {/* Without View Transitions each page fades in on its own (140-220 ms fallback). */}
-        <main
-          ref={main}
-          id="main"
-          tabIndex={-1}
-          key={pathname}
-          className={cx('page', !supportsViewTransitions() && 'route-enter')}
+        {/*
+          The boundary sits outside the keyed main on purpose: it stays mounted across navigations, so while
+          the next screen's chunk loads inside a router transition the old page stays on screen (no skeleton
+          flash under a View Transition). The fallback only shows on the very first load.
+          Without desktop View Transitions each page fades in on its own (CSS).
+        */}
+        <Suspense
+          fallback={
+            <main id="main" tabIndex={-1} className="page">
+              <RouteFallback label={t('state.loading')} />
+            </main>
+          }
         >
-          <Suspense fallback={<RouteFallback label={t('state.loading')} />}>
+          <main
+            ref={main}
+            id="main"
+            tabIndex={-1}
+            key={pathname}
+            className={cx('page', !routeTransitionsActive() && 'route-enter')}
+          >
             <Outlet />
-          </Suspense>
-        </main>
+          </main>
+        </Suspense>
       </TopbarSlotProvider>
     </>
   )

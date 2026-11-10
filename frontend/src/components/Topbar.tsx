@@ -52,7 +52,7 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
               {
                 id: 'system',
                 label: t('nav.adminSystem'),
-                icon: 'settings' as const,
+                icon: 'server' as const,
                 onSelect: go('/admin/system'),
               },
             ]
