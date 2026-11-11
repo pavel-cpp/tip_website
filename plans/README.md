@@ -12,6 +12,7 @@ Source: `improve-animations` audit of `frontend/` at commit c8d7b7a. Phones are 
 | 006 | Reduced motion keeps short opacity fades | MEDIUM | DONE |
 | 007 | Panel-collapse snap, colour picker unfold, crossfade and will-change polish | LOW | DONE |
 | 008 | Measured lag fixes; 1:1 splitter, flat ticket slide, morph route transitions | HIGH | DONE |
+| 009 | Route transitions rewritten as an own FLIP morph engine (no View Transitions) | HIGH | DONE |
 
 ## Order and dependencies
 

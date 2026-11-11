@@ -1,11 +1,10 @@
 import type { Page } from '@playwright/test'
 import { type Api, adminCreds, uniq } from '../support/api'
-import { Topbar } from '../support/pages'
 import { expect, test } from '../support/test'
 import { WorkspacePage } from '../support/workspace'
 
-// Motion polish: the page-turn between tickets and the route transitions. The suite runs with reduced
-// motion by default, so these specs switch it back on. Frames are recorded with E2E_FRAMES=1 (see `frames`).
+// Motion polish: the ticket slide and the splitter. Route motion has its own spec (route-motion.spec.ts). The suite
+// runs with reduced motion by default, so these specs switch it back on. Frames: E2E_FRAMES=1 (see `frames`).
 
 test.use({ reducedMotion: 'no-preference' })
 
@@ -117,7 +116,11 @@ test('the splitter follows the pointer 1:1, dims the panel that would hide, and 
   const project = await seeded(admin)
   const page = await signedIn(adminCreds())
   const errors: string[] = []
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
+  // WebKit reports the `interactive-widget` viewport key as an error; it is a hint other engines understand.
+  page.on(
+    'console',
+    (m) => m.type() === 'error' && !m.text().includes('interactive-widget') && errors.push(m.text()),
+  )
   const ws = new WorkspacePage(page)
   await ws.open(project.id)
   const split = page.getByRole('separator', { name: ws.t('workspace.split.label') })
@@ -189,93 +192,13 @@ test('no ticket animation with reduced motion', async ({ admin, signedIn, viewpo
   expect(n).toBe(0)
 })
 
-test('opening a project morphs its card into the workspace and back; settings is a sheet', async ({
-  admin,
-  signedIn,
-  viewport,
-  browserName,
-}) => {
-  test.skip(!desktop(viewport), 'desktop pointer layout')
-  const project = await seeded(admin)
-  const page = await signedIn(adminCreds())
-  const supported = await page.evaluate(() => typeof document.startViewTransition === 'function')
-  test.skip(!supported, `${browserName} has no View Transitions: the CSS fade-in applies`)
-  const root = page.locator('html')
-
-  await page.locator(`.project-card[data-flip-id="${project.id}"] a.project-card-link`).click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
-  // The flags are set for the duration of the transition and removed afterwards.
-  await expect(root).not.toHaveAttribute('data-morph', /.*/)
-  await expect(page.locator('main.page')).toHaveAttribute('data-rank', '1')
-
-  await page.getByRole('button', { name: ws(page, 'workspace.settings') }).click()
-  await expect(page).toHaveURL(/\/settings$/)
-  await expect(root).not.toHaveAttribute('data-sheet', /.*/)
-  await page.getByRole('button', { name: ws(page, 'action.close') }).click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
-  await page
-    .getByRole('link', { name: ws(page, 'projects.title') })
-    .first()
-    .click()
-  await expect(page.locator('main.page')).toHaveAttribute('data-rank', '0')
-  await expect(root).not.toHaveAttribute('data-morph', /.*/)
-  // Nothing keeps a transition name behind, or the next morph would be refused for duplicate names.
-  await expect(page.locator('[data-hero]')).toHaveCount(0)
-})
-
-function ws(page: Page, key: Parameters<WorkspacePage['t']>[0]): string {
-  return new WorkspacePage(page).t(key)
-}
-
-// Dev tool: pauses the running transition at fixed times and saves screenshots to e2e/.output/frames.
+// Dev tool: pauses the page-turn at fixed times and saves screenshots to e2e/.output/frames. Route motion frames
+// are recorded by route-motion.spec.ts.
 test('frames', async ({ admin, signedIn, viewport, browserName }) => {
   test.skip(!process.env.E2E_FRAMES || !desktop(viewport), 'set E2E_FRAMES=1 to record frames')
   const project = await seeded(admin)
   const page = await signedIn(adminCreds())
-  const shot = async (name: string, kind: string, times: number[], act: () => Promise<unknown>) => {
-    void act()
-    await page.waitForFunction(
-      (k) =>
-        document.getAnimations().some((a) => (a.effect as KeyframeEffect | null)?.pseudoElement?.includes(k)),
-      kind,
-      { timeout: 3000 },
-    )
-    for (const t of times) {
-      await page.evaluate((ms) => {
-        for (const a of document.getAnimations()) {
-          a.pause()
-          a.currentTime = ms
-        }
-      }, t)
-      await page.screenshot({ path: `e2e/.output/frames/${browserName}-${name}-${t}.png` })
-    }
-    await page.evaluate(() => {
-      for (const a of document.getAnimations()) a.finish()
-    })
-    await page.waitForTimeout(300)
-  }
-  const card = page.locator(`.project-card[data-flip-id="${project.id}"] a.project-card-link`)
-  await shot('open', 'view-transition', [40, 100, 160, 240, 320], () => card.click())
-  await shot('sheet-open', 'view-transition', [40, 100, 160, 240, 320], () =>
-    page.getByRole('button', { name: ws(page, 'workspace.settings') }).click(),
-  )
-  await shot('sheet-close', 'view-transition', [40, 100, 160, 240, 320], () =>
-    page.getByRole('button', { name: ws(page, 'action.close') }).click(),
-  )
-  await shot('close', 'view-transition', [40, 100, 160, 240, 320], () =>
-    page
-      .getByRole('link', { name: ws(page, 'projects.title') })
-      .first()
-      .click(),
-  )
-
-  await shot('sibling', 'view-transition', [40, 100, 180, 260], () => new Topbar(page).goTo('adminUsers'))
-  await page.goto('/')
-
-  // Page-turn between tickets (picture-only mode).
-  await card.click()
-  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
-  await expect(page.locator('html')).not.toHaveAttribute('data-nav', /.*/)
+  await page.goto(`/projects/${project.id}`)
   await pictureOnly(page, new WorkspacePage(page))
   await page.keyboard.press('ArrowRight')
   await page.waitForFunction(() =>
