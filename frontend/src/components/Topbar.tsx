@@ -16,7 +16,7 @@ export function Topbar({ minimal = false }: { minimal?: boolean }) {
   const navigate = useNavigate()
   const auth = useOptionalAuth()
   const user = auth?.user ?? null
-  const go = (to: string) => () => void navigate(to, { viewTransition: true })
+  const go = (to: string) => () => void navigate(to)
   const can = (perm: string) => user?.permissions.includes(perm as never) ?? false
 
   // The operator links come with the system status; fetched once and cached, never polled.

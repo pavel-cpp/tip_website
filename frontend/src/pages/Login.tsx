@@ -47,10 +47,7 @@ export default function Login() {
       await login(name.trim(), password)
       setPhase('done')
       // Let the check mark play before the screen changes.
-      setTimeout(
-        () => void navigate(target, { replace: true, viewTransition: true }),
-        prefersReducedMotion() ? 0 : 450,
-      )
+      setTimeout(() => void navigate(target, { replace: true }), prefersReducedMotion() ? 0 : 450)
     } catch (err) {
       setPhase('idle')
       setError(errorText(err))

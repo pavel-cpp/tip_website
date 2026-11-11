@@ -104,7 +104,7 @@ export default function Projects() {
 
   const onAction = (action: ProjectAction, project: ProjectCardData) => {
     if (action === 'settings') {
-      void navigate(`/projects/${project.id}/settings`, { viewTransition: true })
+      void navigate(`/projects/${project.id}/settings`)
     } else if (action === 'delete') {
       setDeleting(project)
     } else if (action === 'moveUp' || action === 'moveDown') {
@@ -249,7 +249,9 @@ export default function Projects() {
   return (
     <>
       <div className="projects-head">
-        <h1 className="page-title">{t('projects.title')}</h1>
+        <h1 className="page-title" data-morph="heading" data-morph-text="">
+          {t('projects.title')}
+        </h1>
         <Input
           className="projects-search"
           type="search"
@@ -280,7 +282,7 @@ export default function Projects() {
         onCreate={async (title) => {
           const project = await create.mutateAsync(title)
           setCreating(false)
-          void navigate(`/projects/${project.id}/settings`, { viewTransition: true })
+          void navigate(`/projects/${project.id}/settings`)
         }}
       />
       <DeleteProjectDialog

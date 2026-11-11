@@ -16,7 +16,7 @@ function LogoutRedirect({ onLoggedOut }: { onLoggedOut: () => void }) {
     () =>
       onLogout(() => {
         onLoggedOut()
-        void navigate('/login', { viewTransition: true })
+        void navigate('/login')
       }),
     [navigate, onLoggedOut],
   )

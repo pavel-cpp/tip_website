@@ -96,6 +96,7 @@ export function ProjectCard({ project, actions, onAction, dragProps, dragging }:
         dragging && 'is-dragging',
       )}
       data-flip-id={project.id}
+      data-morph={`hero:${project.id}`}
       style={
         {
           '--aside-w': `${asideWidth(online.length, items.length > 0) + 8}px`,
@@ -105,9 +106,16 @@ export function ProjectCard({ project, actions, onAction, dragProps, dragging }:
     >
       <AppLink to={`/projects/${project.id}`} className="project-card-link" draggable={false}>
         {/* The picture stays clean: title, status and actions live on the solid strip below it. */}
-        <span className="project-card-thumb" style={{ background }} aria-hidden="true" />
+        <span
+          className="project-card-thumb"
+          style={{ background }}
+          data-morph={`ticket:${project.id}`}
+          aria-hidden="true"
+        />
         <span className="project-card-body">
-          <span className="project-card-title">{project.title}</span>
+          <span className="project-card-title" data-morph={`title:${project.id}`} data-morph-text="">
+            {project.title}
+          </span>
           <span className="project-card-meta">
             {finished && <span className="project-card-status">{t('projects.card.finished')}</span>}
             <span className="project-card-count">

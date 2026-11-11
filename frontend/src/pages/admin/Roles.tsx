@@ -76,7 +76,9 @@ export default function Roles() {
   return (
     <div className="admin-page">
       <div className="admin-head">
-        <h1 className="page-title">{t('nav.adminRoles')}</h1>
+        <h1 className="page-title" data-morph="heading" data-morph-text="">
+          {t('nav.adminRoles')}
+        </h1>
         <div className="admin-tools">
           <Button variant="primary" disabled={!catalog.data} onClick={() => setEditing('new')}>
             <Icon name="plus" />

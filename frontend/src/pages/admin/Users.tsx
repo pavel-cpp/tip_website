@@ -122,7 +122,9 @@ export default function Users() {
   return (
     <div className="admin-page">
       <div className="admin-head">
-        <h1 className="page-title">{t('nav.adminUsers')}</h1>
+        <h1 className="page-title" data-morph="heading" data-morph-text="">
+          {t('nav.adminUsers')}
+        </h1>
         <div className="admin-tools">
           <Input
             label={t('action.search')}

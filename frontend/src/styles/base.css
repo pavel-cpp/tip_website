@@ -162,103 +162,39 @@ main:focus {
 }
 
 /*
-  Route transitions (desktop pointers only; lib/viewTransition.ts sets data-nav, data-morph and data-sheet for the
-  running transition, phones never get them). A morph, not a slide: the page itself is a single layer that
-  fades in a beat after the shared elements start, and what the two screens have in common travels from its old
-  place to the new one as a named element:
-    hero       the project card grows into the workspace and shrinks back
-    proj-title the project title (card -> workspace crumb -> settings crumb)
-    ticket     the ticket picture (workspace panel <-> settings preview)
-    heading    the page heading stays put while the siblings cross-fade
-  Shared elements move first (--vt-move), the rest of the page follows --vt-lag later (choreography). Only opacity
-  and the transform/size of snapshots are animated: no blur, and no full-page layers besides the root.
+  Route motion (lib/routeMotion.ts, desktop pointers): the outgoing page is copied into a layer that settles out
+  while ghosts of the shared elements (a card, a title, the ticket picture) fly to their new place and the new
+  page is revealed block by block. Both layers are fixed, inert and removed when the motion ends; the boxes inside
+  are absolute, so the layer clips them to the viewport. Positions,
+  sizes, transforms and timings are set from script (CSSOM, so the server's CSP is satisfied).
 */
-:root {
-  --vt-move: 300ms;
-  --vt-fade: 180ms;
-  --vt-lag: 60ms;
+.route-layer {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
-@media (hover: hover) and (pointer: fine) and (min-width: 700px) {
-  /* A name is only given for the running transition, so it can never be duplicated within one document state. */
-  :root[data-morph] main.page[data-rank="1"],
-  :root[data-morph] .project-card[data-hero] {
-    view-transition-name: hero;
-  }
-  :root[data-morph] .project-card[data-hero] .project-card-title,
-  :root[data-morph] .wsbar-crumbs > .wsbar-title,
-  :root[data-sheet] .wsbar-crumbs > .wsbar-title,
-  :root[data-sheet] .wsbar-crumb:nth-child(2) > .wsbar-parent {
-    view-transition-name: proj-title;
-  }
-  :root[data-sheet] .tk-stage,
-  :root[data-sheet] .st-stage {
-    view-transition-name: ticket;
-  }
-  :root[data-nav="sibling"] main.page .page-title {
-    view-transition-name: heading;
-  }
+/* Below the sticky top bar: the old page never covers it. The under layer (backdrop, frame ghosts) and the clone
+   share the level; DOM order puts the old content on top of the frame ghosts. */
+.route-layer-under,
+.route-layer-clone {
+  z-index: calc(var(--z-sticky) - 1);
 }
-/* The old screen stays opaque underneath; the new one fades in over it. No plus-lighter blending of two full layers. */
-:root[data-nav]::view-transition-old(root) {
-  animation: none;
-  mix-blend-mode: normal;
+/* Hides the new page until its blocks are revealed. */
+.route-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
 }
-:root[data-nav]::view-transition-new(root) {
-  animation: vt-in var(--vt-fade) var(--ease-out) var(--vt-lag) both;
-  mix-blend-mode: normal;
+/* Above the top bar (a title flies up into it) and below menus, modals and toasts. */
+.route-layer-ghost {
+  z-index: calc(var(--z-sticky) + 1);
 }
-@keyframes vt-in {
-  from {
-    opacity: 0;
-  }
-}
-::view-transition-group(hero),
-::view-transition-group(proj-title),
-::view-transition-group(ticket),
-::view-transition-group(heading) {
-  animation-duration: var(--vt-move);
-  animation-timing-function: var(--ease-drawer);
-}
-::view-transition-old(hero),
-::view-transition-new(hero),
-::view-transition-old(proj-title),
-::view-transition-new(proj-title),
-::view-transition-old(ticket),
-::view-transition-new(ticket),
-::view-transition-old(heading),
-::view-transition-new(heading) {
-  animation-timing-function: var(--ease-drawer);
-}
-/* The group box is animated by the browser (size and position of snapshots, no layout); it clips, so the tall
-   workspace never spills out of the growing card. */
-::view-transition-group(hero) {
-  overflow: clip;
-  border-radius: var(--radius-lg);
-}
-/* The picture and the preview have different shapes: keep the picture whole while the box changes shape. */
-::view-transition-old(ticket),
-::view-transition-new(ticket) {
-  height: 100%;
-  object-fit: contain;
-}
-/* Without a partner (the card scrolled away, a list still loading) the workspace just rises in or settles out. */
-::view-transition-new(hero):only-child {
-  animation: vt-rise var(--vt-move) var(--ease-drawer) both;
-}
-::view-transition-old(hero):only-child {
-  animation: vt-sink var(--vt-fade) var(--ease-out) both;
-}
-@keyframes vt-rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-}
-@keyframes vt-sink {
-  to {
-    opacity: 0;
-    transform: translateY(8px);
-  }
+.route-ghost {
+  position: absolute;
+  margin: 0;
+  box-sizing: border-box;
+  will-change: transform, opacity;
 }
 
 @keyframes fade-in {

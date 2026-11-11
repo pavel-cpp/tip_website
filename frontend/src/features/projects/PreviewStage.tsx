@@ -10,7 +10,7 @@ import { PlaceholderPreview } from './PlaceholderPreview'
 import './settings.css'
 
 interface Props {
-  project: Pick<Project, 'image'>
+  project: Pick<Project, 'id' | 'image'>
   image: HTMLImageElement | null
   placeholders: TicketPlaceholders
   values: TicketValues
@@ -97,7 +97,7 @@ export function PreviewStage({
   )
 
   return (
-    <div className="st-stage">
+    <div className="st-stage" data-morph={`ticket:${project.id}`}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: a drop target; the choose-file button below is the keyboard path */}
       <div
         className={cx('st-drop', over && 'is-over')}

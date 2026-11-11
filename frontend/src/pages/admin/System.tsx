@@ -30,7 +30,9 @@ export default function System() {
   return (
     <div className="admin-page">
       <div className="admin-head">
-        <h1 className="page-title">{t('nav.adminSystem')}</h1>
+        <h1 className="page-title" data-morph="heading" data-morph-text="">
+          {t('nav.adminSystem')}
+        </h1>
         <div className="admin-tools">
           <Button
             size="sm"

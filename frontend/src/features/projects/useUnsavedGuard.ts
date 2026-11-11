@@ -71,14 +71,14 @@ export function useUnsavedGuard(dirty: boolean) {
     dirtyRef.current = false
     setPending(false)
     if (typeof to === 'number') void navigate(to)
-    else if (to) void navigate(to, { viewTransition: true })
+    else if (to) void navigate(to)
   }, [navigate])
 
   /** For buttons that leave the screen programmatically (Cancel, close). */
   const requestLeave = useCallback(
     (to: string) => {
       if (!dirtyRef.current) {
-        void navigate(to, { viewTransition: true })
+        void navigate(to)
         return
       }
       target.current = to

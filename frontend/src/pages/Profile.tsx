@@ -102,7 +102,9 @@ export default function Profile() {
 
   return (
     <div className="profile">
-      <h1 className="page-title">{t('profile.title')}</h1>
+      <h1 className="page-title" data-morph="heading" data-morph-text="">
+        {t('profile.title')}
+      </h1>
 
       <form className="profile-card" onSubmit={save} noValidate>
         <section className="profile-avatar" aria-labelledby="profile-photo">

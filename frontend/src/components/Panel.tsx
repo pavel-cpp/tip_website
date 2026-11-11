@@ -9,11 +9,13 @@ interface PanelProps {
   actions?: ReactNode
   children?: ReactNode
   className?: string
+  /** The panel slides in from the side when its page opens (lib/routeMotion.ts). */
+  reveal?: 'side'
 }
 
-export function Panel({ title, icon, actions, children, className }: PanelProps) {
+export function Panel({ title, icon, actions, children, className, reveal }: PanelProps) {
   return (
-    <section className={cx('panel', className)}>
+    <section className={cx('panel', className)} data-reveal={reveal}>
       <header className="panel-head">
         {icon && <Icon name={icon} />}
         <h2 className="panel-title">{title}</h2>
