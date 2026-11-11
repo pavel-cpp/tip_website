@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -54,8 +53,20 @@ type Config struct {
 type Handler struct {
 	cfg      Config
 	patterns []string
-	closing  atomic.Bool
+	mu       sync.Mutex // guards closing together with wg.Add, so Add never runs concurrently with Wait
+	closing  bool
 	wg       sync.WaitGroup
+}
+
+// enter registers one live connection. It refuses once Shutdown has started.
+func (h *Handler) enter() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closing {
+		return false
+	}
+	h.wg.Add(1)
+	return true
 }
 
 // New builds a Handler, filling in default timeouts.
@@ -95,7 +106,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Shutdown refuses new connections, closes the live ones with 1001 and waits
 // for their goroutines to finish or for ctx to end.
 func (h *Handler) Shutdown(ctx context.Context) error {
-	h.closing.Store(true)
+	h.mu.Lock()
+	h.closing = true
+	h.mu.Unlock()
 	err := h.cfg.Collab.Shutdown(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -157,10 +170,11 @@ func (c *connection) enqueue(m outMsg) {
 
 // ServeProject runs one connection for projectID.
 func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID string) {
-	if h.closing.Load() {
+	if !h.enter() {
 		http.Error(w, "server is shutting down", http.StatusServiceUnavailable)
 		return
 	}
+	defer h.wg.Done()
 	log := logging.FromContext(r.Context())
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns:  h.patterns,
@@ -170,8 +184,6 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 		log.Debug().Err(err).Msg("websocket upgrade rejected")
 		return
 	}
-	h.wg.Add(1)
-	defer h.wg.Done()
 	conn.SetReadLimit(MaxFrameBytes)
 
 	ctx, cancel := context.WithCancel(r.Context())
