@@ -59,10 +59,13 @@
 
 	# WebSocket upgrades are proxied transparently. The Content-Security-Policy
 	# header is set by tipd, which knows the exact asset origins.
+	# A short check interval keeps the window of 503s small after tipd is replaced: an upstream that failed a check
+	# during a restart stays marked down until the next check passes.
 	reverse_proxy tipd:8080 {
 		lb_try_duration 5s
 		health_uri /healthz
-		health_interval 15s
+		health_interval 3s
+		health_timeout 2s
 	}
 }
 
