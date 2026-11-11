@@ -10,5 +10,5 @@ func freeBytes(dir string) (uint64, error) {
 	if err := syscall.Statfs(dir, &st); err != nil {
 		return 0, err
 	}
-	return uint64(st.Bavail) * uint64(st.Bsize), nil //nolint:gosec // Bavail and Bsize are never negative
+	return st.Bavail * uint64(st.Bsize), nil //nolint:gosec // Bavail and Bsize are never negative
 }
