@@ -244,7 +244,6 @@ test.describe('phone', () => {
     await expect(
       ws.bulkBar.getByRole('button', { name: ws.t('workspace.bulk.saveMany', { count: 2 }) }),
     ).toBeVisible()
-    await page.keyboard.press('Escape')
 
     // Leaving selection mode brings the toolbar back in the same place.
     await ws.bulkBar.getByRole('button', { name: ws.t('workspace.select.exit') }).tap()
@@ -415,7 +414,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    const h1 = page.locator('.ws-title')
+    const h1 = page.locator('.wsbar-title')
     await expect(h1).toHaveAttribute('title', title)
     const lines = await h1.evaluate(
       (el) => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight),
