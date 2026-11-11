@@ -43,17 +43,17 @@ log "migrating with $TAG"
 compose run --rm --no-deps -T tipd migrate || die "migration failed; the running version was not touched"
 
 log "swapping the stack to $TAG"
-compose up -d --remove-orphans
 
-if ! wait_healthy; then
-  log "new version did not become healthy within ${HEALTH_TIMEOUT}s"
+# A failing `up` (daemon error, bad image) is handled like an unhealthy start: it falls through to the rollback.
+if ! { compose up -d --remove-orphans && wait_healthy; }; then
+  log "new version did not start or did not become healthy within ${HEALTH_TIMEOUT}s"
   compose_logs
   if [[ -z $prev || $prev == "$TAG" || -z $prev_base ]]; then
     die "nothing to roll back to (first deploy or same tag); leaving the stack as it is"
   fi
   log "rolling back to $prev"
   set_images "$prev_base" "$prev"
-  compose up -d --remove-orphans
+  compose up -d --remove-orphans || die "rollback to $prev failed to start; manual attention needed"
   wait_healthy || die "rollback to $prev is not healthy either; manual attention needed"
   printf '%s\n' "$TAG" >.failed_tag
   die "deploy of $TAG failed, rolled back to $prev"
@@ -84,5 +84,5 @@ if [[ -n $domain && -f nginx/tip.conf && -f /etc/nginx/sites-available/tip.conf 
 fi
 
 log "deployed $TAG (previous: ${keep_prev:-none})"
-compose ps --format 'table {{.Service}}\t{{.State}}\t{{.Health}}'
+compose ps --format 'table {{.Service}}\t{{.Status}}'
 df -h / | tail -n 1

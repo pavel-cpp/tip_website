@@ -27,9 +27,9 @@ set_images() {
 
 probe_edge() {
   if command -v curl >/dev/null 2>&1; then
-    curl -fsS -m 5 -o /dev/null "$HEALTH_URL"
+    curl -fsS -m 5 "$HEALTH_URL" >/dev/null
   else
-    wget -q -T 5 -O /dev/null "$HEALTH_URL"
+    wget -q -T 5 -O - "$HEALTH_URL" >/dev/null
   fi
 }
 

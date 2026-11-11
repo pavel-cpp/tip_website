@@ -55,6 +55,7 @@ jobs:
           context: .
           file: deploy/Dockerfile
           platforms: linux/amd64
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           push: true
           build-args: |
             VERSION=${{ steps.meta.outputs.tag }}
@@ -69,6 +70,7 @@ jobs:
         with:
           context: deploy/backup
           platforms: linux/amd64
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           push: true
           tags: |
             ${{ steps.meta.outputs.base }}/backup:${{ steps.meta.outputs.tag }}

@@ -15,6 +15,7 @@
 | [04-api.md](04-api.md) | REST API и протокол WebSocket |
 | [05-observability.md](05-observability.md) | Логи, метрики, ретенция 3–5 дней, бюджет ресурсов и диска, бэкапы |
 | [06-frontend.md](06-frontend.md) | Фронтенд: экраны из макета, кроссплатформенность (macOS/iOS), производительность |
+| [08-ci-cd.md](08-ci-cd.md) | CI/CD: GitHub Actions, образы в GHCR, деплой на общий сервер (nginx → Caddy → tipd), откат, что вводить в GitHub |
 
 ## Источники
 
