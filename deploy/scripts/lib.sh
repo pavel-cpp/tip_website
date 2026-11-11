@@ -3,9 +3,6 @@
 
 PROJECT="${TIP_PROJECT:-tip}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"
-EDGE_PORT="${EDGE_PORT:-8080}"
-export EDGE_PORT
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:${EDGE_PORT}/readyz}"
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 die() {
@@ -13,24 +10,25 @@ die() {
   exit 1
 }
 
-# One place that knows which compose files make up the server stack.
+# One place that knows which compose file makes up the server stack. TIP_COMPOSE_EXTRA is a hook for rehearsals only
+# (an extra compose file, for example to remap the published ports on a machine where 80/443 are taken).
 compose() {
-  docker compose -p "$PROJECT" -f docker-compose.prod.yml -f docker-compose.server.yml --env-file prod.env "$@"
+  local extra=()
+  if [[ -n ${TIP_COMPOSE_EXTRA:-} ]]; then extra=(-f "$TIP_COMPOSE_EXTRA"); fi
+  docker compose -p "$PROJECT" -f docker-compose.prod.yml "${extra[@]}" --env-file prod.env "$@"
 }
 
-# Pins the images of the services we build ourselves; the compose files read these two variables.
+# Pins the images of the services we build ourselves; the compose file reads these two variables.
 set_images() {
   TIPD_IMAGE="$1/tipd:$2"
   BACKUP_IMAGE="$1/backup:$2"
   export TIPD_IMAGE BACKUP_IMAGE
 }
 
+# A request through Caddy to tipd, over the plain-HTTP probe listener inside the caddy container (see Caddyfile).
+# It does not depend on the certificate, which Caddy may still be obtaining right after the first start.
 probe_edge() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsS -m 5 "$HEALTH_URL" >/dev/null
-  else
-    wget -q -T 5 -O - "$HEALTH_URL" >/dev/null
-  fi
+  compose exec -T caddy wget -q -T 5 -O - http://127.0.0.1:8081/readyz >/dev/null 2>&1
 }
 
 # Healthy = tipd's own /readyz probe passes inside the container AND the request gets through Caddy.
