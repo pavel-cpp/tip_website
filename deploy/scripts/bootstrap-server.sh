@@ -12,12 +12,13 @@
 #   4. /etc/nginx/sites-available/tip.conf (+ symlink in sites-enabled), certificate for DOMAIN only (webroot).
 # It opens no other port, does not touch swap/zram/kernel settings and asks no questions.
 #
-# Flags: --nginx-only   re-install the nginx site only (after nginx/tip.conf changed), step 4
+# Flags: --no-email     register with Let's Encrypt without an address (no expiry notices; renewal still runs)
+#        --nginx-only   re-install the nginx site only (after nginx/tip.conf changed), step 4
 #        --staging      Let's Encrypt staging certificate first (rerun without it for the real one)
 #        --force        allow an existing /opt/tip (never overwrites an existing prod.env)
 set -euo pipefail
 
-DOMAIN="" EMAIL="" EXPECT_HOST="" KEY_FILE="" DRY=0 STAGING=0 FORCE=0 NGINX_ONLY=0
+DOMAIN="" EMAIL="" NO_EMAIL=0 EXPECT_HOST="" KEY_FILE="" DRY=0 STAGING=0 FORCE=0 NGINX_ONLY=0
 APP_DIR=/opt/tip
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NGINX_SRC="$HERE/../nginx/tip.conf"
@@ -37,6 +38,7 @@ while (($#)); do
   case "$1" in
     --domain) DOMAIN="${2:-}"; shift 2 ;;
     --email) EMAIL="${2:-}"; shift 2 ;;
+    --no-email) NO_EMAIL=1; shift ;;
     --expect-hostname) EXPECT_HOST="${2:-}"; shift 2 ;;
     --deploy-key-file) KEY_FILE="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
@@ -48,7 +50,7 @@ while (($#)); do
 done
 
 [[ $DOMAIN =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || die "--domain is required (lower case host name)"
-[[ $EMAIL =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || die "--email is required (Let's Encrypt notices)"
+((NO_EMAIL)) || [[ $EMAIL =~ ^[^@[:space:]]+@[^@[:space:]]+$ ]] || die "--email is required (Let's Encrypt notices), or pass --no-email"
 [[ -n $EXPECT_HOST ]] || die "--expect-hostname is required (guard against the wrong machine)"
 if ((!NGINX_ONLY)); then
   [[ -f $KEY_FILE ]] || die "--deploy-key-file must point to the deploy PUBLIC key"
@@ -208,9 +210,11 @@ EOF
   install_site "$http_conf"
   rm -f "$http_conf"
   stage_flag=()
+  email_flag=(-m "$EMAIL")
+  if ((NO_EMAIL)); then email_flag=(--register-unsafely-without-email); fi
   if ((STAGING)); then stage_flag=(--staging); fi
   run certbot certonly --webroot -w "$WEBROOT" -d "$DOMAIN" --cert-name "$DOMAIN" \
-    --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring \
+    --non-interactive --agree-tos "${email_flag[@]}" --keep-until-expiring \
     --deploy-hook "systemctl reload nginx" "${stage_flag[@]}" "${force_renew[@]}"
 else
   say "  = certificate for $DOMAIN already present"
