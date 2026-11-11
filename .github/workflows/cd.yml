@@ -123,10 +123,12 @@ jobs:
           EOF
       - name: Copy deploy files
         run: |
-          # Compose files, Caddyfiles, nginx site, scripts and monitoring configs. prod.env stays on the server.
+          # Compose file, Caddyfile (+ caddy.d, where an optional grafana.caddy is kept by the operator), scripts and
+          # monitoring configs. prod.env stays on the server. tar -x only adds and replaces files, so a
+          # caddy.d/grafana.caddy created on the server survives the deploy.
           tar -C deploy -czf - \
-            docker-compose.prod.yml docker-compose.server.yml Caddyfile Caddyfile.edge \
-            prometheus grafana loki vector nginx scripts \
+            docker-compose.prod.yml Caddyfile caddy.d \
+            prometheus grafana loki vector scripts \
             | ssh target 'mkdir -p /opt/tip && tar -xzf - -C /opt/tip'
       - name: Deploy
         env:

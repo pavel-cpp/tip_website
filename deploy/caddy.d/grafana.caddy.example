@@ -1,0 +1,20 @@
+# Grafana on its own sub-domain, off by default. To enable (needs the `obs` compose profile):
+#   cp caddy.d/grafana.caddy.example caddy.d/grafana.caddy     (in /opt/tip)
+#   set GRAFANA_DOMAIN, GRAFANA_BASIC_AUTH_USER and GRAFANA_BASIC_AUTH_HASH in prod.env, then
+#   docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs up -d
+# Two layers: Caddy basic auth first, then Grafana's own login. Grafana would treat the Basic header as its own
+# credentials, so it is stripped upstream. Hash: docker run --rm caddy:2.9-alpine caddy hash-password
+
+{$GRAFANA_DOMAIN} {
+	import security_headers
+	import access_log
+	encode zstd gzip
+
+	basic_auth {
+		{$GRAFANA_BASIC_AUTH_USER} {$GRAFANA_BASIC_AUTH_HASH}
+	}
+
+	reverse_proxy grafana:3000 {
+		header_up -Authorization
+	}
+}

@@ -142,10 +142,10 @@ func accessLogMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP returns the address of the real client. The app is reachable only through our own proxies
-// (Caddy on the Docker network, behind it the host nginx), so X-Forwarded-For is honoured only when the
-// peer is a loopback or private address, and read right to left: the first address that is not one of our
-// own hops is the client. Anything the client prepends to the header is therefore ignored, and a malformed
+// clientIP returns the address of the real client. The app is reachable only through our own proxy
+// (Caddy on the Docker network, which replaces any client-sent X-Forwarded-For with the remote address it saw),
+// so X-Forwarded-For is honoured only when the peer is a loopback or private address, and read right to left:
+// the first address that is not one of our own hops is the client. Anything the client prepends to the header is therefore ignored, and a malformed
 // header falls back to the peer instead of guessing.
 func clientIP(r *http.Request) string {
 	peer := r.RemoteAddr

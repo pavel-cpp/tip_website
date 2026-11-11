@@ -27,7 +27,7 @@ done
 
 log "rolling back $cur -> $target"
 set_images "$base" "$target"
-compose up -d --remove-orphans
+compose up -d --no-build --remove-orphans
 wait_healthy || die "$target is not healthy; check: docker compose -p $PROJECT logs tipd"
 
 printf '%s\n' "$target" >.current_tag

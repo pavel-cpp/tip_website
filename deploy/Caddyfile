@@ -1,16 +1,21 @@
-# Caddy: automatic HTTPS, reverse proxy to tipd, Grafana on a sub-domain.
-# Prometheus and Loki are intentionally not proxied: they stay on the
-# internal Docker network. Variables come from the caddy service environment.
+# Caddy is the only public edge of the stack: automatic HTTPS (certificate issued and renewed by Caddy itself,
+# kept in the `caddy` volume) and a reverse proxy to tipd.
+# Prometheus and Loki are intentionally not proxied: they stay on the internal Docker network.
+# Variables come from the caddy service environment (docker-compose.prod.yml).
 
 {
-	email {$ACME_EMAIL}
-	# The admin API stays on localhost inside the container; the compose
-	# healthcheck uses it. Slow-header clients are cut off early.
+	# Empty unless the operator sets ACME_EMAIL / ACME_CA in prod.env; compose turns them into the whole option
+	# line ("email x@y", "acme_ca <url>"), so an empty value does not leave a broken directive behind.
+	{$ACME_EMAIL_OPT}
+	{$ACME_CA_OPT}
+	# Slow-header clients are cut off early. The admin API stays on localhost inside the container.
 	servers {
 		timeouts {
 			read_header 10s
 		}
 	}
+	# No trusted_proxies on purpose: nothing sits in front of Caddy, so an X-Forwarded-For sent by a client is
+	# not trusted and reverse_proxy replaces it with the real remote address.
 }
 
 # Shared snippets -----------------------------------------------------------
@@ -61,20 +66,12 @@
 	}
 }
 
-# Grafana -----------------------------------------------------------------
-# Two layers: Caddy basic auth first, then Grafana's own login. Grafana would
-# treat the Basic header as its own credentials, so it is stripped upstream.
-
-{$GRAFANA_DOMAIN} {
-	import security_headers
-	import access_log
-	encode zstd gzip
-
-	basic_auth {
-		{$GRAFANA_BASIC_AUTH_USER} {$GRAFANA_BASIC_AUTH_HASH}
-	}
-
-	reverse_proxy grafana:3000 {
-		header_up -Authorization
-	}
+# Readiness probe for deploy.sh: plain HTTP inside the container (never published), so a deploy is judged by the
+# app and the proxy, not by certificate issuance, which can take a moment or depend on DNS.
+http://127.0.0.1:8081 {
+	bind 127.0.0.1
+	reverse_proxy tipd:8080
 }
+
+# Optional sites (Grafana): *.caddy files in conf.d are loaded when present, none is fine.
+import conf.d/*.caddy

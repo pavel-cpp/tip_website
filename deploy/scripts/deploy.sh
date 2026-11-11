@@ -45,7 +45,7 @@ compose run --rm --no-deps -T tipd migrate || die "migration failed; the running
 log "swapping the stack to $TAG"
 
 # A failing `up` (daemon error, bad image) is handled like an unhealthy start: it falls through to the rollback.
-if ! { compose up -d --remove-orphans && wait_healthy; }; then
+if ! { compose up -d --no-build --remove-orphans && wait_healthy; }; then
   log "new version did not start or did not become healthy within ${HEALTH_TIMEOUT}s"
   compose_logs
   if [[ -z $prev || $prev == "$TAG" || -z $prev_base ]]; then
@@ -53,7 +53,7 @@ if ! { compose up -d --remove-orphans && wait_healthy; }; then
   fi
   log "rolling back to $prev"
   set_images "$prev_base" "$prev"
-  compose up -d --remove-orphans || die "rollback to $prev failed to start; manual attention needed"
+  compose up -d --no-build --remove-orphans || die "rollback to $prev failed to start; manual attention needed"
   wait_healthy || die "rollback to $prev is not healthy either; manual attention needed"
   printf '%s\n' "$TAG" >.failed_tag
   die "deploy of $TAG failed, rolled back to $prev"
@@ -75,11 +75,18 @@ for repo in tipd backup; do
   done
 done
 
-# The nginx site is root-owned and installed by bootstrap-server.sh; only warn when it drifted from the repository.
+# Informational only (never fails the deploy): is the public HTTPS endpoint answering with a trusted certificate?
+# Right after the very first start Caddy may still be obtaining it; look at `docker compose -p tip logs caddy`.
 domain="$(sed -n 's/^DOMAIN=//p' prod.env | head -n1)"
-if [[ -n $domain && -f nginx/tip.conf && -f /etc/nginx/sites-available/tip.conf ]]; then
-  if ! sed "s/__DOMAIN__/$domain/g" nginx/tip.conf | cmp -s - /etc/nginx/sites-available/tip.conf; then
-    log "WARNING: /etc/nginx/sites-available/tip.conf differs from nginx/tip.conf; ask root to run bootstrap-server.sh --nginx-only"
+if [[ -n $domain ]] && command -v curl >/dev/null 2>&1; then
+  resolve=(--resolve "$domain:${TLS_PORT:-443}:127.0.0.1")
+  url="https://$domain:${TLS_PORT:-443}/readyz"
+  if curl -fsS -m 8 "${resolve[@]}" -o /dev/null "$url" 2>/dev/null; then
+    log "https://$domain answers with a trusted certificate"
+  elif curl -fsSk -m 8 "${resolve[@]}" -o /dev/null "$url" 2>/dev/null; then
+    log "NOTE: https://$domain answers, but the certificate is not trusted (staging CA, or still being issued)"
+  else
+    log "NOTE: https://$domain does not answer yet (certificate may still be issued; check DNS and the caddy logs)"
   fi
 fi
 

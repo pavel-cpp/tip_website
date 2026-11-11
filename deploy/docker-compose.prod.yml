@@ -7,9 +7,12 @@
 # swapping on an HDD is worse than an OOM kill. oom_score_adj makes the kernel
 # sacrifice observability before tipd, Postgres and Redis.
 #
+# Caddy is the only public edge (80, 443, 443/udp) and gets and renews the certificate itself. Docker publishes
+# ports around ufw, so no other service may publish a port unless it is bound to 127.0.0.1.
+#
 # Profiles: loki, vector and grafana are in the optional `obs` profile (off by default, they do not fit
-# next to other workloads on a 2 GB host). Enable with `--profile obs` and set LOKI_URL=http://loki:3100,
-# GRAFANA_DOMAIN and the GRAFANA_* variables in the env file.
+# next to other workloads on a 2 GB host). Enable with `--profile obs`, set LOKI_URL=http://loki:3100 and the
+# GRAFANA_* variables in the env file, and copy caddy.d/grafana.caddy.example to caddy.d/grafana.caddy.
 #
 # Image tags are pinned to known-good versions; bump them deliberately.
 # # VERIFY: all third-party tags below were chosen from memory and must be
@@ -33,8 +36,12 @@ services:
     environment:
       GOMEMLIMIT: 28MiB
       DOMAIN: ${DOMAIN:?set DOMAIN}
+      # Whole option lines for the Caddyfile global block; empty (so omitted) when the variable is unset or empty.
+      # ACME_CA example (Let's Encrypt staging for a first run): https://acme-staging-v02.api.letsencrypt.org/directory
+      ACME_EMAIL_OPT: ${ACME_EMAIL:+email ${ACME_EMAIL}}
+      ACME_CA_OPT: ${ACME_CA:+acme_ca ${ACME_CA}}
+      # Used only by caddy.d/grafana.caddy (see caddy.d/grafana.caddy.example).
       GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:-}
-      ACME_EMAIL: ${ACME_EMAIL:-}
       GRAFANA_BASIC_AUTH_USER: ${GRAFANA_BASIC_AUTH_USER:-}
       GRAFANA_BASIC_AUTH_HASH: ${GRAFANA_BASIC_AUTH_HASH:-}
     ports:
@@ -43,6 +50,8 @@ services:
       - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy.d:/etc/caddy/conf.d:ro
+      # Certificates and the ACME account: survive deploys, never prune this volume.
       - caddy:/data
     networks: [internal]
     depends_on:
