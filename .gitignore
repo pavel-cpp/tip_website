@@ -53,3 +53,8 @@ backend/web/dist/*
 
 # Production secrets (only the .example file is tracked)
 deploy/prod.env
+
+# JetBrains database connections (may hold hosts and credentials)
+.idea/dataSources*
+.idea/dataSources.local.xml
+.idea/db-forest-config.xml
