@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useToast } from '../../components/Toast'
 import { useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
@@ -56,6 +57,9 @@ interface Args {
 
 const zipName = (title: string) => `${safeFilePart(title) || 'tickets'}.zip`
 
+/** Identifies the picture of one ticket: any change of these fields makes a ready print sheet stale. */
+const printKey = (r: Participant) => `${r.id}:${r.number}:${r.name}:${r.phone}`
+
 /** Copy / save / print behaviour behind the workspace toolbar. All of it is gated by participant.print upstream. */
 export function useTicketActions({
   projectId,
@@ -77,6 +81,8 @@ export function useTicketActions({
   const [sheets, setSheets] = useState<string[] | null>(null)
   const sheetUrls = useRef<string[]>([])
   const printedIds = useRef<string[]>([])
+  // The single ticket the mounted sheets were made for (null when they hold a batch).
+  const warmKey = useRef<string | null>(null)
   const dropSheets = useCallback(() => {
     for (const u of sheetUrls.current) URL.revokeObjectURL(u)
     sheetUrls.current = []
@@ -339,10 +345,54 @@ export function useTicketActions({
 
   const cancel = useCallback(() => abort.current?.abort(), [])
 
-  /** Renders the tickets, mounts them as hidden sheets and opens the print dialog without leaving the page. */
+  /** Mounts rendered sheets (hidden on screen); `key` names the single ticket they hold, if they do. */
+  const mountSheets = useCallback(
+    (blobs: Blob[], ids: string[], key: string | null) => {
+      dropSheets()
+      sheetUrls.current = blobs.map((b) => URL.createObjectURL(b))
+      printedIds.current = ids
+      warmKey.current = key
+      // Flushed so the images exist in the page when the dialog is asked for, inside the same task.
+      flushSync(() => setSheets([...sheetUrls.current]))
+    },
+    [dropSheets],
+  )
+
+  // Touch screens: the dialog must open inside the tap. So the sheet of the single ticket on screen is made ahead of
+  // time (after a pause, so paging does not queue renders) and the tap only has to call window.print().
+  const onlyKey = only ? printKey(only) : null
+  useEffect(() => {
+    if (!only || !source || !isTouchDevice() || warmKey.current === onlyKey) return
+    let live = true
+    const id = setTimeout(() => {
+      renderPrintBatch(
+        source,
+        [only],
+        () => undefined,
+        () => !live || busy.current,
+      )
+        .then((blobs) => {
+          if (live && !busy.current && blobs.length === 1 && alive.current)
+            mountSheets(blobs, [only.id], onlyKey)
+        })
+        .catch(() => undefined)
+    }, 600)
+    return () => {
+      live = false
+      clearTimeout(id)
+    }
+  }, [source, onlyKey])
+
+  /** Opens the print dialog without leaving the page; phones use the ready sheet of the one ticket when there is one. */
   const runPrint = useCallback(async () => {
     if (!source || targets.length === 0 || busy.current) {
       if (!source) toast.show({ message: t('workspace.toast.notReady'), tone: 'error' })
+      return
+    }
+    const [one] = targets
+    if (targets.length === 1 && one && warmKey.current === printKey(one) && sheetUrls.current.length === 1) {
+      // Nothing is awaited before this call: it is still the tap.
+      void printSheets()
       return
     }
     busy.current = true
@@ -360,17 +410,23 @@ export function useTicketActions({
         () => ctl.signal.aborted,
       )
       if (ctl.signal.aborted || !alive.current) return
-      dropSheets()
-      sheetUrls.current = blobs.map((b) => URL.createObjectURL(b))
-      printedIds.current = rows.map((r) => r.id)
-      setSheets([...sheetUrls.current])
-      if (isIOS()) {
-        // Safari only prints from a user gesture, and the rendering above used it up.
+      const [first] = rows
+      mountSheets(
+        blobs,
+        rows.map((r) => r.id),
+        rows.length === 1 && first ? printKey(first) : null,
+      )
+      // Safari only prints from a user gesture, and a long render uses it up: then the tap is asked for again.
+      // Where the browser cannot say whether the gesture is still alive (older iOS), it is asked for as well.
+      const tapAlive = navigator.userActivation?.isActive
+      if (isIOS() && tapAlive !== true) {
         toast.show({
           message: t('workspace.print.ready', { count: rows.length, pages: paginate(rows.length).length }),
           action: { label: t('workspace.print.button'), onAction: () => void printSheets() },
-          duration: 30_000,
+          duration: 20_000,
         })
+      } else {
+        await printSheets()
       }
     } catch (e) {
       toast.show({ message: errorText(e), tone: 'error' })
@@ -379,14 +435,18 @@ export function useTicketActions({
       abort.current = null
       if (alive.current) setProgress(null)
     }
-  }, [source, targets, toast, t, dropSheets])
+  }, [source, targets, toast, t, mountSheets])
   const print = useCallback(() => void runPrint(), [runPrint])
 
   const printClosed = useCallback(() => {
-    dropSheets()
-    setSheets(null)
     // Only ids are sent; the dialog gives no way to tell printed from cancelled.
     void logPrinted(projectId, printedIds.current).catch(() => undefined)
+    // Phones report "closed" as soon as the dialog opens, while it is still drawing the pages from these images:
+    // the sheets stay until the next print or the next ticket replaces them.
+    if (isTouchDevice()) return
+    dropSheets()
+    setSheets(null)
+    warmKey.current = null
   }, [dropSheets, projectId])
 
   return {

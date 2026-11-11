@@ -38,7 +38,7 @@ import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineB
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
 import { PhoneToolbar } from '../features/workspace/PhoneToolbar'
 import { PrintSheets } from '../features/workspace/PrintSheets'
-import { copyShortcutLabel, isIOS } from '../features/workspace/platform'
+import { copyShortcutLabel } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
@@ -829,7 +829,7 @@ function WorkspaceView({ project }: { project: Project }) {
       )}
       {watchedPeer && watchRowId && <style>{spotlightCss(watchRowId, peerColor)}</style>}
 
-      {actions.sheets && <PrintSheets urls={actions.sheets} auto={!isIOS()} onClosed={actions.printClosed} />}
+      {actions.sheets && <PrintSheets urls={actions.sheets} onClosed={actions.printClosed} />}
       {actions.progress && (
         <div className="ws-progress" role="status">
           <div
