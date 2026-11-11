@@ -144,7 +144,7 @@ export const A11Y_STATES: Screen[] = [
       await ws.showTable()
       await ws.rows.first().waitFor()
       if (await ws.isCards()) {
-        await ws.rows.first().locator('.pc-main').click()
+        await ws.openCard(ws.rows.first(), false)
         await ws.sheet.waitFor()
       } else {
         await ws.cell(ws.row(0), 'name').click()

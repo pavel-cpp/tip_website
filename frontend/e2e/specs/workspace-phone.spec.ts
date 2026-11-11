@@ -86,7 +86,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    await ws.rowByText('Bobur').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Bobur'))
     await expect(ws.sheet).toBeVisible()
     await expect(ws.sheet.getByLabel(ws.t('workspace.col.name'))).toHaveValue('Bobur Rahimov')
     await ws.sheet.getByLabel(ws.t('workspace.col.name')).fill('Bobur Edited')
@@ -107,7 +107,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    await ws.rowByText('Alisher').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Alisher'))
     await expect(ws.sheet.getByRole('img', { name: /Alisher Karimov/ })).toBeVisible()
     await ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.next') }).tap()
     await expect(ws.sheet.getByLabel(ws.t('workspace.col.name'))).toHaveValue('Bobur Rahimov')
@@ -129,12 +129,12 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    const open = () => ws.rowByText('Alisher').locator('.pc-main').tap()
+    const open = () => ws.openCard(ws.rowByText('Alisher'))
     const url = page.url()
 
     await open()
     await expect(ws.sheet).toBeVisible()
-    await expect(ws.sheet.getByLabel(ws.t('workspace.col.name'))).toBeFocused()
+    await expect(ws.sheet).toBeFocused() // the dialog, not a field: no keyboard on open
     for (let i = 0; i < 12; i++) {
       await page.keyboard.press('Tab')
       const inside = await page.evaluate(() => !!document.activeElement?.closest('.sheet'))
@@ -165,7 +165,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    await ws.rowByText('Alisher').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Alisher'))
     await expect(ws.sheet).toBeVisible()
     const sheet = await box(ws.sheet)
     expect(sheet.x).toBeGreaterThanOrEqual(0)
@@ -244,7 +244,6 @@ test.describe('phone', () => {
     await expect(
       ws.bulkBar.getByRole('button', { name: ws.t('workspace.bulk.saveMany', { count: 2 }) }),
     ).toBeVisible()
-    await page.keyboard.press('Escape')
 
     // Leaving selection mode brings the toolbar back in the same place.
     await ws.bulkBar.getByRole('button', { name: ws.t('workspace.select.exit') }).tap()
@@ -334,7 +333,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    await ws.rowByText('Eldor').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Eldor'))
     await ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.clear') }).tap()
     await expect(ws.sheet).toBeHidden()
     await expect(ws.rows).toHaveCount(5)
@@ -362,7 +361,7 @@ test.describe('phone', () => {
     const b = await open(bob)
     const id = created[0]?.id as string
 
-    await a.ws.grid.locator(`[data-row-id="${id}"]`).locator('.pc-main').tap()
+    await a.ws.openCard(a.ws.grid.locator(`[data-row-id="${id}"]`))
     await expect(a.ws.sheet).toBeVisible()
 
     const bobCard = b.ws.grid.locator(`[data-row-id="${id}"]`)
@@ -374,7 +373,7 @@ test.describe('phone', () => {
     expect(ring).not.toBe('rgba(0, 0, 0, 0)')
 
     // Bob cannot open it and is told why.
-    await bobCard.locator('.pc-main').tap()
+    await b.ws.openCard(bobCard)
     await expect(b.ws.sheet).toHaveCount(0)
     await expect(
       b.page.getByText(b.ws.t('workspace.card.blocked', { number: 1, name: 'Alice Phone' })),
@@ -386,7 +385,7 @@ test.describe('phone', () => {
     await expect(a.ws.sheet).toBeHidden()
     await expect(bobCard).toContainText('Alisher Live')
     await expect(bobCard).not.toHaveAttribute('data-locked', 'true')
-    await bobCard.locator('.pc-main').tap()
+    await b.ws.openCard(bobCard)
     await expect(b.ws.sheet).toBeVisible()
   })
 
@@ -399,7 +398,7 @@ test.describe('phone', () => {
     await ws.showPicture()
     expect(await smallTargets(page.locator('.ws'))).toEqual([])
     await ws.showTable()
-    await ws.rowByText('Alisher').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Alisher'))
     await expect(ws.sheet).toBeVisible()
     expect(await smallTargets(ws.sheet)).toEqual([])
   })
@@ -415,7 +414,7 @@ test.describe('phone', () => {
     const page = await signedIn(adminCreds())
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
-    const h1 = page.locator('.ws-title')
+    const h1 = page.locator('.wsbar-title')
     await expect(h1).toHaveAttribute('title', title)
     const lines = await h1.evaluate(
       (el) => el.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(el).lineHeight),
@@ -494,7 +493,7 @@ test.describe('phone landscape', () => {
     const ws = new WorkspacePage(page)
     await ws.open(project.id)
     await expect(page.locator('.pc-scroll')).toBeVisible()
-    await ws.rowByText('Alisher').locator('.pc-main').tap()
+    await ws.openCard(ws.rowByText('Alisher'))
     await expect(ws.sheet).toBeVisible()
     const save = await box(ws.sheet.getByRole('button', { name: ws.t('workspace.sheet.save') }))
     expect(save.y + save.h).toBeLessThanOrEqual(390.5)

@@ -35,7 +35,7 @@ async function pictureOnly(page: Page, ws: WorkspacePage) {
   await page.locator('.tk-viewport').click()
 }
 
-test('stepping tickets in picture-only mode turns the card; quick repeats do not pile up', async ({
+test('stepping tickets slides the picture out and the next one in as one strip; quick repeats stay consistent', async ({
   admin,
   signedIn,
   viewport,
@@ -49,33 +49,66 @@ test('stepping tickets in picture-only mode turns the card; quick repeats do not
   const who = page.getByTestId('ticket-who')
   await expect(who).toContainText('Person 1')
 
-  await page.keyboard.press('ArrowRight')
-  await expect(who).toContainText('Person 2')
-  const turn = () =>
+  // Each scripted slide, as [first transform, last transform, duration].
+  const slides = () =>
     page.evaluate(() =>
       document
         .getAnimations()
-        .filter((a) =>
-          ((a.effect as KeyframeEffect | null)?.target as HTMLElement | null)?.classList.contains(
-            'tk-canvas',
-          ),
+        .filter(
+          (a) =>
+            !(a instanceof CSSTransition) &&
+            ((a.effect as KeyframeEffect | null)?.target as HTMLElement | null)?.classList.contains(
+              'tk-canvas',
+            ),
         )
-        .map((a) => String((a.effect as KeyframeEffect).getKeyframes()[0]?.transform)),
+        .map((a) => {
+          const k = (a.effect as KeyframeEffect).getKeyframes()
+          return [
+            String(k[0]?.transform),
+            String(k[k.length - 1]?.transform),
+            a.effect?.getTiming().duration,
+          ] as const
+        }),
     )
-  await expect.poll(async () => (await turn()).length).toBe(2)
-  // Next: the new card arrives from the right, so it starts shifted right.
-  expect((await turn()).some((t) => t.includes('translateX(32px)'))).toBe(true)
+  const px = (t: string) => Number.parseFloat(/translateX\((-?[\d.]+)px\)/.exec(t)?.[1] ?? 'NaN')
+  const width = await page.locator('.tk-stage').evaluate((el) => el.clientWidth)
 
-  // A burst of steps cancels the running turn each time: never more than the current pair.
+  await page.keyboard.press('ArrowRight')
+  await expect(who).toContainText('Person 2')
+  await expect.poll(async () => (await slides()).length).toBe(2)
+  const next = await slides()
+  // The picture leaves a full width to the left, the next one waits a full width to the right and arrives.
+  const out = next.find(([from]) => px(from) === 0)
+  const inn = next.find(([, to]) => px(to) === 0)
+  expect(px(out?.[1] ?? '')).toBeCloseTo(-width, 0)
+  expect(px(inn?.[0] ?? '')).toBeCloseTo(width, 0)
+  // Fixed 260-300 ms, only transform.
+  for (const [, , ms] of next) expect(Number(ms)).toBeGreaterThanOrEqual(260)
+  for (const [, , ms] of next) expect(Number(ms)).toBeLessThanOrEqual(300)
+
+  // A burst of steps retargets from where the strip is: never more than three canvases move at once.
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
   await expect(who).toContainText('Person 5')
-  expect((await turn()).length).toBeLessThanOrEqual(2)
+  expect((await slides()).length).toBeLessThanOrEqual(3)
 
-  // Back: mirrored.
+  // Back from rest: mirrored, the previous one arrives from the left.
+  await expect.poll(async () => (await slides()).length, { timeout: 3000 }).toBe(0)
   await page.keyboard.press('ArrowLeft')
   await expect(who).toContainText('Person 4')
-  await expect.poll(async () => (await turn()).some((t) => t.includes('translateX(-32px)'))).toBe(true)
-  await expect.poll(async () => (await turn()).length, { timeout: 3000 }).toBeLessThanOrEqual(2)
+  await expect.poll(async () => (await slides()).some(([from]) => px(from) < -width / 2)).toBe(true)
+
+  // When it is over nothing is left behind: no animation, no inline shift, exactly one visible canvas.
+  await expect.poll(async () => (await slides()).length, { timeout: 3000 }).toBe(0)
+  const rest = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('.tk-canvas')].map((c) => ({
+      front: c.hasAttribute('data-front'),
+      transform: c.style.transform,
+      opacity: getComputedStyle(c).opacity,
+    })),
+  )
+  expect(rest.every((c) => c.transform === '')).toBe(true)
+  expect(rest.filter((c) => c.opacity === '1')).toHaveLength(1)
+  expect(rest.find((c) => c.opacity === '1')?.front).toBe(true)
 })
 
 test('a held arrow key swaps tickets without the page-turn', async ({ admin, signedIn, viewport }) => {
@@ -212,7 +245,7 @@ test('frames', async ({ admin, signedIn, viewport, browserName }) => {
           ),
       ),
   )
-  for (const t of [30, 60, 100, 150]) {
+  for (const t of [0, 70, 140, 210, 285]) {
     await page.evaluate((ms) => {
       for (const a of document.getAnimations()) {
         a.pause()

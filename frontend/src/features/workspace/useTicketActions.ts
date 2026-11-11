@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useToast } from '../../components/Toast'
 import { useI18n } from '../../i18n'
 import { errorText } from '../../i18n/apiError'
-import { paginate } from '../../lib/ticket'
+import { paginate, renderTicketBlob } from '../../lib/ticket'
 import { logPrinted, type Participant } from './api'
 import { COPY_CAP } from './clipboardPayload'
 import {
+  chunkFiles,
   downloadEach,
   folderSupported,
   loadSaveMode,
@@ -19,14 +21,17 @@ import { printSheets } from './PrintSheets'
 import { isIOS } from './platform'
 import { safeFilePart } from './tableLogic'
 import {
+  canShareFiles,
   copyTicket,
   copyTickets,
   downloadBlob,
+  isTouchDevice,
   nextTurn,
   renderPrintBatch,
   saveTickets,
   type TicketSource,
   ticketBatch,
+  ticketValues,
 } from './ticketActions'
 
 export interface Progress {
@@ -46,12 +51,24 @@ interface Args {
   current: Participant | null
   /** Selected rows in table order; falls back to `current` when empty. */
   selectedRows: readonly Participant[]
+  /** Phone layout: several tickets are saved as image files through the share sheet, never as a ZIP. */
+  phone?: boolean
 }
 
 const zipName = (title: string) => `${safeFilePart(title) || 'tickets'}.zip`
 
+/** Identifies the picture of one ticket: any change of these fields makes a ready print sheet stale. */
+const printKey = (r: Participant) => `${r.id}:${r.number}:${r.name}:${r.phone}`
+
 /** Copy / save / print behaviour behind the workspace toolbar. All of it is gated by participant.print upstream. */
-export function useTicketActions({ projectId, projectTitle, source, current, selectedRows }: Args) {
+export function useTicketActions({
+  projectId,
+  projectTitle,
+  source,
+  current,
+  selectedRows,
+  phone = false,
+}: Args) {
   const { t } = useI18n()
   const toast = useToast()
   const [progress, setProgress] = useState<Progress | null>(null)
@@ -64,6 +81,8 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
   const [sheets, setSheets] = useState<string[] | null>(null)
   const sheetUrls = useRef<string[]>([])
   const printedIds = useRef<string[]>([])
+  // The single ticket the mounted sheets were made for (null when they hold a batch).
+  const warmKey = useRef<string | null>(null)
   const dropSheets = useCallback(() => {
     for (const u of sheetUrls.current) URL.revokeObjectURL(u)
     sheetUrls.current = []
@@ -78,15 +97,35 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
   }, [dropSheets])
 
   const targets = selectedRows.length > 0 ? selectedRows : current ? [current] : []
+
+  // Touch screens: a clipboard write must start inside the tap, and Safari is strict about how long the picture
+  // may take. So the single ticket is rendered ahead (after a short pause, so paging does not queue renders)
+  // and the tap hands the clipboard a finished blob.
+  const warm = useRef<{ source: TicketSource; row: Participant; blob: Promise<Blob> } | null>(null)
+  const only = targets.length === 1 ? targets[0] : undefined
+  useEffect(() => {
+    warm.current = null
+    if (!only || !source || !window.matchMedia('(pointer: coarse)').matches) return
+    const id = setTimeout(() => {
+      const blob = renderTicketBlob(source.image, source.placeholders, ticketValues(only))
+      blob.catch(() => undefined)
+      warm.current = { source, row: only, blob }
+    }, 250)
+    return () => clearTimeout(id)
+  }, [source, only?.id, only?.number, only?.name, only?.phone])
   const setSaveMode = useCallback((m: SaveMode) => {
     storeSaveMode(m)
     setSaveModeState(m)
   }, [])
 
   const saveZipRef = useRef<() => Promise<void>>(async () => undefined)
+  // On phones the "save instead" offer is image files, not an archive.
   const toZip = useCallback(
-    () => ({ label: t('workspace.copy.zip'), onAction: () => void saveZipRef.current() }),
-    [t],
+    () => ({
+      label: t(phone ? 'workspace.copy.images' : 'workspace.copy.zip'),
+      onAction: () => void saveZipRef.current(),
+    }),
+    [t, phone],
   )
 
   /** Must run synchronously inside the click/keydown handler (Safari clipboard rule). */
@@ -107,14 +146,18 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
         busy.current = false
         if (alive.current) setProgress(null)
         if (!res.ok) {
-          toast.show({ message: t('workspace.toast.copyManyFailed'), tone: 'error', action: toZip() })
+          toast.show({
+            message: t(phone ? 'workspace.toast.copyManyFailedPhone' : 'workspace.toast.copyManyFailed'),
+            tone: 'error',
+            action: toZip(),
+          })
           return
         }
         toast.show({
           message:
             t('workspace.toast.copiedMany', { count: res.count }) +
             (res.skipped > 0
-              ? ` ${t('workspace.toast.copyCapped', { cap: COPY_CAP, skipped: res.skipped })}`
+              ? ` ${t(phone ? 'workspace.toast.copyCappedPhone' : 'workspace.toast.copyCapped', { cap: COPY_CAP, skipped: res.skipped })}`
               : ''),
           // Pasting HTML into a plain image field gives only one picture, so the ZIP is always on offer.
           action: toZip(),
@@ -123,7 +166,16 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
       })
       return
     }
-    void copyTicket(source, first).then(async (res) => {
+    const w = warm.current
+    const ready =
+      w &&
+      w.source === source &&
+      w.row.id === first.id &&
+      w.row.name === first.name &&
+      w.row.phone === first.phone
+        ? w.blob
+        : undefined
+    void copyTicket(source, first, ready).then(async (res) => {
       if (res.ok) {
         toast.show({ message: t('workspace.toast.copied') })
         return
@@ -136,7 +188,7 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
         toast.show({ message: errorText(e), tone: 'error' })
       }
     })
-  }, [source, targets, toast, t, toZip])
+  }, [source, targets, toast, t, toZip, phone])
 
   const report = useCallback(
     (res: { saved: number; failed: { name: string }[]; cancelled: boolean }, total: number) => {
@@ -159,13 +211,53 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
     [toast, t],
   )
 
+  /**
+   * Hands prepared image files to the share sheet (Save to Photos / Gallery), one chunk per sheet. A sheet only
+   * opens inside a tap, so the first one opens at once while the tap is still fresh and every other chunk is
+   * offered in a short-lived toast whose button is that tap.
+   */
+  const offerShare = useCallback(
+    function offer(chunks: File[][], i: number, total: number, now: boolean): void {
+      const open = () => {
+        navigator.share({ files: chunks[i] as File[] }).then(
+          () => {
+            if (i + 1 < chunks.length) offer(chunks, i + 1, total, false)
+            else toast.show({ message: t('workspace.toast.saved', { count: total }) })
+          },
+          (e: unknown) => {
+            if (e instanceof DOMException && e.name === 'AbortError') {
+              const saved = chunks.slice(0, i).reduce((n, c) => n + c.length, 0)
+              toast.show({ message: t('workspace.toast.saveCancelled', { saved, total }) })
+            } else {
+              toast.show({ message: errorText(e), tone: 'error' })
+            }
+          },
+        )
+      }
+      if (now) {
+        open()
+        return
+      }
+      toast.show({
+        message: t('workspace.share.ready', { part: i + 1, parts: chunks.length }),
+        action: { label: t('workspace.share.save'), onAction: open },
+        duration: 60_000,
+      })
+    },
+    [toast, t],
+  )
+
   const runSave = useCallback(
     async (mode: SaveMode) => {
       if (!source || targets.length === 0 || busy.current) {
         if (!source) toast.show({ message: t('workspace.toast.notReady'), tone: 'error' })
         return
       }
-      const plan = planSave(targets.length, mode, { folder: folderSupported(), ios: isIOS() })
+      const plan = planSave(targets.length, mode, {
+        folder: folderSupported(),
+        ios: isIOS(),
+        phone: phone && isTouchDevice(),
+      })
       busy.current = true
       const ctl = new AbortController()
       abort.current = ctl
@@ -196,6 +288,32 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
             }),
             targets.length,
           )
+        } else if (plan.kind === 'share') {
+          // Render everything first (one canvas alive at a time), then share the files in as few sheets as possible.
+          setProgress({ kind: 'save', done: 0, total: targets.length, cancellable: true })
+          const files: File[] = []
+          const batch = ticketBatch(source, targets, projectTitle)
+          for (const [i, item] of batch.entries()) {
+            if (ctl.signal.aborted) break
+            files.push(new File([await item.render()], item.name, { type: 'image/png' }))
+            onProgress(true)(i + 1, batch.length)
+            await nextTurn()
+          }
+          if (ctl.signal.aborted) {
+            report({ saved: 0, failed: [], cancelled: true }, targets.length)
+          } else if (canShareFiles(chunkFiles(files)[0] ?? [])) {
+            offerShare(chunkFiles(files), 0, files.length, navigator.userActivation?.isActive === true)
+          } else {
+            toast.show({ message: t('workspace.toast.shareFallback'), duration: 8000 })
+            report(
+              await downloadEach(
+                files.map((f) => ({ name: f.name, render: async () => f })),
+                downloadBlob,
+                { onProgress: onProgress(true), signal: ctl.signal, gapMs: 700 },
+              ),
+              files.length,
+            )
+          }
         } else {
           if (plan.kind === 'zip' && plan.note) {
             toast.show({ message: t('workspace.toast.noFolderZip'), duration: 8000 })
@@ -212,7 +330,7 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
         if (alive.current) setProgress(null)
       }
     },
-    [source, targets, projectTitle, toast, t, report],
+    [source, targets, projectTitle, toast, t, report, phone, offerShare],
   )
 
   const save = useCallback(() => runSave(saveMode), [runSave, saveMode])
@@ -227,10 +345,54 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
 
   const cancel = useCallback(() => abort.current?.abort(), [])
 
-  /** Renders the tickets, mounts them as hidden sheets and opens the print dialog without leaving the page. */
+  /** Mounts rendered sheets (hidden on screen); `key` names the single ticket they hold, if they do. */
+  const mountSheets = useCallback(
+    (blobs: Blob[], ids: string[], key: string | null) => {
+      dropSheets()
+      sheetUrls.current = blobs.map((b) => URL.createObjectURL(b))
+      printedIds.current = ids
+      warmKey.current = key
+      // Flushed so the images exist in the page when the dialog is asked for, inside the same task.
+      flushSync(() => setSheets([...sheetUrls.current]))
+    },
+    [dropSheets],
+  )
+
+  // Touch screens: the dialog must open inside the tap. So the sheet of the single ticket on screen is made ahead of
+  // time (after a pause, so paging does not queue renders) and the tap only has to call window.print().
+  const onlyKey = only ? printKey(only) : null
+  useEffect(() => {
+    if (!only || !source || !isTouchDevice() || warmKey.current === onlyKey) return
+    let live = true
+    const id = setTimeout(() => {
+      renderPrintBatch(
+        source,
+        [only],
+        () => undefined,
+        () => !live || busy.current,
+      )
+        .then((blobs) => {
+          if (live && !busy.current && blobs.length === 1 && alive.current)
+            mountSheets(blobs, [only.id], onlyKey)
+        })
+        .catch(() => undefined)
+    }, 600)
+    return () => {
+      live = false
+      clearTimeout(id)
+    }
+  }, [source, onlyKey])
+
+  /** Opens the print dialog without leaving the page; phones use the ready sheet of the one ticket when there is one. */
   const runPrint = useCallback(async () => {
     if (!source || targets.length === 0 || busy.current) {
       if (!source) toast.show({ message: t('workspace.toast.notReady'), tone: 'error' })
+      return
+    }
+    const [one] = targets
+    if (targets.length === 1 && one && warmKey.current === printKey(one) && sheetUrls.current.length === 1) {
+      // Nothing is awaited before this call: it is still the tap.
+      void printSheets()
       return
     }
     busy.current = true
@@ -248,17 +410,23 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
         () => ctl.signal.aborted,
       )
       if (ctl.signal.aborted || !alive.current) return
-      dropSheets()
-      sheetUrls.current = blobs.map((b) => URL.createObjectURL(b))
-      printedIds.current = rows.map((r) => r.id)
-      setSheets([...sheetUrls.current])
-      if (isIOS()) {
-        // Safari only prints from a user gesture, and the rendering above used it up.
+      const [first] = rows
+      mountSheets(
+        blobs,
+        rows.map((r) => r.id),
+        rows.length === 1 && first ? printKey(first) : null,
+      )
+      // Safari only prints from a user gesture, and a long render uses it up: then the tap is asked for again.
+      // Where the browser cannot say whether the gesture is still alive (older iOS), it is asked for as well.
+      const tapAlive = navigator.userActivation?.isActive
+      if (isIOS() && tapAlive !== true) {
         toast.show({
           message: t('workspace.print.ready', { count: rows.length, pages: paginate(rows.length).length }),
           action: { label: t('workspace.print.button'), onAction: () => void printSheets() },
-          duration: 30_000,
+          duration: 20_000,
         })
+      } else {
+        await printSheets()
       }
     } catch (e) {
       toast.show({ message: errorText(e), tone: 'error' })
@@ -267,14 +435,18 @@ export function useTicketActions({ projectId, projectTitle, source, current, sel
       abort.current = null
       if (alive.current) setProgress(null)
     }
-  }, [source, targets, toast, t, dropSheets])
+  }, [source, targets, toast, t, mountSheets])
   const print = useCallback(() => void runPrint(), [runPrint])
 
   const printClosed = useCallback(() => {
-    dropSheets()
-    setSheets(null)
     // Only ids are sent; the dialog gives no way to tell printed from cancelled.
     void logPrinted(projectId, printedIds.current).catch(() => undefined)
+    // Phones report "closed" as soon as the dialog opens, while it is still drawing the pages from these images:
+    // the sheets stay until the next print or the next ticket replaces them.
+    if (isTouchDevice()) return
+    dropSheets()
+    setSheets(null)
+    warmKey.current = null
   }, [dropSheets, projectId])
 
   return {

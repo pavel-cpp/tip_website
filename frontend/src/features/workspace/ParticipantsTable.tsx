@@ -49,6 +49,7 @@ import {
   planPaste,
   pruneSelection,
   selectAllVisible,
+  tapAction,
 } from './tableLogic'
 import { useDragSelect } from './useDragSelect'
 
@@ -453,6 +454,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   // ---- cards and bottom sheet
 
+  // The card the last pick selected: tapping it again opens the editor.
+  const armed = useRef<string | null>(null)
   const pickCard = useCallback(
     (id: string) => {
       const index = ids.indexOf(id)
@@ -460,6 +463,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       setActive({ row: index, col: 1 })
       setAnchor(index)
       onCurrentChange(id)
+      armed.current = id
       return index
     },
     [ids, onCurrentChange],
@@ -467,7 +471,8 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   const openCard = useCallback(
     (id: string) => {
-      if (pickCard(id) < 0) return
+      const second = tapAction(armed.current, id) === 'open'
+      if (pickCard(id) < 0 || !second) return
       const owner = lockFor(id)
       if (owner) {
         // A row someone else is editing never opens; say who holds it instead of failing silently.

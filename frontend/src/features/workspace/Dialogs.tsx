@@ -93,15 +93,25 @@ export function CopyFallbackDialog({ blob, onClose }: { blob: Blob | null; onClo
     setUrl(u)
     return () => URL.revokeObjectURL(u)
   }, [blob])
+  // The share sheet (Copy, Save to Photos, messengers) is the other way out where the clipboard refuses.
+  const file = blob ? new File([blob], 'ticket.png', { type: 'image/png' }) : null
+  const canShare = !!file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
   return (
     <Modal
       open={blob !== null}
       onClose={onClose}
       title={t('workspace.copyFallback.title')}
       actions={
-        <Button variant="primary" onClick={onClose}>
-          {t('action.close')}
-        </Button>
+        <>
+          {canShare && (
+            <Button onClick={() => void navigator.share({ files: [file as File] }).catch(() => undefined)}>
+              {t('workspace.copyFallback.share')}
+            </Button>
+          )}
+          <Button variant="primary" onClick={onClose}>
+            {t('action.close')}
+          </Button>
+        </>
       }
     >
       <p className="muted">{t('workspace.copyFallback.body')}</p>

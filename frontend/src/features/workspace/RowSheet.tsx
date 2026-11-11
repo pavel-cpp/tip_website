@@ -108,7 +108,11 @@ export function RowSheet(props: RowSheetProps) {
     const previous = document.activeElement as HTMLElement | null
     const root = document.getElementById('root')
     root?.setAttribute('inert', '')
-    shell.current?.querySelector<HTMLElement>('.sheet-input')?.focus({ preventScroll: true })
+    // On touch screens a focused field raises the keyboard, which hides the form the user came to read;
+    // the dialog itself takes the focus (screen readers still land inside) and a tap on a field opens the keyboard.
+    const touch = window.matchMedia('(pointer: coarse)').matches
+    const target = touch ? '.sheet' : '.sheet-input'
+    shell.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true })
     return () => {
       root?.removeAttribute('inert')
       previous?.focus?.({ preventScroll: true })
@@ -225,7 +229,7 @@ function SheetForm({
   }
 
   return (
-    <div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <div className="sheet-grab" aria-hidden="true" />
       <header className="sheet-head">
         <div className="sheet-heading">

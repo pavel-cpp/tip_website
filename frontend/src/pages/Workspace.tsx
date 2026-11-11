@@ -38,7 +38,7 @@ import { OfflineBanner, useConnectionDown } from '../features/workspace/OfflineB
 import { type CommitResult, ParticipantsTable } from '../features/workspace/ParticipantsTable'
 import { PhoneToolbar } from '../features/workspace/PhoneToolbar'
 import { PrintSheets } from '../features/workspace/PrintSheets'
-import { copyShortcutLabel, isIOS } from '../features/workspace/platform'
+import { copyShortcutLabel } from '../features/workspace/platform'
 import type { RowLockOwner } from '../features/workspace/presence'
 import { useRowPresence } from '../features/workspace/presence'
 import { BIG_PRINT_THRESHOLD, estimateMs, formatDuration } from '../features/workspace/printEstimate'
@@ -207,6 +207,7 @@ function WorkspaceView({ project }: { project: Project }) {
     source,
     current,
     selectedRows,
+    phone: narrow,
   })
 
   // Cmd/Ctrl+C copies the ticket unless the user is copying text out of a field.
@@ -406,13 +407,17 @@ function WorkspaceView({ project }: { project: Project }) {
   const nextRow = stepRow(shownRows, current?.id ?? null, 1)
   // True while a held arrow key repeats: the ticket then swaps with no page-turn.
   const instantStep = useRef(false)
-  const stepTo = useCallback((row: Participant | null, instant = false) => {
-    if (!row) return
-    instantStep.current = instant
-    setCurrentId(row.id)
-    setSelected(new Set([row.id]))
-    setReveal(row.id)
-  }, [])
+  const stepTo = useCallback(
+    (row: Participant | null, instant = false) => {
+      if (!row) return
+      instantStep.current = instant
+      setCurrentId(row.id)
+      // On phones the selection is its own mode (a swipe must not drop a multi-selection).
+      if (!narrow) setSelected(new Set([row.id]))
+      setReveal(row.id)
+    },
+    [narrow],
+  )
   const stepRef = useRef({ prev: prevRow, next: nextRow, go: stepTo })
   stepRef.current = { prev: prevRow, next: nextRow, go: stepTo }
   useEffect(() => {
@@ -663,12 +668,14 @@ function WorkspaceView({ project }: { project: Project }) {
         settingsTo={canSettings ? `/projects/${project.id}/settings` : undefined}
         instantRef={instantStep}
         nav={
-          pictureOnly
+          pictureOnly || narrow
             ? {
                 hasPrev: !!prevRow,
                 hasNext: !!nextRow,
                 onPrev: () => stepTo(prevRow),
                 onNext: () => stepTo(nextRow),
+                prevRow,
+                nextRow,
               }
             : undefined
         }
@@ -824,7 +831,7 @@ function WorkspaceView({ project }: { project: Project }) {
       )}
       {watchedPeer && watchRowId && <style>{spotlightCss(watchRowId, peerColor)}</style>}
 
-      {actions.sheets && <PrintSheets urls={actions.sheets} auto={!isIOS()} onClosed={actions.printClosed} />}
+      {actions.sheets && <PrintSheets urls={actions.sheets} onClosed={actions.printClosed} />}
       {actions.progress && (
         <div className="ws-progress" role="status">
           <div

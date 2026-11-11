@@ -15,7 +15,16 @@ import {
   rowIndexAt,
   safeFilePart,
   selectAllVisible,
+  tapAction,
 } from './tableLogic'
+
+describe('tapAction', () => {
+  it('selects on the first tap and opens on a tap of the already selected card', () => {
+    expect(tapAction(null, 'a')).toBe('select')
+    expect(tapAction('b', 'a')).toBe('select')
+    expect(tapAction('a', 'a')).toBe('open')
+  })
+})
 
 const row = (n: number, name: string, phone: string): Participant => ({
   id: `id${n}`,

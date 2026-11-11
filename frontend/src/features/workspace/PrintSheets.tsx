@@ -27,21 +27,25 @@ function useConstructedStyle(css: string): boolean {
   return supported
 }
 
-/** Opens the browser print dialog once every ticket image is decoded (printing earlier gives blank tickets in Chrome). */
-export async function printSheets(): Promise<void> {
-  await Promise.all(
-    [...document.querySelectorAll<HTMLImageElement>('.print-ticket')].map((img) =>
-      (img.decode?.() ?? Promise.resolve()).catch(() => undefined),
-    ),
+/**
+ * Opens the browser print dialog once every ticket image is loaded (printing earlier gives blank tickets in
+ * Chrome). When the images are already there it prints in the same task: Safari on iOS only prints inside the
+ * user's tap, and any await in between can use that up.
+ */
+export function printSheets(): Promise<void> {
+  const imgs = [...document.querySelectorAll<HTMLImageElement>('.print-ticket')]
+  if (imgs.length > 0 && imgs.every((img) => img.complete && img.naturalWidth > 0)) {
+    window.print()
+    return Promise.resolve()
+  }
+  return Promise.all(imgs.map((img) => (img.decode?.() ?? Promise.resolve()).catch(() => undefined))).then(
+    () => window.print(),
   )
-  window.print()
 }
 
 interface PrintSheetsProps {
   /** Object URLs of the rendered tickets, in print order. */
   urls: readonly string[]
-  /** Open the print dialog as soon as the sheets are mounted (iOS needs a user gesture, so it passes false). */
-  auto: boolean
   /** The print dialog was closed (printed or cancelled). */
   onClosed: () => void
 }
@@ -50,7 +54,7 @@ interface PrintSheetsProps {
  * A4 sheets of 70x40 mm tickets, mounted next to the app (not instead of it): they are invisible on
  * screen and the print media rules hide everything else, so the user never leaves the workspace.
  */
-export function PrintSheets({ urls, auto, onClosed }: PrintSheetsProps) {
+export function PrintSheets({ urls, onClosed }: PrintSheetsProps) {
   const { t } = useI18n()
   const pages = useMemo(() => paginate(urls.length), [urls.length])
   const css = useMemo(() => printCss(), [])
@@ -60,9 +64,6 @@ export function PrintSheets({ urls, auto, onClosed }: PrintSheetsProps) {
     window.addEventListener('afterprint', onClosed)
     return () => window.removeEventListener('afterprint', onClosed)
   }, [onClosed])
-  useEffect(() => {
-    if (auto) void printSheets()
-  }, [auto])
 
   return createPortal(
     <div className="print-sheets" aria-hidden="true">
