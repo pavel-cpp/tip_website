@@ -1,0 +1,55 @@
+# Caddy behind the host nginx (docker-compose.server.yml): plain HTTP on :8080, loopback only on the host.
+# TLS, HTTP->HTTPS redirect and HSTS are handled by nginx (deploy/nginx/tip.conf). Grafana is not proxied.
+
+{
+	auto_https off
+	servers {
+		# nginx reaches the container through the Docker bridge (a private address); its X-Forwarded-For is
+		# kept and extended instead of being replaced, so tipd can find the real client (see clientIP).
+		trusted_proxies static private_ranges
+		timeouts {
+			read_header 10s
+		}
+	}
+}
+
+# HSTS is set by nginx only (one header, not two).
+(security_headers) {
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# One JSON access log line per request on stdout.
+(access_log) {
+	log {
+		output stdout
+		format json
+	}
+}
+
+:8080 {
+	import security_headers
+	import access_log
+	encode zstd gzip
+
+	# Metrics and pprof live on the internal listener; never expose them.
+	@internal path /metrics /debug/pprof /debug/pprof/*
+	respond @internal 404
+
+	# Image uploads are limited to 10 MB by the app; leave headroom for the multipart envelope.
+	request_body {
+		max_size 12MB
+	}
+
+	# WebSocket upgrades are proxied transparently. The Content-Security-Policy header is set by tipd.
+	reverse_proxy tipd:8080 {
+		lb_try_duration 5s
+		health_uri /healthz
+		health_interval 15s
+	}
+}

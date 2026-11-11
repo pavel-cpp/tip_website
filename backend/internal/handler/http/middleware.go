@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -140,14 +141,37 @@ func accessLogMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP returns the peer address; the app runs behind Caddy on a private network, so the
-// forwarded header is deliberately not trusted here.
+// clientIP returns the address of the real client. The app is reachable only through our own proxies
+// (Caddy on the Docker network, behind it the host nginx), so X-Forwarded-For is honoured only when the
+// peer is a loopback or private address, and read right to left: the first address that is not one of our
+// own hops is the client. Anything the client prepends to the header is therefore ignored, and a malformed
+// header falls back to the peer instead of guessing.
 func clientIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return strings.TrimSpace(r.RemoteAddr)
+	peer := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(peer); err == nil {
+		peer = host
 	}
-	return host
+	peer = strings.TrimSpace(peer)
+	if a, err := netip.ParseAddr(peer); err != nil || !ownHop(a) {
+		return peer
+	}
+	parts := strings.Split(strings.Join(r.Header.Values("X-Forwarded-For"), ","), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		a, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			return peer
+		}
+		if !ownHop(a) {
+			return a.Unmap().String()
+		}
+	}
+	return peer
+}
+
+// ownHop reports whether an address belongs to our own proxy chain rather than to a client.
+func ownHop(a netip.Addr) bool {
+	a = a.Unmap()
+	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
 }
 
 // securityHeaders sets the baseline response headers with the given Content-Security-Policy.

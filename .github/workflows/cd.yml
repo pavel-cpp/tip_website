@@ -1,0 +1,147 @@
+name: cd
+
+# Continuous delivery: checks (ci.yml) -> build and push images to GHCR -> deploy to the production server.
+# Runs on every push to main and by hand (Actions -> cd -> Run workflow, optionally for another ref).
+# Setup and secrets: docs/08-ci-cd.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or commit to deploy (default: the branch the workflow is run on)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  build:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      base: ${{ steps.meta.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Image names and tag
+        id: meta
+        run: |
+          # Registry paths must be lower case; the tag is the short commit of what is actually built.
+          base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push tipd
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          platforms: linux/amd64
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          push: true
+          build-args: |
+            VERSION=${{ steps.meta.outputs.tag }}
+            COMMIT=${{ github.sha }}
+          tags: |
+            ${{ steps.meta.outputs.base }}/tipd:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.base }}/tipd:latest
+          cache-from: type=gha,scope=tipd
+          cache-to: type=gha,scope=tipd,mode=max
+      - name: Build and push backup
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/backup
+          platforms: linux/amd64
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.base }}/backup:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.base }}/backup:latest
+          cache-from: type=gha,scope=backup
+          cache-to: type=gha,scope=backup,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Add required reviewers to this environment to get a manual approval before every deploy.
+    environment: production
+    # One deploy at a time; a newer one waits instead of cancelling a running one half way.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: read
+    env:
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+      DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+      IMAGE_BASE: ${{ needs.build.outputs.base }}
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Prepare ssh
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_HOST" || { echo "repository variable DEPLOY_HOST is not set"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # The server's host key is pinned; an unknown or changed key aborts the deploy.
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host target
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            Port $DEPLOY_PORT
+            IdentityFile ~/.ssh/id_deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+      - name: Copy deploy files
+        run: |
+          # Compose files, Caddyfiles, nginx site, scripts and monitoring configs. prod.env stays on the server.
+          tar -C deploy -czf - \
+            docker-compose.prod.yml docker-compose.server.yml Caddyfile Caddyfile.edge \
+            prometheus grafana loki vector nginx scripts \
+            | ssh target 'mkdir -p /opt/tip && tar -xzf - -C /opt/tip'
+      - name: Deploy
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+        run: |
+          # The job token goes over ssh stdin, is used for the pull and is removed from the server on exit.
+          # shellcheck disable=SC2029  # the values are expanded here on purpose (derived from the repository and commit)
+          printf '%s' "$REGISTRY_TOKEN" | ssh target \
+            "cd /opt/tip && IMAGE_BASE='$IMAGE_BASE' REGISTRY_USER='$REGISTRY_USER' scripts/deploy.sh '$TAG'"
+      - name: Summary
+        if: success()
+        run: |
+          {
+            echo "### Deployed"
+            echo "- tag: \`$TAG\`"
+            echo "- images: \`$IMAGE_BASE/tipd:$TAG\`"
+          } >> "$GITHUB_STEP_SUMMARY"
