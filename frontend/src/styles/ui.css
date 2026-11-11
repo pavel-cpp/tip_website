@@ -614,6 +614,8 @@
   padding: 0 var(--space-5);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border-strong);
+  /* Own compositing layer: its pixels do not change when the route motion layers underneath come and go. */
+  will-change: opacity;
 }
 .brand {
   display: flex;
