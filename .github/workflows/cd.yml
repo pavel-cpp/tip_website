@@ -1,30 +1,26 @@
 name: cd
 
 # Continuous delivery: checks (ci.yml) -> build and push images to GHCR -> deploy to the production server.
-# Runs on every push to main and by hand (Actions -> cd -> Run workflow, optionally for another ref).
+# Runs on every push to main and by hand (Actions -> cd -> Run workflow). It only ever deploys main: a run started
+# from any other branch does nothing, so an unmerged commit cannot reach production.
 # Setup and secrets: docs/08-ci-cd.md.
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "Branch, tag or commit to deploy (default: the branch the workflow is run on)"
-        required: false
-        default: ""
 
 permissions:
   contents: read
 
 jobs:
   ci:
+    if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/ci.yml
-    with:
-      ref: ${{ inputs.ref }}
 
   build:
     needs: ci
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
       - name: Image names and tag
         id: meta
         run: |
@@ -99,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
       - name: Prepare ssh
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
