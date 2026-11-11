@@ -40,7 +40,7 @@ compose pull
 compose up -d --wait postgres redis
 
 log "migrating with $TAG"
-compose run --rm --no-deps tipd migrate || die "migration failed; the running version was not touched"
+compose run --rm --no-deps -T tipd migrate || die "migration failed; the running version was not touched"
 
 log "swapping the stack to $TAG"
 compose up -d --remove-orphans

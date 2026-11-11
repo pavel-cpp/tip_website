@@ -2,14 +2,21 @@ name: ci
 
 on:
   push:
-    branches: [main, dev]
+    # main is covered by cd.yml, which runs these same jobs before it deploys.
+    branches: [dev]
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit to check (default: the triggering one)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,6 +47,8 @@ jobs:
       TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
@@ -61,6 +70,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - name: Detect frontend
         id: detect
         run: |
