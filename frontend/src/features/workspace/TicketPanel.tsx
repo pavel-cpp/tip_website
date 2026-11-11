@@ -7,11 +7,13 @@ import {
   imageSize,
   loadFonts,
   renderTicket,
+  renderTicketBlob,
   type TicketImage,
   type TicketPlaceholders,
 } from '../../lib/ticket'
 import type { Participant } from './api'
 import { WsIcon } from './icons'
+import { type Axis, follow, lockAxis, swipeResult, velocity } from './swipe'
 import { ticketValues } from './ticketActions'
 
 export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const
@@ -25,12 +27,14 @@ const TURN = { ms: 180, shift: 32 } as const
  * arrives from the opposite side and fades in. Only transform and opacity (compositor). Returns the
  * animations so a quick next step can cancel them instead of queueing up.
  */
-export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1): Animation[] {
+export function turnTicket(oldEl: HTMLElement, newEl: HTMLElement, dir: 1 | -1, fromX = 0): Animation[] {
   const away = (x: number): Keyframe => ({ transform: `translateX(${x}px)`, opacity: 0 })
-  const rest: Keyframe = { transform: 'translateX(0)', opacity: 1 }
+  // A swipe hands the ticket over where the finger left it, and it keeps going the same way.
+  const rest: Keyframe = { transform: fromX ? `translateX(${fromX}px)` : 'translateX(0)', opacity: 1 }
+  const reach = Math.max(TURN.shift, Math.abs(fromX))
   const opts = { duration: TURN.ms, easing: EASE.out }
   return [
-    oldEl.animate([rest, away(-TURN.shift * dir)], { ...opts, fill: 'both' }),
+    oldEl.animate([rest, away(-reach * dir)], { ...opts, fill: 'both' }),
     newEl.animate([away(TURN.shift * dir), rest], { ...opts, fill: 'backwards' }),
   ]
 }
@@ -97,6 +101,22 @@ export function TicketPanel({
   const shownNumber = useRef<number | null>(null)
   const turning = useRef<Animation[]>([])
   const animate = nav !== undefined
+  // Swipe (touch): the front canvas follows the finger; on release it hands over to the turn or settles back.
+  const swipe = useRef<{
+    px: number
+    py: number
+    from: number
+    axis: Axis | null
+    el: HTMLCanvasElement | null
+    dx: number
+    shown: number
+    samples: { t: number; x: number }[]
+  } | null>(null)
+  const handoff = useRef(0)
+  const settling = useRef<Animation | null>(null)
+  const giveUp = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const navRef = useRef(nav)
+  navRef.current = nav
 
   const values = useMemo(() => (participant ? ticketValues(participant) : null), [participant])
   const { number, name, phone } = values ?? { number: '', name: '', phone: '' }
@@ -123,6 +143,11 @@ export function TicketPanel({
         shownNumber.current = shown
         for (const a of turning.current) a.cancel()
         turning.current = []
+        // The canvas that was dragged goes back to its slot; a turn (below) carries on from where it was left.
+        const fromX = handoff.current
+        handoff.current = 0
+        clearTimeout(giveUp.current)
+        if (old) old.style.transform = ''
         if (
           animate &&
           !instantRef?.current &&
@@ -133,7 +158,7 @@ export function TicketPanel({
           typeof back.animate === 'function'
         ) {
           // The stage clips to its rounded frame, so the swing reads as a card turning inside it.
-          turning.current = turnTicket(old, back, shown > prev ? 1 : -1)
+          turning.current = turnTicket(old, back, shown > prev ? 1 : -1, fromX)
         }
       })
     })
@@ -142,6 +167,34 @@ export function TicketPanel({
     }
     // `values` is derived from the primitives below; canvases are stable refs.
   }, [image, placeholders, number, name, phone, values === null])
+
+  // Touch screens: a canvas has no native "Copy / Save" menu, so once the ticket has settled a real <img> of the
+  // same picture lies over it and a long press works the way it does on any photo. Typing and swiping show the
+  // canvas again (the image is dropped and drawn anew after a pause).
+  const [coarse] = useState(() => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches)
+  const [nativeUrl, setNativeUrl] = useState<string | null>(null)
+  const [regen, setRegen] = useState(0)
+  useEffect(() => {
+    setNativeUrl(null)
+    if (!coarse || !image || !placeholders || !values || !drawn) return
+    let live = true
+    let url: string | null = null
+    const id = setTimeout(() => {
+      renderTicketBlob(image, placeholders, { number, name, phone })
+        .then((blob) => {
+          if (!live) return
+          url = URL.createObjectURL(blob)
+          setNativeUrl(url)
+        })
+        .catch(() => undefined)
+    }, 350)
+    return () => {
+      live = false
+      clearTimeout(id)
+      if (url) URL.revokeObjectURL(url)
+    }
+    // `values` is derived from the primitives below.
+  }, [coarse, image, placeholders, number, name, phone, drawn, regen, values === null])
 
   const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null)
   const onPanStart = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -163,6 +216,100 @@ export function TicketPanel({
   const onPanEnd = () => {
     pan.current = null
   }
+
+  const swipeOn = !!nav && !compact && zoom <= 1
+  const offsetOf = (el: HTMLElement): number => {
+    const t = getComputedStyle(el).transform
+    return t && t !== 'none' ? new DOMMatrix(t).m41 : 0
+  }
+  /** Eases the canvas from where the finger left it back to its slot (no-op for a canvas that is not shifted). */
+  const settle = (el: HTMLCanvasElement | null, x: number) => {
+    if (!el) return
+    el.style.transform = ''
+    if (!x || prefersReducedMotion() || typeof el.animate !== 'function') return
+    settling.current = el.animate([{ transform: `translateX(${x}px)` }, { transform: 'translateX(0)' }], {
+      duration: 220,
+      easing: EASE.out,
+    })
+  }
+  const swipeDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!swipeOn || e.pointerType !== 'touch' || !e.isPrimary) return
+    const el = canvases[frontRef.current]?.current ?? null
+    // Catching the ticket while it is still easing back: the finger picks it up where it is.
+    let from = 0
+    if (el && settling.current) {
+      from = offsetOf(el)
+      settling.current.cancel()
+      settling.current = null
+    }
+    swipe.current = {
+      px: e.clientX - from,
+      py: e.clientY,
+      from,
+      axis: null,
+      el,
+      dx: from,
+      shown: frontRef.current,
+      samples: [{ t: e.timeStamp, x: e.clientX }],
+    }
+  }
+  const swipeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const s = swipe.current
+    if (!s?.el) return
+    const dx = e.clientX - s.px
+    if (s.axis === null) {
+      s.axis = lockAxis(dx - s.from, e.clientY - s.py)
+      if (s.axis === null) return
+    }
+    if (s.axis === 'y') {
+      swipe.current = null
+      return
+    }
+    if (s.dx === s.from) setNativeUrl(null)
+    s.dx = dx
+    s.samples.push({ t: e.timeStamp, x: e.clientX })
+    if (s.samples.length > 12) s.samples.shift()
+    const n = navRef.current
+    s.el.style.transform = `translateX(${follow(dx, !!n?.hasPrev, !!n?.hasNext)}px)`
+  }
+  const swipeUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const s = swipe.current
+    swipe.current = null
+    if (!s?.el) return
+    const n = navRef.current
+    const shifted = follow(s.dx, !!n?.hasPrev, !!n?.hasNext)
+    if (s.axis !== 'x') {
+      s.el.style.transform = ''
+      return
+    }
+    const res =
+      e.type === 'pointercancel'
+        ? 'stay'
+        : swipeResult({
+            dx: s.dx,
+            vx: velocity(s.samples),
+            width: s.el.clientWidth,
+            canPrev: !!n?.hasPrev,
+            canNext: !!n?.hasNext,
+          })
+    if (res === 'stay' || !n) {
+      settle(s.el, shifted)
+      setRegen((v) => v + 1)
+      return
+    }
+    // The next ticket is drawn a frame or two later and takes over from this offset; if nothing arrives, settle.
+    handoff.current = shifted
+    clearTimeout(giveUp.current)
+    const el = s.el
+    giveUp.current = setTimeout(() => {
+      if (frontRef.current !== s.shown) return
+      handoff.current = 0
+      settle(el, offsetOf(el))
+    }, 700)
+    if (res === 'prev') n.onPrev()
+    else n.onNext()
+  }
+  useEffect(() => () => clearTimeout(giveUp.current), [])
   if (!hasProjectImage) {
     return (
       <div className="tk-empty" role="status">
@@ -241,10 +388,23 @@ export function TicketPanel({
       <div
         className="tk-viewport"
         data-pan={zoom > 1 || undefined}
-        onPointerDown={onPanStart}
-        onPointerMove={onPanMove}
-        onPointerUp={onPanEnd}
-        onPointerCancel={onPanEnd}
+        data-swipe={swipeOn || undefined}
+        onPointerDown={(e) => {
+          onPanStart(e)
+          swipeDown(e)
+        }}
+        onPointerMove={(e) => {
+          onPanMove(e)
+          swipeMove(e)
+        }}
+        onPointerUp={(e) => {
+          onPanEnd()
+          swipeUp(e)
+        }}
+        onPointerCancel={(e) => {
+          onPanEnd()
+          swipeUp(e)
+        }}
       >
         <div
           className="tk-stage"
@@ -267,6 +427,8 @@ export function TicketPanel({
               }
             />
           ))}
+          {/* The canvas next to it carries the accessible name; this copy only exists for the long press. */}
+          {nativeUrl && <img className="tk-native" src={nativeUrl} alt="" draggable={false} />}
           {(imageLoading || (!drawn && !empty)) && <div className="tk-loading skeleton" aria-hidden="true" />}
         </div>
         {empty && (

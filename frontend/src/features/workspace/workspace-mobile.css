@@ -488,6 +488,10 @@
   box-shadow: var(--shadow-pop);
   animation: sheet-in var(--dur-base) var(--ease-standard) both;
 }
+/* The dialog itself holds the initial focus (so no keyboard opens); it is not a control, so no ring. */
+.sheet:focus {
+  outline: none;
+}
 .sheet-overlay[data-state="closed"] .sheet {
   animation: sheet-out var(--dur-fast) var(--ease-out) both;
 }
@@ -598,5 +602,49 @@
 @media (max-height: 520px) {
   .sheet-preview {
     height: 140px;
+  }
+}
+
+/* ---------- ticket on touch screens: swipe to turn, long press to copy ---------- */
+/* Horizontal moves belong to the swipe (script), vertical ones still scroll. */
+.tk-viewport[data-swipe] {
+  touch-action: pan-y;
+}
+@media (pointer: coarse) {
+  /* The arrows are the fallback to the swipe: they sit below the picture instead of covering its edges. */
+  .tk[data-nav] .tk-step {
+    top: auto;
+    bottom: var(--space-3);
+    min-height: 48px;
+    margin-top: 0;
+    width: 56px;
+  }
+  .tk[data-nav] .tk-viewport {
+    /* Room for the arrows under the picture. */
+    padding-bottom: calc(48px + var(--space-3) * 2);
+  }
+  /* Text around the picture is never selected by a long press; the picture itself keeps the native menu. */
+  .tk,
+  .sheet {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .sheet-input {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
+  .tk-native {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+    -webkit-user-drag: none;
   }
 }
