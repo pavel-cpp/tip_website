@@ -6,6 +6,7 @@ import { OnlineAvatars } from '../realtime/RealtimeStatus'
 import './workspace-topbar.css'
 
 interface WorkspaceTopbarProps {
+  projectId: string
   title: string
   contributors: { id: string; displayName: string; color: string }[]
   hasOnline: boolean
@@ -15,6 +16,7 @@ interface WorkspaceTopbarProps {
 
 /** Project path and the colleagues online, shown in the top bar while the workspace is open. */
 export function WorkspaceTopbar({
+  projectId,
   title,
   contributors,
   hasOnline,
@@ -37,7 +39,7 @@ export function WorkspaceTopbar({
         <span className="muted wsbar-slash wsbar-hide-sm" aria-hidden="true">
           /
         </span>
-        <span className="wsbar-title" title={title}>
+        <span className="wsbar-title" title={title} data-morph={`title:${projectId}`} data-morph-text="">
           {title}
         </span>
       </nav>

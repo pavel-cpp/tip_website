@@ -1,8 +1,8 @@
-import { Suspense, useEffect, useLayoutEffect, useRef } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigationType } from 'react-router'
 import { useI18n } from '../i18n'
 import { cx } from '../lib/cx'
-import { routeCommitted, routeRank, routeTransitionsActive } from '../lib/viewTransition'
+import { motionMode, playRouteMotion } from '../lib/routeMotion'
 import { Skeleton } from './Skeleton'
 import { Topbar } from './Topbar'
 import { TopbarSlotProvider } from './TopbarSlot'
@@ -10,12 +10,12 @@ import { TopbarSlotProvider } from './TopbarSlot'
 /**
  * Keeps document.title equal to the page heading (WCAG 2.4.2). Pages render exactly one h1; reading it
  * here avoids threading a title through every route, and the observer picks up headings that arrive
- * after data loads (a project name) or after a language switch. `pathname` re-binds the observer
- * because the main element is re-created on every navigation.
+ * after data loads (a project name) or after a language switch. The observer follows the element itself
+ * (not the path): the main element is re-created on every navigation, and while a lazy screen is still
+ * loading its main is not there yet.
  */
-function useHeadingTitle(main: React.RefObject<HTMLElement | null>, appName: string, pathname: string): void {
+function useHeadingTitle(el: HTMLElement | null, appName: string): void {
   useEffect(() => {
-    const el = main.current
     if (!el) return
     const sync = () => {
       const h1 = el.querySelector('h1')?.textContent?.trim()
@@ -25,13 +25,13 @@ function useHeadingTitle(main: React.RefObject<HTMLElement | null>, appName: str
     const observer = new MutationObserver(sync)
     observer.observe(el, { childList: true, subtree: true, characterData: true })
     return () => observer.disconnect()
-  }, [main, appName, pathname])
+  }, [el, appName])
 }
 
 /**
  * Per-history-entry scroll restoration for client-side navigation: new pages start at the top, back and
- * forward return to where the entry was left. Runs in a layout effect so a View Transition captures the
- * final position, and tells the transition layer that the route has been committed.
+ * forward return to where the entry was left. Runs in a layout effect so the route motion measures the
+ * final position, and then starts that motion (the page is still unpainted at this point).
  */
 function useRouteScroll(): void {
   const { pathname, key } = useLocation()
@@ -47,8 +47,8 @@ function useRouteScroll(): void {
   useLayoutEffect(() => {
     const moved = current.current.path !== pathname
     current.current.path = pathname
-    routeCommitted(pathname)
     if (moved) window.scrollTo(0, type === 'POP' ? (positions.current.get(key) ?? 0) : 0)
+    playRouteMotion(pathname)
   }, [pathname, key, type])
 }
 
@@ -56,9 +56,14 @@ function useRouteScroll(): void {
 export function Shell({ minimal = false }: { minimal?: boolean }) {
   const { t } = useI18n()
   const { pathname } = useLocation()
-  const main = useRef<HTMLElement>(null)
+  const main = useRef<HTMLElement | null>(null)
+  const [mainEl, setMainEl] = useState<HTMLElement | null>(null)
+  const bindMain = useCallback((el: HTMLElement | null) => {
+    main.current = el
+    setMainEl(el)
+  }, [])
   const first = useRef(true)
-  useHeadingTitle(main, t('app.name'), pathname)
+  useHeadingTitle(mainEl, t('app.name'))
   useRouteScroll()
 
   // After a client-side navigation keyboard and screen-reader users start at the new page, not at the
@@ -98,8 +103,8 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
         {/*
           The boundary sits outside the keyed main on purpose: it stays mounted across navigations, so while
           the next screen's chunk loads inside a router transition the old page stays on screen (no skeleton
-          flash under a View Transition). The fallback only shows on the very first load.
-          Without desktop View Transitions each page fades in on its own (CSS).
+          flash). The fallback only shows on the very first load. Desktop pages are animated by
+          lib/routeMotion.ts; touch screens fade each page in by CSS.
         */}
         <Suspense
           fallback={
@@ -109,12 +114,11 @@ export function Shell({ minimal = false }: { minimal?: boolean }) {
           }
         >
           <main
-            ref={main}
+            ref={bindMain}
             id="main"
             tabIndex={-1}
             key={pathname}
-            data-rank={routeRank(pathname) ?? undefined}
-            className={cx('page', !routeTransitionsActive() && 'route-enter')}
+            className={cx('page', motionMode() === 'off' && 'route-enter')}
           >
             <Outlet />
           </main>

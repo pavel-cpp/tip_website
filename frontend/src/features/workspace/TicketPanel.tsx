@@ -54,6 +54,8 @@ interface TicketPanelProps {
   settingsTo?: string
   /** Inside the phone sheet: just the ticket, no zoom controls. */
   compact?: boolean
+  /** Shared-element key of the picture (lib/routeMotion.ts), e.g. `ticket:<projectId>`. */
+  morph?: string
   /** Picture-only mode: arrows to the previous/next participant and a "number, name" indicator. */
   nav?: TicketNav
   /** Set while a held key repeats: tickets swap with no turn (read when the new ticket is drawn). */
@@ -83,6 +85,7 @@ export function TicketPanel({
   compact = false,
   nav,
   instantRef,
+  morph,
 }: TicketPanelProps) {
   const { t, formatNumber } = useI18n()
   const canvases = [useRef<HTMLCanvasElement>(null), useRef<HTMLCanvasElement>(null)]
@@ -245,6 +248,7 @@ export function TicketPanel({
       >
         <div
           className="tk-stage"
+          data-morph={morph}
           data-ready={drawn || undefined}
           style={{ '--zoom': zoom, '--aspect': size ? size.w / size.h : 7 / 4 } as CSSProperties}
         >

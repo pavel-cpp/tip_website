@@ -7,13 +7,13 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { initI18n } from './i18n'
 import { initMotionSetting } from './lib/motion'
-import { installRouteTransitions } from './lib/viewTransition'
+import { installRouteMotion } from './lib/routeMotion'
 import { initTheme } from './theme/theme'
 
 initTheme()
 initMotionSetting()
 // Before the router exists, so the popstate hook runs ahead of the router's own listener.
-installRouteTransitions()
+installRouteMotion()
 
 // The dictionary for the stored language is loaded first so the first paint is already localised.
 void initI18n().then(() => {

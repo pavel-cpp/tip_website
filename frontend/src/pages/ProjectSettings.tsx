@@ -192,6 +192,8 @@ function SettingsEditor({
               <input
                 id="st-title"
                 className="st-title"
+                data-morph={`title:${project.id}`}
+                data-morph-text=""
                 name="title"
                 title={t('settings.titleHint')}
                 value={draft.title}
@@ -254,7 +256,7 @@ function SettingsEditor({
             }
           />
 
-          <Panel title={t('settings.placeholders')} icon="settings" className="st-side">
+          <Panel title={t('settings.placeholders')} icon="settings" className="st-side" reveal="side">
             <div className="settings-fields">
               <Tabs
                 tabs={tabs}

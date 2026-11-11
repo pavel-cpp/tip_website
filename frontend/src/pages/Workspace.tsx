@@ -576,11 +576,12 @@ function WorkspaceView({ project }: { project: Project }) {
       id: 'settings',
       label: t('workspace.settings'),
       separatorBefore: phoneItems.length > 0,
-      onSelect: () => void navigate(`/projects/${project.id}/settings`, { viewTransition: true }),
+      onSelect: () => void navigate(`/projects/${project.id}/settings`),
     })
   }
   const topbarContent = (
     <WorkspaceTopbar
+      projectId={project.id}
       title={project.title}
       contributors={project.contributors}
       hasOnline={hasOnline}
@@ -656,6 +657,7 @@ function WorkspaceView({ project }: { project: Project }) {
         hasProjectImage={!!project.image}
         placeholders={project.image ? (project.placeholders as TicketPlaceholders) : null}
         participant={current}
+        morph={`ticket:${project.id}`}
         emptyReason={list.isError ? 'error' : rows.length === 0 && !list.isPending ? 'no-rows' : 'select'}
         onRetry={() => void list.refetch()}
         settingsTo={canSettings ? `/projects/${project.id}/settings` : undefined}
@@ -677,7 +679,7 @@ function WorkspaceView({ project }: { project: Project }) {
   const peerColor = watchedPeer?.color ?? ''
 
   return (
-    <div className="ws" data-tab={tab}>
+    <div className="ws" data-tab={tab} data-morph={`hero:${project.id}`}>
       {/* The page heading for assistive technology and the document title; the visible path is in the top bar. */}
       <h1 className="sr-only">{project.title}</h1>
       <TopbarPortal fallback={<div className="ws-head">{topbarContent}</div>}>{topbarContent}</TopbarPortal>
@@ -797,7 +799,7 @@ function WorkspaceView({ project }: { project: Project }) {
                 variant="ghost"
                 label={t('workspace.settings')}
                 text={t('workspace.settings.short')}
-                onClick={() => void navigate(`/projects/${project.id}/settings`, { viewTransition: true })}
+                onClick={() => void navigate(`/projects/${project.id}/settings`)}
               />
             </>
           )}
