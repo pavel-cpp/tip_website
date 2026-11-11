@@ -105,6 +105,100 @@ test.describe('phone gestures', () => {
       .toBe(true)
   })
 
+  test('the pictures move as one strip under the finger, finish out of the frame and leave nothing behind', async ({
+    admin,
+    signedIn,
+  }) => {
+    const project = await seeded(admin)
+    const page = await signedIn(adminCreds())
+    const ws = new WorkspacePage(page)
+    await ws.open(project.id)
+    await ws.rowByText('Alisher').locator('.pc-main').tap()
+    await ws.showPicture()
+    const who = page.getByTestId('ticket-who')
+    await expect(who).toContainText(ws.t('workspace.ticket.who', { number: 1 }))
+    await page.waitForTimeout(500)
+
+    // Held half way: the picture and the next one right behind it, one stage width apart.
+    const held = await page.evaluate(() => {
+      const el = document.querySelector('.tk-viewport') as HTMLElement
+      const r = el.getBoundingClientRect()
+      const y = r.top + r.height / 2
+      const fire = (type: string, x: number) =>
+        el.dispatchEvent(
+          new PointerEvent(type, {
+            pointerType: 'touch',
+            isPrimary: true,
+            pointerId: 9,
+            bubbles: true,
+            clientX: x,
+            clientY: y,
+          }),
+        )
+      fire('pointerdown', r.left + 300)
+      fire('pointermove', r.left + 240)
+      fire('pointermove', r.left + 180)
+      const x = (c: Element) => new DOMMatrix(getComputedStyle(c).transform).m41
+      const w = (document.querySelector('.tk-stage') as HTMLElement).clientWidth
+      const moved = [...document.querySelectorAll('.tk-canvas')].filter(
+        (c) => (c as HTMLElement).style.transform,
+      )
+      const offsets = moved.map(x).sort((a, b) => a - b)
+      return { w, offsets }
+    })
+    expect(held.offsets).toHaveLength(2)
+    expect(held.offsets[0]).toBeCloseTo(-120, 0)
+    expect((held.offsets[1] ?? 0) - (held.offsets[0] ?? 0)).toBeCloseTo(held.w, 0)
+
+    // Released past the threshold: the next ticket takes over, then a second quick swipe retargets without a jump.
+    await page.evaluate(() => {
+      const el = document.querySelector('.tk-viewport') as HTMLElement
+      el.dispatchEvent(
+        new PointerEvent('pointermove', {
+          pointerType: 'touch',
+          isPrimary: true,
+          pointerId: 9,
+          bubbles: true,
+          clientX: 100,
+          clientY: 300,
+        }),
+      )
+      el.dispatchEvent(
+        new PointerEvent('pointerup', {
+          pointerType: 'touch',
+          isPrimary: true,
+          pointerId: 9,
+          bubbles: true,
+          clientX: 100,
+          clientY: 300,
+        }),
+      )
+    })
+    await expect(who).toContainText(ws.t('workspace.ticket.who', { number: 2 }))
+    await swipe(page, -170)
+    await expect(who).toContainText(ws.t('workspace.ticket.who', { number: 3 }))
+
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          anims: document
+            .getAnimations()
+            .filter(
+              (a) =>
+                ((a.effect as KeyframeEffect | null)?.target as HTMLElement | null)?.classList.contains(
+                  'tk-canvas',
+                ) && !(a instanceof CSSTransition),
+            ).length,
+          shifted: [...document.querySelectorAll<HTMLElement>('.tk-canvas')].filter((c) => c.style.transform)
+            .length,
+          visible: [...document.querySelectorAll<HTMLElement>('.tk-canvas')].filter(
+            (c) => getComputedStyle(c).opacity === '1',
+          ).length,
+        })),
+      )
+      .toEqual({ anims: 0, shifted: 0, visible: 1 })
+  })
+
   test('the settled ticket is a real image for the native long-press menu, and text around it is not selectable', async ({
     admin,
     signedIn,
@@ -118,10 +212,13 @@ test.describe('phone gestures', () => {
     const img = page.locator('.tk-native')
     await expect(img).toBeVisible({ timeout: 8000 })
     expect(await img.evaluate((el: HTMLImageElement) => el.naturalWidth > 0 && !el.draggable)).toBe(true)
-    const noSelect = await page.locator('.tk').first().evaluate((el) => {
-      const cs = getComputedStyle(el) as CSSStyleDeclaration & { webkitUserSelect?: string }
-      return (cs.userSelect || cs.webkitUserSelect) === 'none'
-    })
+    const noSelect = await page
+      .locator('.tk')
+      .first()
+      .evaluate((el) => {
+        const cs = getComputedStyle(el) as CSSStyleDeclaration & { webkitUserSelect?: string }
+        return (cs.userSelect || cs.webkitUserSelect) === 'none'
+      })
     expect(noSelect).toBe(true)
   })
 

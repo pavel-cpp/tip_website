@@ -674,6 +674,8 @@ function WorkspaceView({ project }: { project: Project }) {
                 hasNext: !!nextRow,
                 onPrev: () => stepTo(prevRow),
                 onNext: () => stepTo(nextRow),
+                prevRow,
+                nextRow,
               }
             : undefined
         }
