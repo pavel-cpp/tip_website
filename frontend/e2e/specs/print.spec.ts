@@ -33,6 +33,7 @@ async function printFromWorkspace(admin: Api, page: Page, count: number): Promis
 test('printing stays on the workspace and splits 22 tickets into A4 sheets of 21 and 1', async ({
   admin,
   signedIn,
+  hasTouch,
 }) => {
   const page = await signedIn(adminCreds())
   await printFromWorkspace(admin, page, 22)
@@ -48,9 +49,15 @@ test('printing stays on the workspace and splits 22 tickets into A4 sheets of 21
   await expect(page).toHaveURL(/\/projects\/[^/]+$/)
   await expect(page.locator('.print-sheets')).toBeHidden()
 
-  // Closing the dialog drops the sheets.
+  // Closing the dialog drops the sheets. Touch devices keep them (hidden): iOS fires afterprint as soon as the
+  // dialog opens, and the sheets are the ones the next tap on Print uses.
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
-  await expect(page.locator('.print-sheets')).toHaveCount(0)
+  if (hasTouch) {
+    await expect(page.locator('.print-sheets')).toHaveCount(1)
+    await expect(page.locator('.print-sheets')).toBeHidden()
+  } else {
+    await expect(page.locator('.print-sheets')).toHaveCount(0)
+  }
 })
 
 // Regression: the print layout used to be an inline <style> element, which the server's
