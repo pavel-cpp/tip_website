@@ -50,6 +50,18 @@ export class WorkspacePage {
     return this.page.locator('.sheet')
   }
 
+  /**
+   * Phone: taps a card the way a user opens it. The first tap only selects the card and the second opens the
+   * sheet, so a card that is not selected yet gets two taps (never a second one once the sheet is up: its
+   * backdrop would close it).
+   */
+  async openCard(card: Locator, tap = true): Promise<void> {
+    const main = card.locator('.pc-main')
+    const press = () => (tap ? main.tap() : main.click())
+    await press()
+    if ((await this.sheet.count()) === 0) await press()
+  }
+
   /** Selects one row: a click on its number cell, or a long press on its card. */
   async selectRow(row: Locator): Promise<void> {
     if (await this.isCards()) await this.longPress(row)
@@ -116,7 +128,7 @@ export class WorkspacePage {
   async editCell(row: Locator, col: 'name' | 'phone', value: string): Promise<void> {
     if (await this.isCards()) {
       // Phones edit in the bottom sheet: tap the card, change the field, save.
-      await row.locator('.pc-main').click()
+      await this.openCard(row, false)
       await this.sheet
         .getByLabel(this.t(col === 'name' ? 'workspace.col.name' : 'workspace.col.phone'))
         .fill(value)
