@@ -207,6 +207,7 @@ function WorkspaceView({ project }: { project: Project }) {
     source,
     current,
     selectedRows,
+    phone: narrow,
   })
 
   // Cmd/Ctrl+C copies the ticket unless the user is copying text out of a field.

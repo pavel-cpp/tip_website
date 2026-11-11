@@ -11,16 +11,33 @@ export type SavePlan =
   | { kind: 'zip'; note: boolean }
   | { kind: 'folder' }
   | { kind: 'downloads'; note: true }
+  /** Phones: several image files through the share sheet (Save to Photos / Gallery), never a ZIP. */
+  | { kind: 'share' }
 
 /**
  * How `count` tickets are delivered. A folder needs the File System Access API (Chromium). Without it
  * iOS gets a ZIP (it blocks serial downloads) and other browsers get one download per file; both say so.
+ * Phones skip all of that: they get image files in the share sheet, whatever the remembered mode.
  */
-export function planSave(count: number, mode: SaveMode, caps: { folder: boolean; ios: boolean }): SavePlan {
+export function planSave(
+  count: number,
+  mode: SaveMode,
+  caps: { folder: boolean; ios: boolean; phone?: boolean },
+): SavePlan {
   if (count <= 1) return { kind: 'single' }
+  if (caps.phone) return { kind: 'share' }
   if (mode === 'zip') return { kind: 'zip', note: false }
   if (caps.folder) return { kind: 'folder' }
   return caps.ios ? { kind: 'zip', note: true } : { kind: 'downloads', note: true }
+}
+
+/** Files per share sheet: platforms differ in how many a single share can carry, and each needs its own tap. */
+export const SHARE_CHUNK = 20
+
+export function chunkFiles<T>(items: readonly T[], size = SHARE_CHUNK): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
 }
 
 export const folderSupported = (): boolean =>

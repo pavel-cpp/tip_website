@@ -26,6 +26,16 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
     other: '{count} ta chiptadan nusxa olish',
   },
   'workspace.copy.zip': 'ZIP saqlash',
+  'workspace.copy.images': 'Rasmlarni saqlash',
+  'workspace.copyFallback.share': 'Ulashish',
+  'workspace.toast.copyManyFailedPhone':
+    'Brauzer bir nechta chiptani nusxalashga ruxsat bermadi. Ularni rasm sifatida saqlang.',
+  'workspace.toast.copyCappedPhone':
+    'Faqat dastlabki {cap} tasi nusxalandi, {skipped} tasi qoldirildi. Koʻproq uchun rasmlarni saqlang.',
+  'workspace.share.ready':
+    'Rasmlar tayyor ({part}/{parts}-qism). «Saqlash» tugmasini bosing va galereyani tanlang.',
+  'workspace.share.save': 'Saqlash',
+  'workspace.toast.shareFallback': 'Bu brauzerda galereya mavjud emas: rasmlar navbat bilan yuklanadi.',
   'workspace.save.many': {
     one: 'Saqlash: {count} ta chipta',
     other: 'Saqlash: {count} ta chipta',

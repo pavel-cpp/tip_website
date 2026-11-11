@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { buildHtml, buildTextList, COPY_CAP, capRows } from './clipboardPayload'
 import {
   type BatchItem,
+  chunkFiles,
   type DirLike,
   downloadEach,
   loadSaveMode,
@@ -53,6 +54,18 @@ describe('save planning', () => {
   it('falls back to a ZIP on iOS and to serial downloads elsewhere, both with a note', () => {
     expect(planSave(5, 'folder', { folder: false, ios: true })).toEqual({ kind: 'zip', note: true })
     expect(planSave(5, 'folder', { folder: false, ios: false })).toEqual({ kind: 'downloads', note: true })
+  })
+  it('gives phones image files through the share sheet, never a ZIP, whatever the saved mode', () => {
+    expect(planSave(5, 'zip', { folder: false, ios: true, phone: true })).toEqual({ kind: 'share' })
+    expect(planSave(5, 'folder', { folder: true, ios: false, phone: true })).toEqual({ kind: 'share' })
+    expect(planSave(1, 'zip', { folder: false, ios: true, phone: true })).toEqual({ kind: 'single' })
+  })
+  it('splits files into share chunks that keep their order', () => {
+    const files = Array.from({ length: 45 }, (_, i) => i)
+    const chunks = chunkFiles(files)
+    expect(chunks.map((c) => c.length)).toEqual([20, 20, 5])
+    expect(chunks.flat()).toEqual(files)
+    expect(chunkFiles([])).toEqual([])
   })
   it('remembers the choice', () => {
     storeSaveMode('folder')

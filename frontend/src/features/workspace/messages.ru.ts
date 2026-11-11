@@ -27,6 +27,15 @@ export const workspaceRu = {
     other: 'Копировать: {count} билета',
   },
   'workspace.copy.zip': 'Сохранить ZIP',
+  'workspace.copy.images': 'Сохранить фото',
+  'workspace.copyFallback.share': 'Поделиться',
+  'workspace.toast.copyManyFailedPhone':
+    'Браузер не дал скопировать несколько билетов. Сохраните их как фото.',
+  'workspace.toast.copyCappedPhone':
+    'Скопированы только первые {cap}, пропущено: {skipped}. Для большего числа сохраните фото.',
+  'workspace.share.ready': 'Фото готовы (часть {part} из {parts}). Нажмите «Сохранить» и выберите галерею.',
+  'workspace.share.save': 'Сохранить',
+  'workspace.toast.shareFallback': 'Галерея недоступна в этом браузере: фото будут скачаны по очереди.',
   'workspace.save.many': {
     one: 'Сохранить {count} билет',
     few: 'Сохранить: {count} билета',

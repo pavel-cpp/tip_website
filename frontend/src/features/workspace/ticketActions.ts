@@ -44,8 +44,13 @@ export type CopyResult = { ok: true } | { ok: false; blob: Promise<Blob> }
  * promise goes straight into the ClipboardItem instead of being awaited first. When the clipboard is
  * unavailable or refuses, the caller gets the image to show in a "long-press to copy" dialog.
  */
-export async function copyTicket(source: TicketSource, participant: Participant): Promise<CopyResult> {
-  const blob = renderTicketBlob(source.image, source.placeholders, ticketValues(participant))
+export async function copyTicket(
+  source: TicketSource,
+  participant: Participant,
+  /** The PNG rendered ahead of the tap (phones): the clipboard then gets a finished picture, not work in progress. */
+  ready?: Promise<Blob>,
+): Promise<CopyResult> {
+  const blob = ready ?? renderTicketBlob(source.image, source.placeholders, ticketValues(participant))
   blob.catch(() => undefined)
   try {
     if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) throw new Error('unsupported')
@@ -121,11 +126,17 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
-/** iOS prefers the share sheet for files; returns false when it is unavailable or was dismissed. */
+/** Phones and tablets. */
+export const isTouchDevice = (): boolean =>
+  isIOS() || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches)
+
+/** True when the browser can hand these files to the share sheet (Save to Photos / Gallery on phones). */
+export const canShareFiles = (files: File[]): boolean =>
+  typeof navigator.canShare === 'function' && navigator.canShare({ files })
+
+/** Touch devices prefer the share sheet for files (it reaches the gallery); false when unavailable or dismissed. */
 export async function shareFile(file: File): Promise<boolean> {
-  if (!isIOS() || typeof navigator.canShare !== 'function' || !navigator.canShare({ files: [file] })) {
-    return false
-  }
+  if (!isTouchDevice() || !canShareFiles([file])) return false
   try {
     await navigator.share({ files: [file] })
     return true
