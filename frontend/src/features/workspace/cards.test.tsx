@@ -46,6 +46,7 @@ const none: RowPresence = { locks: new Map(), cursors: new Map() }
 function Harness(props: Partial<ParticipantsTableProps> & { presence?: RowPresence }) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [query, setQuery] = useState('')
+  const [current, setCurrent] = useState<string | null>(null)
   return (
     <ParticipantsTable
       rows={ROWS}
@@ -53,8 +54,8 @@ function Harness(props: Partial<ParticipantsTableProps> & { presence?: RowPresen
       canEdit
       selected={selected}
       onSelectedChange={setSelected}
-      currentId={null}
-      onCurrentChange={() => undefined}
+      currentId={current}
+      onCurrentChange={setCurrent}
       presence={none}
       onCommit={async () => ({ status: 'ok' })}
       onAdopt={() => undefined}
@@ -80,11 +81,21 @@ describe('phone cards', () => {
     expect(screen.queryByRole('grid')).not.toBeInTheDocument()
   })
 
+  it('selects a card on the first tap and opens the editor only on the second', async () => {
+    render(<Harness />)
+    const user = userEvent.setup()
+    await user.click(within(card('Timur')).getByRole('button'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(card('Timur')).toHaveAttribute('data-current')
+    await user.click(within(card('Timur')).getByRole('button'))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
   it('opens the sheet on tap, saves both fields in one patch and closes', async () => {
     const onCommit = vi.fn(async () => ({ status: 'ok' as const }))
     render(<Harness onCommit={onCommit} />)
     const user = userEvent.setup()
-    await user.click(within(card('Timur')).getByRole('button'))
+    await user.dblClick(within(card('Timur')).getByRole('button')) // first tap selects, second opens
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText('Строка № 1')).toBeInTheDocument()
     expect(within(dialog).getByText('В списке: 1 из 3')).toBeInTheDocument()
@@ -101,7 +112,7 @@ describe('phone cards', () => {
   it('closes on Escape, and pages to the next row', async () => {
     render(<Harness />)
     const user = userEvent.setup()
-    await user.click(within(card('Timur')).getByRole('button'))
+    await user.dblClick(within(card('Timur')).getByRole('button')) // first tap selects, second opens
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Следующая строка' }))
     expect(await screen.findByText('Строка № 2')).toBeInTheDocument()
@@ -116,7 +127,7 @@ describe('phone cards', () => {
     const c = card('Nadezhda')
     expect(c).toHaveAttribute('data-locked', 'true')
     expect(c.style.getPropertyValue('--lock')).toBe('#ffb84d')
-    await userEvent.setup().click(within(c).getByRole('button'))
+    await userEvent.setup().dblClick(within(c).getByRole('button'))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onNotify).toHaveBeenCalledWith(expect.stringContaining('Azam Tursunov'))
   })
@@ -131,7 +142,7 @@ describe('phone cards', () => {
     const onCommit = vi.fn(async () => ({ status: 'error' as const }))
     render(<Harness onCommit={onCommit} />)
     const user = userEvent.setup()
-    await user.click(within(card('Timur')).getByRole('button'))
+    await user.dblClick(within(card('Timur')).getByRole('button')) // first tap selects, second opens
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('Имя'), ' K')
     await user.click(within(dialog).getByRole('button', { name: 'Сохранить' }))

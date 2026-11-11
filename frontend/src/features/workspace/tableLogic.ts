@@ -6,6 +6,13 @@ export type Column = (typeof COLUMNS)[number]
 export const EDITABLE: readonly Column[] = ['name', 'phone']
 export const MAX_ADD_ROWS = 5000
 
+/**
+ * Phone cards: the first tap on a card only selects it (the ticket follows), a second tap on the card that is
+ * already selected opens the editor. `armed` is the card the last pick selected.
+ */
+export const tapAction = (armed: string | null, id: string): 'select' | 'open' =>
+  armed === id ? 'open' : 'select'
+
 export interface Cell {
   row: number
   col: number
