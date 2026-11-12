@@ -5,6 +5,7 @@ import {
   chunkFiles,
   type DirLike,
   downloadEach,
+  FOLDER_CONCURRENCY,
   loadSaveMode,
   planSave,
   storeSaveMode,
@@ -141,6 +142,7 @@ describe('folder writing', () => {
     const { dir, files } = fakeDir()
     const ctl = new AbortController()
     const res = await writeToFolder(dir, items(4), {
+      concurrency: 1,
       signal: ctl.signal,
       onProgress: (done) => {
         if (done === 2) ctl.abort()
@@ -149,6 +151,25 @@ describe('folder writing', () => {
     expect(res.cancelled).toBe(true)
     expect(res.saved).toBe(2)
     expect(files.size).toBe(2)
+  })
+
+  it('renders several files at once but never more than the limit, with unique names', async () => {
+    const { dir, files } = fakeDir()
+    let active = 0
+    let peak = 0
+    const many: BatchItem[] = Array.from({ length: 12 }, (_, i) => ({
+      name: 'same.png',
+      render: async () => {
+        peak = Math.max(peak, ++active)
+        await new Promise((r) => setTimeout(r, 5))
+        active--
+        return new Blob([`x${i}`])
+      },
+    }))
+    const res = await writeToFolder(dir, many)
+    expect(res.saved).toBe(12)
+    expect(peak).toBe(FOLDER_CONCURRENCY)
+    expect(files.size).toBe(12)
   })
 })
 

@@ -99,6 +99,9 @@ interface BatchOpts {
   tick?: () => Promise<void>
 }
 
+/** Files rendered and written at the same time: enough to overlap PNG encoding with disk writes, small enough for memory. */
+export const FOLDER_CONCURRENCY = 4
+
 async function exists(dir: DirLike, name: string): Promise<boolean> {
   try {
     await dir.getFileHandle(name)
@@ -108,38 +111,55 @@ async function exists(dir: DirLike, name: string): Promise<boolean> {
   }
 }
 
-/** Writes the files one after another into the chosen folder; a failing file does not stop the rest. */
+/**
+ * Writes the files into the chosen folder, several at a time; a failing file does not stop the rest.
+ * Each worker takes the next unclaimed item, so names stay unique (`uniqueName` claims synchronously) and
+ * cancelling lets only the files already in flight finish.
+ */
 export async function writeToFolder(
   dir: DirLike,
   items: readonly BatchItem[],
-  o: BatchOpts = {},
+  o: BatchOpts & { concurrency?: number } = {},
 ): Promise<BatchResult> {
   const taken = new Set<string>()
   const res: BatchResult = { saved: 0, failed: [], cancelled: false }
-  for (const [i, item] of items.entries()) {
-    if (o.signal?.aborted) {
-      res.cancelled = true
-      break
-    }
-    let name = uniqueName(item.name, taken)
-    try {
-      // Never overwrite a file that was already in the folder.
-      while (await exists(dir, name)) {
-        taken.add(name.toLowerCase())
-        name = uniqueName(item.name, taken)
+  const failed: { index: number; name: string; error: unknown }[] = []
+  let next = 0
+  let done = 0
+
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      if (o.signal?.aborted) {
+        res.cancelled = true
+        return
       }
-      const blob = await item.render()
-      const handle = await dir.getFileHandle(name, { create: true })
-      const w = await handle.createWritable()
-      await w.write(blob)
-      await w.close()
-      res.saved++
-    } catch (error) {
-      res.failed.push({ name, error })
+      const index = next++
+      const item = items[index]
+      if (!item) return
+      let name = uniqueName(item.name, taken)
+      try {
+        // Never overwrite a file that was already in the folder.
+        while (await exists(dir, name)) {
+          taken.add(name.toLowerCase())
+          name = uniqueName(item.name, taken)
+        }
+        const blob = await item.render()
+        const handle = await dir.getFileHandle(name, { create: true })
+        const w = await handle.createWritable()
+        await w.write(blob)
+        await w.close()
+        res.saved++
+      } catch (error) {
+        failed.push({ index, name, error })
+      }
+      o.onProgress?.(++done, items.length)
+      await o.tick?.()
     }
-    o.onProgress?.(i + 1, items.length)
-    await o.tick?.()
   }
+
+  const count = Math.max(1, Math.min(o.concurrency ?? FOLDER_CONCURRENCY, items.length))
+  await Promise.all(Array.from({ length: count }, worker))
+  res.failed = failed.sort((a, b) => a.index - b.index).map(({ name, error }) => ({ name, error }))
   return res
 }
 
