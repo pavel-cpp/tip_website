@@ -137,3 +137,27 @@ func TestAdapters(t *testing.T) {
 		}
 	}
 }
+
+// pacedWriter is a destination slower than the producer, so events are still in the ring when Close is called.
+type pacedWriter struct{ buf *syncBuf }
+
+func (w pacedWriter) Write(p []byte) (int, error) {
+	time.Sleep(200 * time.Microsecond)
+	return w.buf.Write(p)
+}
+
+// Close must not lose events that are still in the ring when it is called (the last lines before a shutdown).
+func TestCloseDeliversPendingEvents(t *testing.T) {
+	var out syncBuf
+	l, closeFn := New(Options{Level: "info", Out: pacedWriter{&out}})
+	const n = 500
+	for range n {
+		l.Info().Msg("pending")
+	}
+	if err := closeFn(); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(out.String(), "\n"); got != n {
+		t.Fatalf("delivered %d of %d events before close returned", got, n)
+	}
+}

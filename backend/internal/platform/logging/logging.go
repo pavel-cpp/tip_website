@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -17,6 +18,7 @@ import (
 const (
 	ringSize      = 8192
 	flushInterval = 10 * time.Millisecond
+	drainTimeout  = 2 * time.Second
 )
 
 func init() {
@@ -43,13 +45,46 @@ func New(o Options) (zerolog.Logger, func() error) {
 	if out == nil {
 		out = os.Stdout
 	}
-	dw := diode.NewWriter(out, ringSize, flushInterval, func(missed int) {
+	var t tally
+	dw := diode.NewWriter(countingWriter{w: out, n: &t.delivered}, ringSize, flushInterval, func(missed int) {
+		t.missed.Add(int64(missed))
 		if o.OnDropped != nil {
 			o.OnDropped(missed)
 		}
 	})
-	l := zerolog.New(dw).Level(parseLevel(o.Level)).With().Timestamp().Logger()
-	return l, dw.Close
+	l := zerolog.New(submitWriter{w: dw, n: &t.submitted}).Level(parseLevel(o.Level)).With().Timestamp().Logger()
+	return l, func() error {
+		// diode.Writer.Close stops the poller at once and abandons what is still in the ring, which would lose
+		// the last lines before shutdown; wait (bounded) until every accepted event reached the destination.
+		deadline := time.Now().Add(drainTimeout)
+		for t.delivered.Load()+t.missed.Load() < t.submitted.Load() && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		return dw.Close()
+	}
+}
+
+// tally counts events handed to the ring, events that reached the destination and events the ring overwrote.
+type tally struct{ submitted, delivered, missed atomic.Int64 }
+
+type submitWriter struct {
+	w io.Writer
+	n *atomic.Int64
+}
+
+func (s submitWriter) Write(p []byte) (int, error) {
+	s.n.Add(1)
+	return s.w.Write(p)
+}
+
+type countingWriter struct {
+	w io.Writer
+	n *atomic.Int64
+}
+
+func (c countingWriter) Write(p []byte) (int, error) {
+	defer c.n.Add(1)
+	return c.w.Write(p)
 }
 
 func parseLevel(s string) zerolog.Level {
