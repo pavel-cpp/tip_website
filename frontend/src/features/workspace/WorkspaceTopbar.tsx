@@ -8,6 +8,7 @@ interface WorkspaceTopbarProps {
   title: string
   contributors: readonly Contributor[]
   watchedId: string | null
+  canFollow: boolean
   onSelectOnline: (id: string) => void
   onSelectLastRow: (rowId: string) => void
 }
@@ -18,6 +19,7 @@ export function WorkspaceTopbar({
   title,
   contributors,
   watchedId,
+  canFollow,
   onSelectOnline,
   onSelectLastRow,
 }: WorkspaceTopbarProps) {
@@ -40,6 +42,7 @@ export function WorkspaceTopbar({
           <WorkspacePeople
             contributors={contributors}
             watchedId={watchedId}
+            canFollow={canFollow}
             onSelectOnline={onSelectOnline}
             onSelectLastRow={onSelectLastRow}
           />

@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { PeerStatus } from './follow'
 import type { Peer } from './protocol'
+import './realtime.css'
 
 interface FollowChipProps {
   peer: Peer

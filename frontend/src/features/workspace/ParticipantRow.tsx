@@ -7,6 +7,7 @@ import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
+import { CursorStrip } from './CursorStrip'
 import { WsIcon } from './icons'
 import type { RowCursor, RowLockOwner } from './presence'
 import { COLUMNS, type Column } from './tableLogic'
@@ -140,13 +141,7 @@ function ParticipantRowImpl({
       <div className="pt-row-inner">
         {fresh && <span className="pt-fresh" aria-hidden="true" />}
         <span key={shake} className="pt-lock-ring" data-shake={shake > 0 || undefined} aria-hidden="true" />
-        {cursors.length > 0 && (
-          <span className="pt-cursors" aria-hidden="true">
-            {cursors.map((c) => (
-              <span key={c.id} className="pt-cursor" style={{ background: c.color }} title={c.displayName} />
-            ))}
-          </span>
-        )}
+        <CursorStrip cursors={cursors} />
         {COLUMNS.map((c, col) => {
           const isEditing = editing?.id === row.id && editing.col === col
           const isFailed = failed?.col === col

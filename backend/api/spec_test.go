@@ -12,7 +12,7 @@ import (
 var permissionCatalog = []string{
 	"project.view", "project.view_finished", "project.create", "project.update", "project.finish", "project.delete",
 	"participant.view", "participant.edit", "participant.print", "participant.export", "participant.import",
-	"participant.delete", "participant.clear",
+	"participant.delete", "participant.clear", "participant.follow",
 	"user.view", "user.manage", "role.manage", "audit.view", "system.view",
 }
 

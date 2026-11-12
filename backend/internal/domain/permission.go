@@ -25,7 +25,8 @@ const (
 	PermParticipantImport   Permission = "participant.import"
 	PermParticipantDelete   Permission = "participant.delete"
 	PermParticipantClear    Permission = "participant.clear"
-	PermUserView            Permission = "user.view"
+	PermParticipantFollow   Permission = "participant.follow"
+	PermUserView           Permission = "user.view"
 	PermUserManage          Permission = "user.manage"
 	PermRoleManage          Permission = "role.manage"
 	PermAuditView           Permission = "audit.view"
@@ -61,6 +62,7 @@ var catalog = []PermissionInfo{
 	{PermParticipantImport, GroupParticipants, "Import participants from XLSX or CSV"},
 	{PermParticipantDelete, GroupParticipants, "Delete rows"},
 	{PermParticipantClear, GroupParticipants, "Clear all participants of a project"},
+	{PermParticipantFollow, GroupParticipants, "Follow a colleague: highlight their row and move along with them"},
 	{PermUserView, GroupAdministration, "View the list of users"},
 	{PermUserManage, GroupAdministration, "Create, edit and deactivate users, reset passwords"},
 	{PermRoleManage, GroupAdministration, "Create, edit and delete roles and assign them to users (effectively full administrator)"},
@@ -84,6 +86,7 @@ var requires = map[Permission][]Permission{
 	PermParticipantImport:   {PermParticipantView},
 	PermParticipantDelete:   {PermParticipantView},
 	PermParticipantClear:    {PermParticipantView},
+	PermParticipantFollow:   {PermParticipantView},
 	PermUserManage:          {PermUserView},
 	PermRoleManage:          {PermUserView},
 }

@@ -153,6 +153,7 @@ function WorkspaceView({ project }: { project: Project }) {
   const canExport = useCan('participant.export')
   const canImportPerm = useCan('participant.import')
   const canSettings = useCan('project.update')
+  const canFollow = useCan('participant.follow')
   const canEdit = canEditPerm && !finished
   const canImport = canImportPerm && !finished
 
@@ -465,14 +466,20 @@ function WorkspaceView({ project }: { project: Project }) {
     [rows, query, follow],
   )
   const selectPeer = (id: string) => {
+    const st = rtSnapshot ? peerStatus(id, rtSnapshot.cursors, rtSnapshot.locks) : null
+    const row = st?.rowId && rows.some((r) => r.id === st.rowId) ? st.rowId : null
+    // Without the follow permission a click only goes to the colleague's cell: no highlight, chip or following.
+    if (!canFollow) {
+      if (row) jumpTo(row)
+      return
+    }
     if (watch?.id === id) {
       setWatch(watch.following ? { id, following: false } : null)
       return
     }
     setWatch({ id, following: false })
-    const st = rtSnapshot ? peerStatus(id, rtSnapshot.cursors, rtSnapshot.locks) : null
     lastAuto.current = null
-    if (st?.rowId && rows.some((r) => r.id === st.rowId)) jumpTo(st.rowId)
+    if (row) jumpTo(row)
   }
   // A colleague who is away: show the row they edited last, without following anyone.
   const goToLastRow = (rowId: string) => {
@@ -595,6 +602,7 @@ function WorkspaceView({ project }: { project: Project }) {
       title={project.title}
       contributors={project.contributors}
       watchedId={watch?.id ?? null}
+      canFollow={canFollow}
       onSelectOnline={selectPeer}
       onSelectLastRow={goToLastRow}
     />

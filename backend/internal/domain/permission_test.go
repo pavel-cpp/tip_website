@@ -24,8 +24,8 @@ func TestCatalogIntegrity(t *testing.T) {
 			t.Errorf("%s: group and description are required", info.Code)
 		}
 	}
-	if len(seen) != 18 {
-		t.Errorf("catalog size = %d, want 18", len(seen))
+	if len(seen) != 19 {
+		t.Errorf("catalog size = %d, want 19", len(seen))
 	}
 	// Every dependency must itself be a catalog member.
 	for p, deps := range requires {

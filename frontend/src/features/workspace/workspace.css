@@ -470,19 +470,22 @@
   }
 }
 
-/* Colleagues who merely look at a row: thin coloured markers beside the number. */
+/* Colleagues who merely look at a row: a strip on the left edge, one coloured segment per person. */
 .pt-cursors {
   position: absolute;
-  left: 4px;
-  top: 8px;
-  bottom: 8px;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
   display: flex;
-  gap: 2px;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 2px;
 }
 .pt-cursor {
-  width: 3px;
-  border-radius: 2px;
-  transition: transform 120ms var(--ease-standard);
+  flex: 1 1 0;
+  min-height: 3px;
 }
 
 .pt-conflict {

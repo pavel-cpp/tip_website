@@ -863,7 +863,7 @@ export interface components {
          * @description Permission from the catalog (`docs/02-architecture.md`, section 5.1).
          * @enum {string}
          */
-        PermissionCode: "project.view" | "project.view_finished" | "project.create" | "project.update" | "project.finish" | "project.delete" | "participant.view" | "participant.edit" | "participant.print" | "participant.export" | "participant.import" | "participant.delete" | "participant.clear" | "user.view" | "user.manage" | "role.manage" | "audit.view" | "system.view";
+        PermissionCode: "project.view" | "project.view_finished" | "project.create" | "project.update" | "project.finish" | "project.delete" | "participant.view" | "participant.edit" | "participant.print" | "participant.export" | "participant.import" | "participant.delete" | "participant.clear" | "participant.follow" | "user.view" | "user.manage" | "role.manage" | "audit.view" | "system.view";
         RoleRef: {
             /** Format: uuid */
             id: string;

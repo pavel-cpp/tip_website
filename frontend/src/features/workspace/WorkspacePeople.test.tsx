@@ -26,6 +26,7 @@ function setup(contributors = [you, alice, bob]) {
     <WorkspacePeople
       contributors={contributors}
       watchedId={null}
+      canFollow
       onSelectOnline={onSelectOnline}
       onSelectLastRow={onSelectLastRow}
     />,

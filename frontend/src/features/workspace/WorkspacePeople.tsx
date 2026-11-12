@@ -1,10 +1,22 @@
-import { type CSSProperties, useMemo } from 'react'
+import { type CSSProperties, useMemo, useSyncExternalStore } from 'react'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Tooltip } from '../../components/Tooltip'
 import { useI18n } from '../../i18n'
 import { useRealtime } from '../realtime/RealtimeProvider'
+import '../realtime/realtime.css'
 
 const MAX_SHOWN = 5
+/** The phone top bar also holds the language, theme and user buttons, so it fits fewer avatars. */
+const MAX_SHOWN_PHONE = 3
+const PHONE = '(max-width: 699px), (orientation: landscape) and (max-height: 500px)'
+
+function subscribePhone(cb: () => void) {
+  if (typeof matchMedia !== 'function') return () => {}
+  const mq = matchMedia(PHONE)
+  mq.addEventListener('change', cb)
+  return () => mq.removeEventListener('change', cb)
+}
+const isPhone = () => typeof matchMedia === 'function' && matchMedia(PHONE).matches
 
 export interface Contributor {
   id: string
@@ -23,6 +35,8 @@ interface WorkspacePeopleProps {
   contributors: readonly Contributor[]
   /** The colleague currently being watched. */
   watchedId: string | null
+  /** With the follow permission a click on an online colleague toggles watching; without it, it only jumps. */
+  canFollow: boolean
   /** A click on someone who is online: go to what they are doing now. */
   onSelectOnline: (id: string) => void
   /** A click on someone who is away: go to the row they edited last. */
@@ -33,6 +47,7 @@ interface WorkspacePeopleProps {
 export function WorkspacePeople({
   contributors,
   watchedId,
+  canFollow,
   onSelectOnline,
   onSelectLastRow,
 }: WorkspacePeopleProps) {
@@ -40,6 +55,7 @@ export function WorkspacePeople({
   const rt = useRealtime()
   const you = rt?.snapshot.you
   const peers = rt?.snapshot.peers
+  const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
   const people = useMemo<Person[]>(() => {
     const online = (peers ?? [])
       .filter((p) => p.id !== you)
@@ -52,9 +68,10 @@ export function WorkspacePeople({
     return [...online, ...away]
   }, [peers, you, contributors])
 
+  const max = phone ? MAX_SHOWN_PHONE : MAX_SHOWN
   if (people.length === 0) return null
-  const visible = people.slice(0, MAX_SHOWN)
-  const hidden = people.slice(MAX_SHOWN)
+  const visible = people.slice(0, max)
+  const hidden = people.slice(max)
   const onlineCount = people.filter((p) => p.online).length
   return (
     <ul
@@ -75,7 +92,7 @@ export function WorkspacePeople({
                 type="button"
                 className="rt-online-btn"
                 data-online={p.online || undefined}
-                aria-pressed={p.online ? watchedId === p.id : undefined}
+                aria-pressed={p.online && canFollow ? watchedId === p.id : undefined}
                 aria-label={label}
                 aria-disabled={!target || undefined}
                 style={{ '--peer': p.color } as CSSProperties}

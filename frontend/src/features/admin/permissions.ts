@@ -18,6 +18,7 @@ export const REQUIRES: Readonly<Partial<Record<PermissionCode, readonly Permissi
   'participant.import': ['participant.view'],
   'participant.delete': ['participant.view'],
   'participant.clear': ['participant.view'],
+  'participant.follow': ['participant.view'],
   'user.manage': ['user.view'],
   'role.manage': ['user.view'],
 }

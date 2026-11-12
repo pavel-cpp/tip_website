@@ -26,6 +26,7 @@ export const ALL_PERMISSIONS = [
   'participant.import',
   'participant.delete',
   'participant.clear',
+  'participant.follow',
   'user.view',
   'user.manage',
   'role.manage',

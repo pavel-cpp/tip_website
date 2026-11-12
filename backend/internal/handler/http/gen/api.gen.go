@@ -226,6 +226,7 @@ const (
 	ParticipantDelete   PermissionCode = "participant.delete"
 	ParticipantEdit     PermissionCode = "participant.edit"
 	ParticipantExport   PermissionCode = "participant.export"
+	ParticipantFollow   PermissionCode = "participant.follow"
 	ParticipantImport   PermissionCode = "participant.import"
 	ParticipantPrint    PermissionCode = "participant.print"
 	ParticipantView     PermissionCode = "participant.view"
@@ -253,6 +254,8 @@ func (e PermissionCode) Valid() bool {
 	case ParticipantEdit:
 		return true
 	case ParticipantExport:
+		return true
+	case ParticipantFollow:
 		return true
 	case ParticipantImport:
 		return true
