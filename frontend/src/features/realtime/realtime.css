@@ -10,17 +10,10 @@
   animation: rt-pop-in var(--dur-base) var(--ease-standard) both;
 }
 .rt-online-item + .rt-online-item {
-  margin-left: -8px;
-}
-.rt-online-item[data-leaving] {
-  animation: rt-pop-out var(--dur-fast) var(--ease-out) both;
-  pointer-events: none;
-}
-/* A green ring marks "online now", distinct from the contributors stack. */
-.rt-online-item .avatar {
-  box-shadow: 0 0 0 2px var(--ok);
+  margin-left: 6px;
 }
 .rt-online-more {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: var(--size);
@@ -36,11 +29,17 @@
     transform: scale(0.6);
   }
 }
-@keyframes rt-pop-out {
-  to {
-    opacity: 0;
-    transform: scale(0.6);
-  }
+/* The green dot marks a colleague who is in the project right now; people who are away have none. */
+.rt-online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+  pointer-events: none;
 }
 
 .rt-conn {
@@ -81,7 +80,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .rt-online-item,
-  .rt-online-item[data-leaving],
   .rt-conn,
   .rt-conn-dot,
   .rt-chip,
@@ -120,6 +118,9 @@
   .rt-online-btn:hover {
     transform: translateY(-1px);
   }
+}
+.rt-online-btn[aria-disabled="true"] {
+  cursor: default;
 }
 .rt-online-btn[aria-pressed="true"] .avatar {
   box-shadow:

@@ -254,8 +254,13 @@ func TestProjectRepoDetailsAndContributors(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("contributor rows = %d", n)
 	}
-	for i := 0; i < 3; i++ {
-		if _, err := d.Exec(`INSERT INTO participants (project_id, number) VALUES ($1, $2)`, p.ID, i+1); err != nil {
+	// Rows 1 and 2 were last edited by u1 (row 2 later), row 3 by u2; u1's last edit is therefore row 2.
+	rowIDs := make([]string, 3)
+	editors := []string{u1, u1, u2}
+	for i := range 3 {
+		err := d.QueryRow(`INSERT INTO participants (project_id, number, updated_by, updated_at) VALUES ($1, $2, $3, $4) RETURNING id::text`,
+			p.ID, i+1, editors[i], t0.Add(time.Duration(i)*time.Second)).Scan(&rowIDs[i])
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -270,6 +275,9 @@ func TestProjectRepoDetailsAndContributors(t *testing.T) {
 	}
 	if got.Contributors[0].ID != u1 || got.Contributors[0].AvatarSHA != "avsha" || got.Contributors[1].ID != u2 || got.Contributors[1].AvatarSHA != "" {
 		t.Fatalf("contributors %+v", got.Contributors)
+	}
+	if got.Contributors[0].LastRowID != rowIDs[1] || got.Contributors[1].LastRowID != rowIDs[2] {
+		t.Fatalf("last edited rows %q %q, want %q %q", got.Contributors[0].LastRowID, got.Contributors[1].LastRowID, rowIDs[1], rowIDs[2])
 	}
 	if e, ok := det[empty.ID]; !ok || e.ParticipantCount != 0 || len(e.Contributors) != 0 {
 		t.Fatalf("empty details %+v", e)

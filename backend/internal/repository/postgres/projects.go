@@ -248,10 +248,15 @@ func (r *ProjectRepo) Details(ctx context.Context, ids []string, maxContributors
 	}
 
 	rows, err := q.QueryContext(ctx, `
-		SELECT c.project_id::text, u.id::text, u.display_name, u.color, COALESCE(a.sha256, '')
+		SELECT c.project_id::text, u.id::text, u.display_name, u.color, COALESCE(a.sha256, ''), COALESCE(e.id::text, '')
 		FROM project_contributors c
 		JOIN users u ON u.id = c.user_id
 		LEFT JOIN user_avatars a ON a.user_id = u.id
+		LEFT JOIN LATERAL (
+			SELECT p.id FROM participants p
+			WHERE p.project_id = c.project_id AND p.updated_by = c.user_id
+			ORDER BY p.updated_at DESC LIMIT 1
+		) e ON true
 		WHERE c.project_id = ANY($1::uuid[])
 		ORDER BY c.project_id, c.last_seen_at DESC, u.id`, ids)
 	if err != nil {
@@ -261,7 +266,7 @@ func (r *ProjectRepo) Details(ctx context.Context, ids []string, maxContributors
 	for rows.Next() {
 		var pid string
 		var u domain.Contributor
-		if err := rows.Scan(&pid, &u.ID, &u.DisplayName, &u.Color, &u.AvatarSHA); err != nil {
+		if err := rows.Scan(&pid, &u.ID, &u.DisplayName, &u.Color, &u.AvatarSHA, &u.LastRowID); err != nil {
 			return nil, fmt.Errorf("scan contributor: %w", err)
 		}
 		d := out[pid]

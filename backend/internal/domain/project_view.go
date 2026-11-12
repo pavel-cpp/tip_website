@@ -15,6 +15,8 @@ type Contributor struct {
 	Color       string
 	// AvatarSHA is the hash of the stored avatar; empty when the user has none.
 	AvatarSHA string
+	// LastRowID is the participant row this user edited last; empty when none remains.
+	LastRowID string
 }
 
 // ProjectDetails holds the data of a project that lives outside the projects table.

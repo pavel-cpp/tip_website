@@ -2185,6 +2185,10 @@ components:
           $ref: "#/components/schemas/Color"
         avatarUrl:
           type: [string, "null"]
+        lastRowId:
+          description: Only in a project's `contributors`. The participant row this user edited last, null when none remains.
+          type: [string, "null"]
+          format: uuid
 
     LoginRequest:
       type: object

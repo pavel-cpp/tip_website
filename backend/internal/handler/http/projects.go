@@ -363,6 +363,9 @@ func projectsContributors(cs []domain.Contributor) []gen.UserRef {
 			u := "/api/v1/users/" + c.ID + "/avatar?v=" + projectsShortHash(c.AvatarSHA)
 			ref.AvatarUrl = &u
 		}
+		if id, err := uuid.Parse(c.LastRowID); err == nil {
+			ref.LastRowId = &id
+		}
 		out[i] = ref
 	}
 	return out

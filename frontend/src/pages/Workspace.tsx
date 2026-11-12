@@ -185,7 +185,6 @@ function WorkspaceView({ project }: { project: Project }) {
 
   const presence = useRowPresence(project.id)
   const rtSnapshot = useRealtime()?.snapshot
-  const hasOnline = (rtSnapshot?.peers ?? []).some((p) => p.id !== rtSnapshot?.you)
   const remoteLeaving = useRealtime()?.leaving
   const remoteFresh = useRealtime()?.remoteFresh
   const people = useMemo(() => {
@@ -475,6 +474,12 @@ function WorkspaceView({ project }: { project: Project }) {
     lastAuto.current = null
     if (st?.rowId && rows.some((r) => r.id === st.rowId)) jumpTo(st.rowId)
   }
+  // A colleague who is away: show the row they edited last, without following anyone.
+  const goToLastRow = (rowId: string) => {
+    if (!rows.some((r) => r.id === rowId)) return
+    setWatch(null)
+    jumpTo(rowId)
+  }
   const toggleFollow = () => {
     lastAuto.current = null
     setWatch((w) => (w ? { ...w, following: !w.following } : w))
@@ -589,9 +594,9 @@ function WorkspaceView({ project }: { project: Project }) {
       projectId={project.id}
       title={project.title}
       contributors={project.contributors}
-      hasOnline={hasOnline}
       watchedId={watch?.id ?? null}
-      onSelectPeer={selectPeer}
+      onSelectOnline={selectPeer}
+      onSelectLastRow={goToLastRow}
     />
   )
   const names = { first: t('workspace.panel.picture'), second: t('workspace.panel.db') }

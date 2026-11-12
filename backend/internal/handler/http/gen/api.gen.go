@@ -995,6 +995,9 @@ type UserRef struct {
 	Color       Color              `json:"color"`
 	DisplayName string             `json:"displayName"`
 	Id          openapi_types.UUID `json:"id"`
+
+	// LastRowId Only in a project's `contributors`. The participant row this user edited last, null when none remains.
+	LastRowId *openapi_types.UUID `json:"lastRowId,omitempty"`
 }
 
 // UserResponse defines model for UserResponse.

@@ -33,9 +33,10 @@ export function textOn(hex: string): string {
 interface AvatarProps {
   user: AvatarUser
   size?: number
+  noTitle?: boolean
 }
 
-export function Avatar({ user, size = 28 }: AvatarProps) {
+export function Avatar({ user, size = 28, noTitle }: AvatarProps) {
   const style = {
     '--size': `${size}px`,
     '--c': user.color,
@@ -43,7 +44,13 @@ export function Avatar({ user, size = 28 }: AvatarProps) {
     backgroundImage: user.avatar ? `url(${user.avatar})` : undefined,
   } as CSSProperties
   return (
-    <span className="avatar" style={style} role="img" aria-label={user.displayName} title={user.displayName}>
+    <span
+      className="avatar"
+      style={style}
+      role="img"
+      aria-label={user.displayName}
+      title={noTitle ? undefined : user.displayName}
+    >
       {!user.avatar && initials(user.displayName)}
     </span>
   )

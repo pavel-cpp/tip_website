@@ -55,11 +55,13 @@ interface UserAvatarProps {
   size?: number
   /** Local preview (blob URL) that wins over the stored avatar, e.g. while uploading. */
   override?: string | null
+  /** Skip the native title when a Tooltip already names the person. */
+  noTitle?: boolean
 }
 
 /** Avatar for API users: loads the protected image, shows initials until it arrives or when there is none. */
-export function UserAvatar({ user, size, override }: UserAvatarProps) {
+export function UserAvatar({ user, size, override, noTitle }: UserAvatarProps) {
   const fetched = useAvatarSrc(override ? null : user.avatarUrl)
   const shown: AvatarUser = { displayName: user.displayName, color: user.color, avatar: override ?? fetched }
-  return <Avatar user={shown} size={size} />
+  return <Avatar user={shown} size={size} noTitle={noTitle} />
 }

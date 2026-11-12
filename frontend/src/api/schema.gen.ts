@@ -929,6 +929,11 @@ export interface components {
             displayName: string;
             color: components["schemas"]["Color"];
             avatarUrl: string | null;
+            /**
+             * Format: uuid
+             * @description Only in a project's `contributors`. The participant row this user edited last, null when none remains.
+             */
+            lastRowId?: string | null;
         };
         LoginRequest: {
             login: string;
