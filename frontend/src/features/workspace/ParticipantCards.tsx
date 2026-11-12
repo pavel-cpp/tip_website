@@ -5,9 +5,8 @@ import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
-import { CursorStrip } from './CursorStrip'
 import type { ConflictState, FailedState } from './ParticipantRow'
-import type { RowCursor, RowLockOwner } from './presence'
+import type { RowLockOwner } from './presence'
 
 /** First-paint height guess for a card (number + one name line + phone + gap); real heights are measured. */
 export const CARD_ESTIMATE = 84
@@ -34,7 +33,6 @@ export interface ParticipantCardProps {
   /** The bottom sheet is editing this row right now (the row is locked for colleagues). */
   editing: boolean
   lockedBy?: RowLockOwner | null
-  cursors?: readonly RowCursor[]
   leaving: boolean
   fresh: boolean
   freshColor: string
@@ -66,7 +64,6 @@ function ParticipantCardImpl({
   current,
   editing,
   lockedBy = null,
-  cursors = [],
   leaving,
   fresh,
   freshColor,
@@ -131,7 +128,6 @@ function ParticipantCardImpl({
       <div className="pc-card">
         {fresh && <span className="pt-fresh" aria-hidden="true" />}
         <span key={shake} className="pt-lock-ring" data-shake={shake > 0 || undefined} aria-hidden="true" />
-        <CursorStrip cursors={cursors} />
         {selectMode && (
           <label className="pc-check">
             <input

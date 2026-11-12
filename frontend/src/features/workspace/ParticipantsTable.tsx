@@ -19,6 +19,7 @@ import { Icon } from '../../components/Icon'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
+import { CursorLayer, placeCursors } from './CursorLayer'
 import { WsIcon } from './icons'
 import { CARD_ESTIMATE, type CardHandlers, ParticipantCard } from './ParticipantCards'
 import {
@@ -146,6 +147,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   const visible = useMemo(() => filterRows(rows, query), [rows, query])
   const ids = useMemo(() => visible.map((r) => r.id), [visible])
+  const indexOfId = useMemo(() => new Map(ids.map((id, i) => [id, i])), [ids])
 
   const scroller = useRef<HTMLDivElement>(null)
   const grid = useRef<HTMLDivElement>(null)
@@ -718,6 +720,21 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     if (allBox.current) allBox.current.indeterminate = selectedVisible.length > 0 && !everySelected
   }, [selectedVisible.length, everySelected, selectMode])
   const items = rowVirtualizer.getVirtualItems()
+  // Colleagues' cursors are drawn on one layer, not inside the rows, so they can glide from row to row.
+  const cursorLayer = (
+    <CursorLayer
+      items={placeCursors(
+        presence.cursors,
+        (id) => {
+          const i = indexOfId.get(id)
+          const m = i === undefined ? undefined : rowVirtualizer.measurementsCache[i]
+          return m ? { start: m.start, size: m.size } : null
+        },
+        // A card's bottom 8px is the gap to the next card.
+        cards ? { top: 4, bottom: 12 } : { top: 4, bottom: 4 },
+      )}
+    />
+  )
   const activeDescendant = activeRow && active ? cellId(activeRow.id, active.col) : undefined
 
   // ---- realtime: row lock lifecycle, cursor and denied locks
@@ -898,7 +915,6 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                       current={currentId === row.id}
                       editing={sheetId === row.id}
                       lockedBy={lockFor(row.id)}
-                      cursors={presence.cursors.get(row.id)}
                       leaving={leaving.has(row.id)}
                       fresh={freshIds.has(row.id)}
                       freshColor={freshColor}
@@ -911,6 +927,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                     />
                   )
                 })}
+                {cursorLayer}
               </div>
             )}
           </div>
@@ -990,7 +1007,6 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                       activeCol={active?.row === item.index ? active.col : null}
                       editing={edit?.id === row.id ? edit : null}
                       lockedBy={lockFor(row.id)}
-                      cursors={presence.cursors.get(row.id)}
                       leaving={leaving.has(row.id)}
                       fresh={freshIds.has(row.id)}
                       freshColor={freshColor}
@@ -1004,6 +1020,18 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                     />
                   )
                 })}
+                {cursorLayer}
+                {active && active.row < visible.length && (
+                  <span
+                    className="pt-ring"
+                    aria-hidden="true"
+                    style={{ transform: `translateY(${active.row * ROW_HEIGHT}px)`, height: ROW_HEIGHT - 1 }}
+                  >
+                    {COLUMNS.map((c, col) => (
+                      <span key={c} data-on={active.col === col || undefined} />
+                    ))}
+                  </span>
+                )}
               </div>
             )}
           </div>

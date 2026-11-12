@@ -17,7 +17,6 @@ import { Tooltip } from '../components/Tooltip'
 import { TopbarPortal } from '../components/TopbarSlot'
 import { type Project, useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
-import { FollowChip } from '../features/realtime/FollowChip'
 import { followJump, peerStatus, spotlightCss } from '../features/realtime/follow'
 import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeProvider'
 import {
@@ -447,13 +446,13 @@ function WorkspaceView({ project }: { project: Project }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [pictureOnly])
 
-  // ---- colleagues: jump to their row, optionally follow them
-  const [watch, setWatch] = useState<{ id: string; following: boolean } | null>(null)
+  // ---- colleagues: a click goes to their row, a double click follows them
+  const [followId, setFollowId] = useState<string | null>(null)
   const lastAuto = useRef<string | null>(null)
-  const watchedPeer = watch ? rtSnapshot?.peers.find((p) => p.id === watch.id) : undefined
-  const watchStatus = useMemo(
-    () => (watch && rtSnapshot ? peerStatus(watch.id, rtSnapshot.cursors, rtSnapshot.locks) : null),
-    [watch, rtSnapshot],
+  const followed = followId ? rtSnapshot?.peers.find((p) => p.id === followId) : undefined
+  const followRowId = useMemo(
+    () => (followId && rtSnapshot ? peerStatus(followId, rtSnapshot.cursors, rtSnapshot.locks).rowId : null),
+    [followId, rtSnapshot],
   )
   const jumpTo = useCallback(
     (rowId: string) => {
@@ -465,63 +464,55 @@ function WorkspaceView({ project }: { project: Project }) {
     },
     [rows, query, follow],
   )
+  const peerRowId = (id: string) => {
+    const rowId = rtSnapshot ? peerStatus(id, rtSnapshot.cursors, rtSnapshot.locks).rowId : null
+    return rowId && rows.some((r) => r.id === rowId) ? rowId : null
+  }
   const selectPeer = (id: string) => {
-    const st = rtSnapshot ? peerStatus(id, rtSnapshot.cursors, rtSnapshot.locks) : null
-    const row = st?.rowId && rows.some((r) => r.id === st.rowId) ? st.rowId : null
-    // Without the follow permission a click only goes to the colleague's cell: no highlight, chip or following.
-    if (!canFollow) {
-      if (row) jumpTo(row)
-      return
-    }
-    if (watch?.id === id) {
-      setWatch(watch.following ? { id, following: false } : null)
-      return
-    }
-    setWatch({ id, following: false })
+    // Going to someone else's cell by hand ends following; a click on the one being followed does not.
+    if (followId && followId !== id) setFollowId(null)
+    const rowId = peerRowId(id)
+    if (rowId) jumpTo(rowId)
+  }
+  const followPeer = (id: string) => {
+    if (!canFollow || followId === id) return
+    const peer = rtSnapshot?.peers.find((p) => p.id === id)
+    if (!peer) return
+    setFollowId(id)
     lastAuto.current = null
-    if (row) jumpTo(row)
+    toast.show({ message: t('realtime.follow.on', { name: peer.displayName }) })
+    const rowId = peerRowId(id)
+    if (rowId) jumpTo(rowId)
   }
   // A colleague who is away: show the row they edited last, without following anyone.
   const goToLastRow = (rowId: string) => {
     if (!rows.some((r) => r.id === rowId)) return
-    setWatch(null)
+    setFollowId(null)
     jumpTo(rowId)
   }
-  const toggleFollow = () => {
-    lastAuto.current = null
-    setWatch((w) => (w ? { ...w, following: !w.following } : w))
-  }
-  const following = !!watch?.following
-  const watchRowId = watchStatus?.rowId ?? null
   useEffect(() => {
-    if (!following) return
-    const target = followJump(watchRowId, lastAuto.current, (rid) => rows.some((r) => r.id === rid))
+    if (!followId) return
+    const target = followJump(followRowId, lastAuto.current, (rid) => rows.some((r) => r.id === rid))
     if (target) jumpTo(target)
-  }, [following, watchRowId, rows, jumpTo])
-  // Moving somewhere else by hand ends the following.
-  const seenCurrent = useRef(currentId)
-  useEffect(() => {
-    // Only a change of the current row counts; our own jump sets `lastAuto` first, so it never matches here.
-    if (currentId === seenCurrent.current) return
-    seenCurrent.current = currentId
-    if (following && currentId !== lastAuto.current) {
-      setWatch((w) => (w ? { ...w, following: false } : w))
-    }
-  }, [following, currentId])
+  }, [followId, followRowId, rows, jumpTo])
+  // Clicking or moving anywhere in the table ends following. Our own jumps do not go through here.
+  const pickRow = useCallback((rowId: string) => {
+    setFollowId(null)
+    setCurrentId(rowId)
+  }, [])
   // The colleague went offline.
   const rtOnline = rtSnapshot?.state === 'online'
   useEffect(() => {
-    if (watch && rtOnline && !watchedPeer) setWatch(null)
-  }, [watch, rtOnline, watchedPeer])
+    if (followId && rtOnline && !followed) setFollowId(null)
+  }, [followId, rtOnline, followed])
   useEffect(() => {
-    if (!watch) return
+    if (!followId) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return
-      setWatch((w) => (w?.following ? { ...w, following: false } : null))
+      if (e.key === 'Escape' && !e.defaultPrevented) setFollowId(null)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [watch])
+  }, [followId])
 
   const exportFile = async (format: ExportFormat) => {
     try {
@@ -601,9 +592,10 @@ function WorkspaceView({ project }: { project: Project }) {
       projectId={project.id}
       title={project.title}
       contributors={project.contributors}
-      watchedId={watch?.id ?? null}
+      followingId={followId}
       canFollow={canFollow}
       onSelectOnline={selectPeer}
+      onFollow={followPeer}
       onSelectLastRow={goToLastRow}
     />
   )
@@ -630,7 +622,7 @@ function WorkspaceView({ project }: { project: Project }) {
           selected={selected}
           onSelectedChange={setSelected}
           currentId={current?.id ?? null}
-          onCurrentChange={setCurrentId}
+          onCurrentChange={pickRow}
           leaving={remoteLeaving}
           freshIds={freshAll}
           freshColor={remoteFresh?.size ? undefined : user?.color}
@@ -695,8 +687,6 @@ function WorkspaceView({ project }: { project: Project }) {
       />
     </Panel>
   )
-
-  const peerColor = watchedPeer?.color ?? ''
 
   return (
     <div className="ws" data-tab={tab} data-morph={`hero:${project.id}`}>
@@ -832,17 +822,7 @@ function WorkspaceView({ project }: { project: Project }) {
         </div>
       )}
 
-      {watch && watchedPeer && watchStatus && (
-        <FollowChip
-          peer={watchedPeer}
-          status={watchStatus}
-          rowNumber={rows.find((r) => r.id === watchStatus.rowId)?.number ?? null}
-          following={following}
-          onToggleFollow={toggleFollow}
-          onClose={() => setWatch(null)}
-        />
-      )}
-      {watchedPeer && watchRowId && <style>{spotlightCss(watchRowId, peerColor)}</style>}
+      {followed && followRowId && <style>{spotlightCss(followRowId, followed.color)}</style>}
 
       {actions.sheets && <PrintSheets urls={actions.sheets} onClosed={actions.printClosed} />}
       {actions.progress && (

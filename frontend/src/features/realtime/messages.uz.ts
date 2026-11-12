@@ -12,12 +12,5 @@ export const realtimeUz: Record<keyof typeof realtimeRu, Message> = {
   'realtime.toast.finished': 'Loyiha yakunlandi — endi faqat koʻrish mumkin.',
   'realtime.someone': 'Hamkasb',
   'realtime.follow.jump': '{name} oldiga oʻtish',
-  'realtime.follow.start': 'Kuzatish',
-  'realtime.follow.stop': 'Kuzatmaslik',
-  'realtime.follow.close': 'Yopish',
-  'realtime.follow.idle': '{name} hali qatorni tanlamagan',
-  'realtime.follow.viewing': '{name} № {number} qatorga qarayapti',
-  'realtime.follow.editingName': '{name} № {number} qatorda ismni tahrirlayapti',
-  'realtime.follow.editingPhone': '{name} № {number} qatorda telefonni tahrirlayapti',
-  'realtime.follow.editingRow': '{name} № {number} qatorni tahrirlayapti',
+  'realtime.follow.on': 'Kuzatish rejimi yoqildi: {name}',
 }

@@ -1,4 +1,4 @@
-import { type CSSProperties, useMemo, useSyncExternalStore } from 'react'
+import { type CSSProperties, useMemo, useRef, useSyncExternalStore } from 'react'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Tooltip } from '../../components/Tooltip'
 import { useI18n } from '../../i18n'
@@ -8,6 +8,8 @@ import '../realtime/realtime.css'
 const MAX_SHOWN = 5
 /** The phone top bar also holds the language, theme and user buttons, so it fits fewer avatars. */
 const MAX_SHOWN_PHONE = 3
+/** Two clicks on one colleague this close together are a double click (tap), which starts following. */
+const DOUBLE_CLICK_MS = 400
 const PHONE = '(max-width: 699px), (orientation: landscape) and (max-height: 500px)'
 
 function subscribePhone(cb: () => void) {
@@ -33,12 +35,14 @@ interface Person extends Contributor {
 
 interface WorkspacePeopleProps {
   contributors: readonly Contributor[]
-  /** The colleague currently being watched. */
-  watchedId: string | null
-  /** With the follow permission a click on an online colleague toggles watching; without it, it only jumps. */
+  /** The colleague the view is following right now. */
+  followingId: string | null
+  /** Following needs the permission; without it a double click does nothing more than a click. */
   canFollow: boolean
   /** A click on someone who is online: go to what they are doing now. */
   onSelectOnline: (id: string) => void
+  /** A double click on someone who is online: start following them. */
+  onFollow: (id: string) => void
   /** A click on someone who is away: go to the row they edited last. */
   onSelectLastRow: (rowId: string) => void
 }
@@ -46,15 +50,17 @@ interface WorkspacePeopleProps {
 /** Everyone who has worked in the project: colleagues online (green dot) first, then the rest. */
 export function WorkspacePeople({
   contributors,
-  watchedId,
+  followingId,
   canFollow,
   onSelectOnline,
+  onFollow,
   onSelectLastRow,
 }: WorkspacePeopleProps) {
   const { t } = useI18n()
   const rt = useRealtime()
   const you = rt?.snapshot.you
   const peers = rt?.snapshot.peers
+  const lastClick = useRef<{ id: string; at: number } | null>(null)
   const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
   const people = useMemo<Person[]>(() => {
     const online = (peers ?? [])
@@ -85,21 +91,34 @@ export function WorkspacePeople({
         const label = p.online
           ? t('realtime.follow.jump', { name: p.displayName })
           : t(lastRowId ? 'workspace.people.jumpLast' : 'workspace.people.noEdits', { name: p.displayName })
+        const tip =
+          p.online && canFollow ? `${p.displayName} · ${t('workspace.people.followHint')}` : p.displayName
         return (
           <li key={p.id} className="rt-online-item">
-            <Tooltip content={p.displayName} side="bottom">
+            <Tooltip content={tip} side="bottom">
               <button
                 type="button"
                 className="rt-online-btn"
                 data-online={p.online || undefined}
-                aria-pressed={p.online && canFollow ? watchedId === p.id : undefined}
+                aria-pressed={p.online && canFollow ? followingId === p.id : undefined}
                 aria-label={label}
                 aria-disabled={!target || undefined}
                 style={{ '--peer': p.color } as CSSProperties}
                 onClick={() => {
                   if (!target) return
-                  if (p.online) onSelectOnline(p.id)
-                  else onSelectLastRow(target)
+                  if (!p.online) {
+                    onSelectLastRow(target)
+                    return
+                  }
+                  const now = Date.now()
+                  const prev = lastClick.current
+                  if (canFollow && prev?.id === p.id && now - prev.at < DOUBLE_CLICK_MS) {
+                    lastClick.current = null
+                    onFollow(p.id)
+                    return
+                  }
+                  lastClick.current = { id: p.id, at: now }
+                  onSelectOnline(p.id)
                 }}
               >
                 <UserAvatar user={p} size={28} noTitle />

@@ -210,6 +210,7 @@ export const workspaceRu = {
   'workspace.people.contributors': 'Участники проекта',
   'workspace.people.jumpLast': 'Перейти к последней правке: {name}',
   'workspace.people.noEdits': '{name}: правок пока нет',
+  'workspace.people.followHint': 'двойной клик: следить',
   'workspace.import.confirmEmpty': 'Импортировать',
   'workspace.ticket.noImageAdmin': 'Загрузите картинку билета в настройках проекта',
   'workspace.ticket.openSettings': 'Открыть настройки проекта',

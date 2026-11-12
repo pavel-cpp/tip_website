@@ -108,7 +108,7 @@ describe('row lock presentation (realtime seam)', () => {
     expect(rowOf('Nadezhda')).toHaveAttribute('data-tip', 'true')
   })
 
-  it('releases the lock when presence clears, and renders colleague cursors beside the number', () => {
+  it('releases the lock when presence clears, and draws colleague cursors on the cursor layer', () => {
     const { rerender } = render(<Harness presence={locked} />)
     rerender(
       <Harness
@@ -119,9 +119,10 @@ describe('row lock presentation (realtime seam)', () => {
       />,
     )
     expect(rowOf('Nadezhda')).not.toHaveAttribute('data-locked')
-    const cursor = rowOf('Timur').querySelector('.pt-cursor') as HTMLElement
+    const cursor = document.querySelector('.pt-cursors .pt-cursor') as HTMLElement
     expect(cursor).not.toBeNull()
     expect(cursor.style.background).not.toBe('')
+    expect(cursor.style.transform).toMatch(/^translateY\(\d+px\) scaleY\(36\)$/)
     expect(rowOf('Timur')).not.toHaveAttribute('data-locked')
   })
 })

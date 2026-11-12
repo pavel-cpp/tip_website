@@ -371,6 +371,10 @@
 .pc-check + .pc-main {
   padding-left: 0;
 }
+.pc-list .pt-cursor {
+  /* Card inset (--space-3) + its 1px border + the 4px that clear the current-card marker. */
+  left: calc(var(--space-3) + 5px);
+}
 .pc-item[data-selected] .pc-card {
   border-color: var(--accent);
   background: var(--accent-soft);

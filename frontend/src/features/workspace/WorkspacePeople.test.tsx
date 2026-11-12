@@ -19,19 +19,21 @@ function online(peers: Array<{ id: string; displayName: string; color: string; a
   vi.mocked(useRealtime).mockReturnValue({ snapshot: { you: 'me', peers } } as never)
 }
 
-function setup(contributors = [you, alice, bob]) {
+function setup(contributors = [you, alice, bob], canFollow = true) {
   const onSelectOnline = vi.fn()
+  const onFollow = vi.fn()
   const onSelectLastRow = vi.fn()
   render(
     <WorkspacePeople
       contributors={contributors}
-      watchedId={null}
-      canFollow
+      followingId={null}
+      canFollow={canFollow}
       onSelectOnline={onSelectOnline}
+      onFollow={onFollow}
       onSelectLastRow={onSelectLastRow}
     />,
   )
-  return { onSelectOnline, onSelectLastRow }
+  return { onSelectOnline, onFollow, onSelectLastRow }
 }
 
 describe('WorkspacePeople', () => {
@@ -52,13 +54,38 @@ describe('WorkspacePeople', () => {
     expect(buttons[1]?.querySelector('.rt-online-dot')).toBeNull()
   })
 
-  it('a click on an online colleague follows them, on an away one it opens their last row', async () => {
+  it('a click on an online colleague goes to them, on an away one it opens their last row', async () => {
     online([you, bob])
     const { onSelectOnline, onSelectLastRow } = setup()
     const [first, second] = screen.getAllByRole('button')
     await userEvent.click(first as HTMLElement)
     expect(onSelectOnline).toHaveBeenCalledWith('u2')
     await userEvent.click(second as HTMLElement)
+    expect(onSelectLastRow).toHaveBeenCalledWith('r1')
+  })
+
+  it('a double click on an online colleague starts following them', async () => {
+    online([you, bob])
+    const { onFollow, onSelectOnline } = setup()
+    await userEvent.dblClick(screen.getAllByRole('button')[0] as HTMLElement)
+    expect(onFollow).toHaveBeenCalledTimes(1)
+    expect(onFollow).toHaveBeenCalledWith('u2')
+    // The first click of the pair still went to the colleague's cell.
+    expect(onSelectOnline).toHaveBeenCalledTimes(1)
+  })
+
+  it('without the follow permission a double click only goes to the cell', async () => {
+    online([you, bob])
+    const { onFollow, onSelectOnline } = setup([you, alice, bob], false)
+    await userEvent.dblClick(screen.getAllByRole('button')[0] as HTMLElement)
+    expect(onFollow).not.toHaveBeenCalled()
+    expect(onSelectOnline).toHaveBeenCalledTimes(2)
+  })
+
+  it('a double click on an away colleague does not follow, it opens their last row', async () => {
+    const { onFollow, onSelectLastRow } = setup()
+    await userEvent.dblClick(screen.getAllByRole('button')[0] as HTMLElement)
+    expect(onFollow).not.toHaveBeenCalled()
     expect(onSelectLastRow).toHaveBeenCalledWith('r1')
   })
 

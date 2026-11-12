@@ -7,9 +7,8 @@ import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
-import { CursorStrip } from './CursorStrip'
 import { WsIcon } from './icons'
-import type { RowCursor, RowLockOwner } from './presence'
+import type { RowLockOwner } from './presence'
 import { COLUMNS, type Column } from './tableLogic'
 
 export const ROW_HEIGHT = 44
@@ -61,8 +60,6 @@ export interface ParticipantRowProps {
   editing: EditState | null
   /** Someone else is editing this row: it renders non-editable with an outline in their colour. */
   lockedBy?: RowLockOwner | null
-  /** Colleagues who are only looking at this row. */
-  cursors?: readonly RowCursor[]
   leaving: boolean
   fresh: boolean
   freshColor: string
@@ -94,7 +91,6 @@ function ParticipantRowImpl({
   activeCol,
   editing,
   lockedBy = null,
-  cursors = [],
   leaving,
   fresh,
   freshColor,
@@ -141,7 +137,6 @@ function ParticipantRowImpl({
       <div className="pt-row-inner">
         {fresh && <span className="pt-fresh" aria-hidden="true" />}
         <span key={shake} className="pt-lock-ring" data-shake={shake > 0 || undefined} aria-hidden="true" />
-        <CursorStrip cursors={cursors} />
         {COLUMNS.map((c, col) => {
           const isEditing = editing?.id === row.id && editing.col === col
           const isFailed = failed?.col === col

@@ -297,11 +297,28 @@
   user-select: none;
   -webkit-user-select: none;
 }
-.pt-cell[data-active] {
-  box-shadow: inset 0 0 0 2px var(--accent);
-  border-radius: 6px;
+/* The selected cell's frame is one element that glides between cells: down the rows with a transform,
+   across the columns by crossfading between the three frames. */
+.pt-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1.4fr) minmax(0, 1fr);
+  pointer-events: none;
+  transition: transform var(--dur-fast) var(--ease-standard);
 }
-.pt-grid:not(:focus-within) .pt-cell[data-active] {
+.pt-ring > span {
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.pt-ring > span[data-on] {
+  opacity: 1;
+}
+.pt-grid:not(:focus-within) .pt-ring > span {
   box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .pt-text {
@@ -470,22 +487,28 @@
   }
 }
 
-/* Colleagues who merely look at a row: a strip on the left edge, one coloured segment per person. */
+/* Colleagues who merely look at a row: one layer over the list, one thin segment per person.
+   A segment is 1px tall and stretched by its transform, so moving it never touches layout. */
 .pt-cursors {
   position: absolute;
-  left: 0;
-  top: 4px;
-  bottom: 4px;
-  width: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-  border-radius: 2px;
+  inset: 0;
+  pointer-events: none;
 }
 .pt-cursor {
-  flex: 1 1 0;
-  min-height: 3px;
+  position: absolute;
+  top: 0;
+  /* Right of the 3px marker of the current row. */
+  left: 4px;
+  width: 4px;
+  height: 1px;
+  transform-origin: 0 0;
+  transition: transform var(--dur-base) var(--ease-standard);
+  animation: pt-cursor-in var(--dur-fast) var(--ease-standard) both;
+}
+@keyframes pt-cursor-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .pt-conflict {

@@ -7,9 +7,10 @@ interface WorkspaceTopbarProps {
   projectId: string
   title: string
   contributors: readonly Contributor[]
-  watchedId: string | null
+  followingId: string | null
   canFollow: boolean
   onSelectOnline: (id: string) => void
+  onFollow: (id: string) => void
   onSelectLastRow: (rowId: string) => void
 }
 
@@ -18,9 +19,10 @@ export function WorkspaceTopbar({
   projectId,
   title,
   contributors,
-  watchedId,
+  followingId,
   canFollow,
   onSelectOnline,
+  onFollow,
   onSelectLastRow,
 }: WorkspaceTopbarProps) {
   const { t } = useI18n()
@@ -41,9 +43,10 @@ export function WorkspaceTopbar({
         <div className="wsbar-group" data-testid="online-users">
           <WorkspacePeople
             contributors={contributors}
-            watchedId={watchedId}
+            followingId={followingId}
             canFollow={canFollow}
             onSelectOnline={onSelectOnline}
+            onFollow={onFollow}
             onSelectLastRow={onSelectLastRow}
           />
         </div>

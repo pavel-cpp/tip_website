@@ -80,7 +80,7 @@ test('settings: gear button, path in the top bar and Close returns to the worksp
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`))
 })
 
-test('online colleagues are in the top bar and a click follows their row', async ({
+test('online colleagues are in the top bar: a click goes to their row, a double click follows them', async ({
   admin,
   signedIn,
   viewport,
@@ -99,37 +99,38 @@ test('online colleagues are in the top bar and a click follows their row', async
     name: ws.t('realtime.follow.jump', { name: 'Aziza Peer' }),
   })
   await expect(avatar).toBeVisible()
-
-  await peerWs.cell(peerWs.grid.locator(`[data-row-id="${rows[3]?.id}"]`), 'name').click()
-  await avatar.click()
   const row = (i: number) => ws.grid.locator(`[data-row-id="${rows[i]?.id}"]`)
+  const peerRow = (i: number) => peerWs.grid.locator(`[data-row-id="${rows[i]?.id}"]`)
+
+  // One click only goes to the cell the colleague is on.
+  await peerWs.cell(peerRow(3), 'name').click()
+  await avatar.click()
   await expect(row(3)).toHaveAttribute('data-current', 'true')
-  await expect(me.getByTestId('follow-status')).toContainText('Aziza Peer')
-  await expect(me.getByTestId('follow-status')).toContainText('4')
+  await expect(avatar).toHaveAttribute('aria-pressed', 'false')
+  await peerWs.cell(peerRow(5), 'name').click()
+  await expect(row(3)).toHaveAttribute('data-current', 'true')
 
-  // Editing shows the field.
-  await peer.keyboard.press('Enter')
-  await expect(me.getByTestId('follow-status')).toContainText(
-    ws.t('realtime.follow.editingName', { name: 'Aziza Peer', number: 4 }),
-  )
-  await peer.keyboard.press('Escape')
-
-  // Follow: the view keeps tracking the colleague.
-  await me.getByRole('button', { name: ws.t('realtime.follow.start') }).click()
-  await peerWs.cell(peerWs.grid.locator(`[data-row-id="${rows[5]?.id}"]`), 'name').click()
+  // A double click starts following and says so; the view then tracks the colleague.
+  await avatar.dblclick()
+  await expect(me.getByText(ws.t('realtime.follow.on', { name: 'Aziza Peer' }))).toBeVisible()
+  await expect(avatar).toHaveAttribute('aria-pressed', 'true')
   await expect(row(5)).toHaveAttribute('data-current', 'true')
+  await peerWs.cell(peerRow(2), 'name').click()
+  await expect(row(2)).toHaveAttribute('data-current', 'true')
 
   // Escape stops following; the next move is not tracked.
   await me.keyboard.press('Escape')
-  await expect(me.getByRole('button', { name: ws.t('realtime.follow.start') })).toBeVisible()
-  await peerWs.cell(peerWs.grid.locator(`[data-row-id="${rows[1]?.id}"]`), 'name').click()
-  await expect(row(5)).toHaveAttribute('data-current', 'true')
+  await expect(avatar).toHaveAttribute('aria-pressed', 'false')
+  await peerWs.cell(peerRow(1), 'name').click()
+  await expect(row(2)).toHaveAttribute('data-current', 'true')
 
-  // Manual navigation also ends it.
-  await me.getByRole('button', { name: ws.t('realtime.follow.start') }).click()
+  // A click on any record also ends it, even on the row that is already current.
+  await avatar.dblclick()
   await expect(row(1)).toHaveAttribute('data-current', 'true')
-  await ws.cell(row(2), 'number').click()
-  await expect(me.getByRole('button', { name: ws.t('realtime.follow.start') })).toBeVisible()
+  await ws.cell(row(1), 'number').click()
+  await expect(avatar).toHaveAttribute('aria-pressed', 'false')
+  await peerWs.cell(peerRow(4), 'name').click()
+  await expect(row(1)).toHaveAttribute('data-current', 'true')
 })
 
 test('splitter: drag, keyboard, double click, drag to the edge hides a panel, drag back restores', async ({
