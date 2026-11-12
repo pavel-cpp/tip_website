@@ -34,6 +34,15 @@ var (
 	commit  = "none"
 )
 
+// versionWithCommit is the version shown to operators next to the build version, e.g. "0.2.0+5 (09613d3)".
+// version stays plain for metrics and logs, where the commit is a separate label.
+func versionWithCommit() string {
+	if len(commit) < 7 {
+		return version
+	}
+	return version + " (" + commit[:7] + ")"
+}
+
 const (
 	migrateTimeout  = 2 * time.Minute
 	shutdownTimeout = 20 * time.Second

@@ -221,7 +221,7 @@ func (a *app) wire(ctx context.Context) error {
 			httpPing(&http.Client{Timeout: lokiTimeout}, cfg.LokiURL+"/ready")))
 	}
 	systemSvc := service.NewSystemService(service.SystemConfig{
-		Version: version, DataDir: cfg.DataDir, ObsRetentionDays: cfg.ObsRetentionDays, AuditRetentionDays: cfg.AuditRetentionDays, SwaggerEnabled: cfg.SwaggerEnabled, GrafanaURL: cfg.GrafanaURL,
+		Version: versionWithCommit(), DataDir: cfg.DataDir, ObsRetentionDays: cfg.ObsRetentionDays, AuditRetentionDays: cfg.AuditRetentionDays, SwaggerEnabled: cfg.SwaggerEnabled, GrafanaURL: cfg.GrafanaURL,
 	}, clk, time.Now(), host, dbProbe, checks...)
 
 	a.router, err = httpapi.NewRouter(httpapi.Deps{

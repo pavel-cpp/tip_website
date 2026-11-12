@@ -1,13 +1,16 @@
 name: cd
 
 # Continuous delivery: checks (ci.yml) -> build and push images to GHCR -> deploy to the production server.
-# Runs on every push to main and by hand (Actions -> cd -> Run workflow). It only ever deploys main: a run started
-# from any other branch does nothing, so an unmerged commit cannot reach production.
+# Runs on every push to main, on a release tag (vX.Y.Z, made by deploy/scripts/release.sh) and by hand
+# (Actions -> cd -> Run workflow). It only ever deploys main: a run from any other branch does nothing, and a tag
+# is deployed only while it is the tip of main, so an unmerged commit cannot reach production.
+# The build version comes from git tags (deploy/scripts/version.sh): 0.2.0 on a release, 0.2.0+5 between releases.
 # Setup and secrets: docs/08-ci-cd.md.
 
 on:
   push:
     branches: [main]
+    tags: ["v[0-9]*"]
   workflow_dispatch:
 
 permissions:
@@ -15,12 +18,12 @@ permissions:
 
 jobs:
   ci:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/ci.yml
 
   build:
     needs: ci
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,17 +31,33 @@ jobs:
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       base: ${{ steps.meta.outputs.base }}
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
-      - name: Image names and tag
+          # Full history and tags: the version is computed from the nearest release tag.
+          fetch-depth: 0
+      - name: A release tag must be the tip of main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Deploying an older tag after newer commits went out would roll production back.
+          git fetch -q origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME is not the tip of main any more; main has newer commits. Cut a new release."
+            exit 1
+          fi
+      - name: Image names, tag and version
         id: meta
         run: |
           # Registry paths must be lower case; the tag is the short commit of what is actually built.
           base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          version=$(sh deploy/scripts/version.sh)
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "tag=sha-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # An image tag cannot hold "+", so 0.2.0+5 becomes 0.2.0-5.
+          echo "version_tag=${version//+/-}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
@@ -54,10 +73,11 @@ jobs:
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           push: true
           build-args: |
-            VERSION=${{ steps.meta.outputs.tag }}
+            VERSION=${{ steps.meta.outputs.version }}
             COMMIT=${{ github.sha }}
           tags: |
             ${{ steps.meta.outputs.base }}/tipd:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.base }}/tipd:${{ steps.meta.outputs.version_tag }}
             ${{ steps.meta.outputs.base }}/tipd:latest
           cache-from: type=gha,scope=tipd
           cache-to: type=gha,scope=tipd,mode=max
@@ -70,6 +90,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.base }}/backup:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.base }}/backup:${{ steps.meta.outputs.version_tag }}
             ${{ steps.meta.outputs.base }}/backup:latest
           cache-from: type=gha,scope=backup
           cache-to: type=gha,scope=backup,mode=max
@@ -92,6 +113,7 @@ jobs:
       DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
       IMAGE_BASE: ${{ needs.build.outputs.base }}
       TAG: ${{ needs.build.outputs.tag }}
+      VERSION: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -140,6 +162,7 @@ jobs:
         run: |
           {
             echo "### Deployed"
+            echo "- version: \`$VERSION\`"
             echo "- tag: \`$TAG\`"
             echo "- images: \`$IMAGE_BASE/tipd:$TAG\`"
           } >> "$GITHUB_STEP_SUMMARY"
