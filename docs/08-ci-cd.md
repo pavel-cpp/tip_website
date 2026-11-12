@@ -33,7 +33,7 @@ flowchart LR
   Ограничение: клиенты по IPv6 приходят через docker-proxy и видны как адрес шлюза docker-сети (лимиты по IP для них общие), IPv4 сохраняется.
 * Стек работает как compose-проект **`tip`** в `/opt/tip` (свои сети и тома: `tip_pgdata`, `tip_redisdata`, `tip_uploads`, `tip_caddy`, …).
 * По умолчанию поднимаются: `caddy`, `tipd`, `postgres`, `redis`, `prometheus`, `node_exporter`, `backup` (сумма `mem_limit` = 528 МБ).
-  `loki`, `vector`, `grafana` вынесены в профиль **`obs`** и по умолчанию выключены (см. раздел 8).
+  `loki`, `vector`, `grafana` вынесены в профиль **`obs`**: в самом compose он выключен, на боевом сервере включён через `COMPOSE_PROFILES=obs` в `prod.env` (см. раздел 8).
 * **Docker и `ufw`.** Порты, опубликованные docker, идут в обход правил `ufw`. Пока наружу смотрят только 80/443 у Caddy и порт `6357` старой базы,
   это не проблема, но любой новый `ports:` без `127.0.0.1:` будет открыт всему интернету независимо от `ufw`.
 
@@ -181,20 +181,25 @@ ssh root@tip.pavel-and-vera.ru 'bash /root/tip-bootstrap/scripts/bootstrap-serve
 
 Проверка Caddy на здоровье `tipd` идёт каждые 3 секунды: после замены контейнера публичный сайт возвращается к 200 сразу, а не через длинный интервал.
 
-## 8. Наблюдаемость на общем сервере
+## 8. Наблюдаемость
 
-Prometheus и node_exporter работают всегда. Loki, Vector и Grafana (около 500 МБ лимитов) включаются вручную, пока нужно разобраться в проблеме:
+Prometheus и node_exporter работают всегда. Loki, Vector и Grafana (лимиты ≈ 500 МБ, по факту около 200 МБ) входят в профиль `obs`. На боевом сервере
+профиль **включён постоянно**: в `/opt/tip/prod.env` стоят `COMPOSE_PROFILES=obs` и `LOKI_URL=http://loki:3100`, поэтому каждый деплой (`compose up`)
+поднимает и их. Чтобы выключить (например, на сервере с 2 ГБ при нехватке памяти): убрать `COMPOSE_PROFILES` из `prod.env` и выполнить
+`docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs stop loki vector grafana`.
+
+Публичный адрес Grafana (отдельный сайт Caddy со своим сертификатом, два слоя входа: basic auth в Caddy и логин Grafana):
 
 ```sh
-# в /opt/tip/prod.env: LOKI_URL=http://loki:3100 ; GRAFANA_ADMIN_PASSWORD ; для публичного адреса Grafana ещё GRAFANA_DOMAIN,
-#   GRAFANA_BASIC_AUTH_USER и GRAFANA_BASIC_AUTH_HASH (хеш: docker run --rm caddy:2.9-alpine caddy hash-password)
-cp caddy.d/grafana.caddy.example caddy.d/grafana.caddy       # подключает отдельный сайт Grafana (нужен DNS для GRAFANA_DOMAIN)
-docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs up -d
-docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs stop loki vector grafana     # выключить
+# 1. DNS: A-запись GRAFANA_DOMAIN (grafana.tip.pavel-and-vera.ru) на адрес сервера
+# 2. в prod.env уже есть GRAFANA_DOMAIN, GRAFANA_BASIC_AUTH_USER и хеш GRAFANA_BASIC_AUTH_HASH (пароль слоя basic auth: /opt/tip/secrets/grafana_basic_auth)
+# 3. подключить сайт и перечитать Caddyfile:
+cp caddy.d/grafana.caddy.example caddy.d/grafana.caddy
+docker compose -p tip -f docker-compose.prod.yml --env-file prod.env exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-Без `caddy.d/grafana.caddy` Grafana наружу не проксируется: заходить через ssh-туннель к контейнеру. Файл `caddy.d/grafana.caddy`, созданный на сервере,
-деплой не перезаписывает и не удаляет.
+Без `caddy.d/grafana.caddy` Grafana наружу не проксируется: заходить через ssh-туннель (`ssh -L 3000:<ip контейнера grafana>:3000 root@сервер`). Файл
+`caddy.d/grafana.caddy`, созданный на сервере, деплой не перезаписывает и не удаляет. Логин Grafana: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` из `prod.env`.
 
 ## 9. Старая боевая БД на порту 6357
 
