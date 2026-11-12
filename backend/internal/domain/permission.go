@@ -26,7 +26,7 @@ const (
 	PermParticipantDelete   Permission = "participant.delete"
 	PermParticipantClear    Permission = "participant.clear"
 	PermParticipantFollow   Permission = "participant.follow"
-	PermUserView           Permission = "user.view"
+	PermUserView            Permission = "user.view"
 	PermUserManage          Permission = "user.manage"
 	PermRoleManage          Permission = "role.manage"
 	PermAuditView           Permission = "audit.view"
