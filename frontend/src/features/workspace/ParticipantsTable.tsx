@@ -34,6 +34,7 @@ import {
 } from './ParticipantRow'
 import { hasCommandKey } from './platform'
 import { type RowLockOwner, type RowPresence, useRowCollab } from './presence'
+import { CurrentMark, selectionRuns, UnderLayer } from './RowGlide'
 import { RowSheet, type SheetSaveResult } from './RowSheet'
 import {
   allVisibleSelected,
@@ -104,6 +105,8 @@ export interface ParticipantsTableProps {
    */
   selectMode?: boolean
   onSelectModeChange?: (on: boolean) => void
+  /** The row of a followed colleague, highlighted in their colour (grid layout only). */
+  spotlight?: { rowId: string; color: string } | null
   /** Ticket preview for the sheet; receives the draft values of the row being edited. */
   sheetPreview?: (row: Participant) => ReactNode
 }
@@ -141,6 +144,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     selectMode: selectModeProp,
     onSelectModeChange,
     sheetPreview,
+    spotlight = null,
   } = props
   const { t } = useI18n()
   const showSkeleton = useSkeleton(loading)
@@ -148,6 +152,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
   const visible = useMemo(() => filterRows(rows, query), [rows, query])
   const ids = useMemo(() => visible.map((r) => r.id), [visible])
   const indexOfId = useMemo(() => new Map(ids.map((id, i) => [id, i])), [ids])
+  const runs = useMemo(() => selectionRuns(ids, selected), [ids, selected])
 
   const scroller = useRef<HTMLDivElement>(null)
   const grid = useRef<HTMLDivElement>(null)
@@ -993,6 +998,15 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           >
             {emptyOrLoading ?? (
               <div className="pt-sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
+                <UnderLayer
+                  runs={runs}
+                  spot={
+                    spotlight && indexOfId.has(spotlight.rowId)
+                      ? { index: indexOfId.get(spotlight.rowId) as number, color: spotlight.color }
+                      : null
+                  }
+                  rowHeight={ROW_HEIGHT}
+                />
                 {items.map((item) => {
                   const row = visible[item.index]
                   if (!row) return null
@@ -1020,6 +1034,10 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                     />
                   )
                 })}
+                <CurrentMark
+                  index={currentId ? (indexOfId.get(currentId) ?? null) : null}
+                  rowHeight={ROW_HEIGHT}
+                />
                 {cursorLayer}
                 {active && active.row < visible.length && (
                   <span

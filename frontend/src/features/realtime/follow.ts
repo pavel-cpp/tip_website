@@ -34,13 +34,3 @@ export function followJump(
   if (!rowId || rowId === lastJumped || !exists(rowId)) return null
   return rowId
 }
-
-const SAFE_ID = /^[\w-]+$/
-const SAFE_COLOR = /^#[0-9a-fA-F]{3,8}$/
-
-/** Row highlight in the colleague's colour; ids and colours come from the server, so both are validated. */
-export function spotlightCss(rowId: string | null, color: string): string {
-  if (!rowId || !SAFE_ID.test(rowId)) return ''
-  const c = SAFE_COLOR.test(color) ? color : 'var(--accent)'
-  return `.pt-row[data-row-id="${rowId}"] .pt-row-inner{box-shadow:inset 0 0 0 2px ${c};background:color-mix(in srgb,${c} 14%,transparent)}`
-}

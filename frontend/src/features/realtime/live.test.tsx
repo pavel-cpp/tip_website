@@ -65,7 +65,7 @@ describe('buildRowPresence', () => {
     expect([...p.locks.keys()]).toEqual(['r2'])
     expect(p.locks.get('r2')?.displayName).toBe('Azam')
     expect(p.cursors.get('r1')).toBeUndefined()
-    expect(p.cursors.get('r2')?.[0]?.color).toBe('#f00')
+    expect(p.cursors.get('r2')?.color).toBe('#f00')
   })
 
   it('names an unknown lock holder generically', () => {

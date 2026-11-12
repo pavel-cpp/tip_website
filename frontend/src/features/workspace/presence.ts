@@ -23,8 +23,8 @@ export interface RowCursor {
 export interface RowPresence {
   /** Rows being edited by someone else, by participant id. */
   locks: ReadonlyMap<string, RowLockOwner>
-  /** Colleagues merely looking at a row, by participant id. */
-  cursors: ReadonlyMap<string, readonly RowCursor[]>
+  /** The colleague who pointed at a row last (one per row), by participant id. */
+  cursors: ReadonlyMap<string, RowCursor>
 }
 
 const EMPTY: RowPresence = { locks: new Map(), cursors: new Map() }
@@ -49,13 +49,12 @@ export function buildRowPresence(
         : { id: lock.by, displayName: someone, color: 'var(--accent)', avatarUrl: null },
     )
   }
-  const cursorMap = new Map<string, RowCursor[]>()
+  // The snapshot lists a colleague's cursor after every move, so the last entry for a row is the latest click.
+  const cursorMap = new Map<string, RowCursor>()
   for (const [userId, c] of Object.entries(cursors)) {
     const p = byId.get(userId)
     if (userId === you || !c.rowId || !p) continue
-    const list = cursorMap.get(c.rowId) ?? []
-    list.push({ id: p.id, displayName: p.displayName, color: p.color })
-    cursorMap.set(c.rowId, list)
+    cursorMap.set(c.rowId, { id: p.id, displayName: p.displayName, color: p.color })
   }
   return { locks: lockMap, cursors: cursorMap }
 }

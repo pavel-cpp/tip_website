@@ -17,7 +17,7 @@ import { Tooltip } from '../components/Tooltip'
 import { TopbarPortal } from '../components/TopbarSlot'
 import { type Project, useProject } from '../features/projects/api'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
-import { followJump, peerStatus, spotlightCss } from '../features/realtime/follow'
+import { followJump, peerStatus } from '../features/realtime/follow'
 import { RealtimeProvider, useRealtime } from '../features/realtime/RealtimeProvider'
 import {
   downloadExport,
@@ -623,6 +623,7 @@ function WorkspaceView({ project }: { project: Project }) {
           onSelectedChange={setSelected}
           currentId={current?.id ?? null}
           onCurrentChange={pickRow}
+          spotlight={followed && followRowId ? { rowId: followRowId, color: followed.color } : null}
           leaving={remoteLeaving}
           freshIds={freshAll}
           freshColor={remoteFresh?.size ? undefined : user?.color}
@@ -821,8 +822,6 @@ function WorkspaceView({ project }: { project: Project }) {
           )}
         </div>
       )}
-
-      {followed && followRowId && <style>{spotlightCss(followRowId, followed.color)}</style>}
 
       {actions.sheets && <PrintSheets urls={actions.sheets} onClosed={actions.printClosed} />}
       {actions.progress && (

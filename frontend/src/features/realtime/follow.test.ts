@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { followJump, peerStatus, spotlightCss } from './follow'
+import { followJump, peerStatus } from './follow'
 
 const lock = (by: string) => ({ by, expiresAt: '2030-01-01T00:00:00Z' })
 
@@ -33,17 +33,5 @@ describe('followJump', () => {
     expect(followJump('r1', 'r1', has)).toBeNull()
     expect(followJump('gone', 'r1', has)).toBeNull()
     expect(followJump(null, 'r1', has)).toBeNull()
-  })
-})
-
-describe('spotlightCss', () => {
-  it('builds a rule for a safe id and colour', () => {
-    expect(spotlightCss('abc-123', '#ff0000')).toContain('[data-row-id="abc-123"]')
-    expect(spotlightCss('abc-123', '#ff0000')).toContain('#ff0000')
-  })
-  it('refuses ids that could break out of the selector and falls back for odd colours', () => {
-    expect(spotlightCss('a"]{x', '#fff')).toBe('')
-    expect(spotlightCss(null, '#fff')).toBe('')
-    expect(spotlightCss('a', 'red;}')).toContain('var(--accent)')
   })
 })

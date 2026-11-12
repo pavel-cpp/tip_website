@@ -114,7 +114,7 @@ describe('row lock presentation (realtime seam)', () => {
       <Harness
         presence={{
           locks: none.locks,
-          cursors: new Map([['id1', [{ id: 'u2', displayName: 'Azam Tursunov', color: '#3ddc97' }]]]),
+          cursors: new Map([['id1', { id: 'u2', displayName: 'Azam Tursunov', color: '#3ddc97' }]]),
         }}
       />,
     )
