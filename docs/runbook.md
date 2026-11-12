@@ -11,7 +11,7 @@ alias dc='docker compose -f deploy/docker-compose.prod.yml --env-file deploy/pro
 
 ## 1. Первое развёртывание
 
-1. **Сервер.** Минимальный Linux (Debian/Ubuntu Server), Docker Engine + compose plugin. Файрвол: наружу открыты только `80/tcp`, `443/tcp`, `443/udp` и SSH. DNS-записи `DOMAIN` и `GRAFANA_DOMAIN` указывают на сервер (нужны Caddy для выпуска сертификатов).
+1. **Сервер.** Минимальный Linux (Debian/Ubuntu Server), Docker Engine + compose plugin. Файрвол: наружу открыты только `80/tcp`, `443/tcp`, `443/udp` и SSH. DNS-запись `DOMAIN` указывает на сервер (нужны Caddy для выпуска сертификатов).
 2. **Память и своп** (см. раздел 2): включите zram, понизьте `vm.swappiness`. Файл подкачки на HDD не создавайте.
 3. **Код и образы.**
    ```bash
@@ -19,7 +19,7 @@ alias dc='docker compose -f deploy/docker-compose.prod.yml --env-file deploy/pro
    cp deploy/prod.env.example deploy/prod.env && chmod 600 deploy/prod.env
    ```
 4. **Секреты** (`deploy/prod.env`): сгенерируйте значения `openssl rand -hex 32` для `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `PASSWORD_PEPPER` (все три разные), `POSTGRES_PASSWORD`, `REDIS_PASSWORD` (только hex: пароли встраиваются в URL), `GRAFANA_ADMIN_PASSWORD`.
-   Хэш для basic-auth Grafana: `docker run --rm caddy:2 caddy hash-password` -> `GRAFANA_BASIC_AUTH_HASH` (значение в одинарных кавычках, иначе `$` будет интерполирован). Заполните `DOMAIN`, `GRAFANA_DOMAIN`, `ACME_EMAIL`, `ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_*`.
+   Хэш для basic-auth Grafana: `docker run --rm caddy:2 caddy hash-password` -> `GRAFANA_BASIC_AUTH_HASH` (значение в одинарных кавычках, иначе `$` будет интерполирован). Заполните `DOMAIN`, `GRAFANA_URL` (`https://DOMAIN/grafana/`), `ACME_EMAIL`, `ALLOWED_ORIGINS`, `BOOTSTRAP_ADMIN_*`.
    Файл `prod.env` не коммитится; его копию храните у владельца отдельно от сервера (в менеджере паролей).
 5. **Проверка конфигурации и запуск.**
    ```bash
@@ -29,7 +29,7 @@ alias dc='docker compose -f deploy/docker-compose.prod.yml --env-file deploy/pro
    dc ps                 # все сервисы должны стать healthy
    ```
 6. **Первый вход.** Откройте `https://DOMAIN`, войдите под `BOOTSTRAP_ADMIN_LOGIN`, смените пароль, затем удалите `BOOTSTRAP_ADMIN_*` из `prod.env` и выполните `dc up -d tipd`.
-7. **Наблюдаемость.** Откройте `https://GRAFANA_DOMAIN` (сначала basic-auth Caddy, затем вход Grafana), папка `TIP`: дашборды «TIP Overview», «TIP Realtime», «TIP Logs». Алерты: Alerting -> Alert rules (папка `TIP`).
+7. **Наблюдаемость.** Откройте `https://DOMAIN/grafana/` (сначала basic-auth Caddy, затем вход Grafana), папка `TIP`: дашборды «TIP Overview», «TIP Realtime», «TIP Logs». Алерты: Alerting -> Alert rules (папка `TIP`).
    Проверьте доставку: Alerting -> Contact points -> `tip-admins` -> Test. Для e-mail задайте `GF_SMTP_*` и `ALERT_EMAIL_TO`, для webhook — `ALERT_WEBHOOK_URL` (затем `dc up -d grafana`). Telegram недоступен.
 8. **Внешний пинг.** Настройте любой доступный из РФ сервис мониторинга или cron на своём ПК, который опрашивает `https://DOMAIN/healthz`: если упал весь сервер, Grafana вместе с ним недоступна.
 9. **Бэкапы.** Выполните первый бэкап вручную и проверьте результат (раздел 5), настройте off-site (раздел 5.3).

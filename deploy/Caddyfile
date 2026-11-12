@@ -57,6 +57,10 @@
 		max_size 12MB
 	}
 
+	# Optional /grafana (conf.d/grafana.caddy, present only when enabled). It sits before the catch-all proxy below:
+	# a matched handle block ends the request, so everything else still goes to tipd.
+	import conf.d/*.caddy
+
 	# WebSocket upgrades are proxied transparently. The Content-Security-Policy
 	# header is set by tipd, which knows the exact asset origins.
 	# A short check interval keeps the window of 503s small after tipd is replaced: an upstream that failed a check
@@ -75,6 +79,3 @@ http://127.0.0.1:8081 {
 	bind 127.0.0.1
 	reverse_proxy tipd:8080
 }
-
-# Optional sites (Grafana): *.caddy files in conf.d are loaded when present, none is fine.
-import conf.d/*.caddy

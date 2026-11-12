@@ -12,7 +12,8 @@
 #
 # Profiles: loki, vector and grafana are in the optional `obs` profile (off by default, they do not fit
 # next to other workloads on a 2 GB host). Enable with `--profile obs`, set LOKI_URL=http://loki:3100 and the
-# GRAFANA_* variables in the env file, and copy caddy.d/grafana.caddy.example to caddy.d/grafana.caddy.
+# GRAFANA_* variables in the env file, and copy caddy.d/grafana.caddy.example to caddy.d/grafana.caddy
+# (Grafana is then reachable at https://DOMAIN/grafana/).
 #
 # Image tags are pinned to known-good versions; bump them deliberately.
 # # VERIFY: all third-party tags below were chosen from memory and must be
@@ -41,7 +42,6 @@ services:
       ACME_EMAIL_OPT: ${ACME_EMAIL:+email ${ACME_EMAIL}}
       ACME_CA_OPT: ${ACME_CA:+acme_ca ${ACME_CA}}
       # Used only by caddy.d/grafana.caddy (see caddy.d/grafana.caddy.example).
-      GRAFANA_DOMAIN: ${GRAFANA_DOMAIN:-}
       GRAFANA_BASIC_AUTH_USER: ${GRAFANA_BASIC_AUTH_USER:-}
       GRAFANA_BASIC_AUTH_HASH: ${GRAFANA_BASIC_AUTH_HASH:-}
     ports:
@@ -95,7 +95,7 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
       # Shown as a link in the admin menu.
-      GRAFANA_URL: ${GRAFANA_URL:-${GRAFANA_DOMAIN:+https://${GRAFANA_DOMAIN}}}
+      GRAFANA_URL: ${GRAFANA_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MAX_IMAGE_MB: ${MAX_IMAGE_MB:-10}
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-16000000}
@@ -306,8 +306,10 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD}
       GF_SECURITY_COOKIE_SECURE: "true"
-      GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-localhost}
-      GF_SERVER_ROOT_URL: https://${GRAFANA_DOMAIN:-localhost}/
+      # Served by Caddy under /grafana on the main domain (caddy.d/grafana.caddy), so Grafana must know its prefix.
+      GF_SERVER_DOMAIN: ${DOMAIN}
+      GF_SERVER_ROOT_URL: https://${DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_LOG_LEVEL: warn
@@ -341,7 +343,7 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/grafana/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
