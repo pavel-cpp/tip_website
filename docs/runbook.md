@@ -29,7 +29,7 @@ alias dc='docker compose -f deploy/docker-compose.prod.yml --env-file deploy/pro
    dc ps                 # все сервисы должны стать healthy
    ```
 6. **Первый вход.** Откройте `https://DOMAIN`, войдите под `BOOTSTRAP_ADMIN_LOGIN`, смените пароль, затем удалите `BOOTSTRAP_ADMIN_*` из `prod.env` и выполните `dc up -d tipd`.
-7. **Наблюдаемость.** Откройте `https://DOMAIN/grafana/` (вход Grafana), папка `TIP`: дашборды «TIP Overview», «TIP Realtime», «TIP Logs». Алерты: Alerting -> Alert rules (папка `TIP`).
+7. **Наблюдаемость.** Откройте `https://DOMAIN/grafana/` (вход Grafana), папка `TIP`: дашборды «TIP Overview», «TIP Realtime», «TIP Logs», «TIP Resources» (процессор, память и диск машины и каждого сервиса). Алерты: Alerting -> Alert rules (папка `TIP`).
    Проверьте доставку: Alerting -> Contact points -> `tip-admins` -> Test. Для e-mail задайте `GF_SMTP_*` и `ALERT_EMAIL_TO`, для webhook — `ALERT_WEBHOOK_URL` (затем `dc up -d grafana`). Telegram недоступен.
 8. **Внешний пинг.** Настройте любой доступный из РФ сервис мониторинга или cron на своём ПК, который опрашивает `https://DOMAIN/healthz`: если упал весь сервер, Grafana вместе с ним недоступна.
 9. **Бэкапы.** Выполните первый бэкап вручную и проверьте результат (раздел 5), настройте off-site (раздел 5.3).

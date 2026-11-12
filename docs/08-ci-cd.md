@@ -188,6 +188,11 @@ Prometheus и node_exporter работают всегда. Loki, Vector и Grafa
 поднимает и их. Чтобы выключить (например, на сервере с 2 ГБ при нехватке памяти): убрать `COMPOSE_PROFILES` из `prod.env` и выполнить
 `docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs stop loki vector grafana`.
 
+Дашборд «TIP Resources» показывает процессор, память и диск машины и каждого контейнера. Данные по контейнерам собирает сервис `hostmetrics`
+(`deploy/hostmetrics/collect.sh`, образ `docker:28.5.2-cli`): читает cgroup v2, список контейнеров из сокета Docker и размеры томов (`du`, раз в 5 минут) и пишет
+файл `containers.prom` в textfile-каталог `node_exporter`. cAdvisor не используется: он не видит контейнеры на Docker 29 (containerd snapshotter). Все монтирования
+только на чтение, сети у сервиса нет, лимит памяти 24 МБ.
+
 Публичный адрес Grafana: `https://<DOMAIN>/grafana/` (путь на основном домене: отдельная DNS-запись и сертификат не нужны; вход только по логину Grafana, поэтому `GRAFANA_ADMIN_PASSWORD` должен быть длинным и случайным):
 
 ```sh

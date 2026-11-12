@@ -384,6 +384,32 @@ services:
     labels:
       tip.logs: "true"
 
+  # Per-container CPU / RAM / log size and per-volume disk size for the "TIP Resources" dashboard. Writes a
+  # textfile next to the backup metrics, node_exporter serves it. Everything is mounted read-only; the Docker
+  # socket is only used to list containers. No network: it only reads files.
+  hostmetrics:
+    image: docker:28.5.2-cli
+    restart: unless-stopped
+    mem_limit: 24m
+    memswap_limit: 24m
+    oom_score_adj: 500
+    network_mode: none
+    entrypoint: ["sh", "/collect.sh"]
+    volumes:
+      - ./hostmetrics/collect.sh:/collect.sh:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/host/cgroup:ro
+      - /var/lib/docker:/host/docker:ro
+      - /var/lib/containerd:/host/containerd:ro
+      - backups:/backups
+    healthcheck:
+      test: ["CMD", "sh", "-c", "find /backups/metrics/containers.prom -mmin -2 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging: *default-logging
+
   backup:
     image: ${BACKUP_IMAGE:-tip/backup:local}
     build:
