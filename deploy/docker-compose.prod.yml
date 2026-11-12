@@ -41,9 +41,6 @@ services:
       # ACME_CA example (Let's Encrypt staging for a first run): https://acme-staging-v02.api.letsencrypt.org/directory
       ACME_EMAIL_OPT: ${ACME_EMAIL:+email ${ACME_EMAIL}}
       ACME_CA_OPT: ${ACME_CA:+acme_ca ${ACME_CA}}
-      # Used only by caddy.d/grafana.caddy (see caddy.d/grafana.caddy.example).
-      GRAFANA_BASIC_AUTH_USER: ${GRAFANA_BASIC_AUTH_USER:-}
-      GRAFANA_BASIC_AUTH_HASH: ${GRAFANA_BASIC_AUTH_HASH:-}
     ports:
       - "80:80"
       - "443:443"

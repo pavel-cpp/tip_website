@@ -188,10 +188,10 @@ Prometheus и node_exporter работают всегда. Loki, Vector и Grafa
 поднимает и их. Чтобы выключить (например, на сервере с 2 ГБ при нехватке памяти): убрать `COMPOSE_PROFILES` из `prod.env` и выполнить
 `docker compose -p tip -f docker-compose.prod.yml --env-file prod.env --profile obs stop loki vector grafana`.
 
-Публичный адрес Grafana: `https://<DOMAIN>/grafana/` (путь на основном домене: отдельная DNS-запись и сертификат не нужны; два слоя входа: basic auth в Caddy и логин Grafana):
+Публичный адрес Grafana: `https://<DOMAIN>/grafana/` (путь на основном домене: отдельная DNS-запись и сертификат не нужны; вход только по логину Grafana, поэтому `GRAFANA_ADMIN_PASSWORD` должен быть длинным и случайным):
 
 ```sh
-# 1. в prod.env: GRAFANA_URL=https://<DOMAIN>/grafana/, GRAFANA_BASIC_AUTH_USER и хеш GRAFANA_BASIC_AUTH_HASH (пароль слоя basic auth: /opt/tip/secrets/grafana_basic_auth)
+# 1. в prod.env: GRAFANA_URL=https://<DOMAIN>/grafana/
 # 2. применить настройки Grafana и tipd (compose up), затем подключить путь и перечитать Caddyfile:
 cp caddy.d/grafana.caddy.example caddy.d/grafana.caddy
 docker compose -p tip -f docker-compose.prod.yml --env-file prod.env exec caddy caddy reload --config /etc/caddy/Caddyfile
