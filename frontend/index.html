@@ -14,7 +14,8 @@
     <!-- favicon.svg follows the OS colour scheme itself; theme-init.js and src/theme swap the href
          to a fixed dark/light file when the app theme is chosen explicitly. -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- ?v= busts the cache: iOS keeps a home-screen icon URL for a long time, and the file was replaced. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2" />
     <title>TIP</title>
     <script src="/theme-init.js"></script>
   </head>
