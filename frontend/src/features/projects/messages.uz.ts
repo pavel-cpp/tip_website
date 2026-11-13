@@ -101,7 +101,7 @@ export const projectsUz: Record<keyof typeof projectsRu, Message> = {
   'settings.readOnly': 'Loyiha yakunlangan — sozlamalar faqat koʻrish uchun',
   'settings.error.title': 'Sozlamalarni yuklab boʻlmadi',
 
-  'ticket.sample.number': '5',
-  'ticket.sample.name': 'Sharafutdin Azimov',
-  'ticket.sample.phone': '+998 90 123-45-67',
+  'ticket.sample.number': '1',
+  'ticket.sample.name': 'Ism Familiya',
+  'ticket.sample.phone': '+7 (888) 888-88-88',
 }

@@ -549,6 +549,9 @@ function WorkspaceView({ project }: { project: Project }) {
     actions.targetCount > 1 ? t('workspace.copy.many', { count: actions.targetCount }) : t('workspace.copy')
   const saveLabel =
     actions.targetCount > 1 ? t('workspace.save.many', { count: actions.targetCount }) : t('workspace.save')
+  // Settings preview the ticket of the row on screen, so it carries that row's id (not its personal data).
+  const openSettings = () =>
+    void navigate(`/projects/${project.id}/settings`, { state: { rowId: current?.id ?? null } })
   // On phones Copy and Save sit in the bar; print, import, export and settings are in the menu.
   const phoneItems: MenuItem[] = []
   if (canPrint) {
@@ -584,7 +587,7 @@ function WorkspaceView({ project }: { project: Project }) {
       id: 'settings',
       label: t('workspace.settings'),
       separatorBefore: phoneItems.length > 0,
-      onSelect: () => void navigate(`/projects/${project.id}/settings`),
+      onSelect: openSettings,
     })
   }
   const topbarContent = (
@@ -810,7 +813,7 @@ function WorkspaceView({ project }: { project: Project }) {
                 variant="ghost"
                 label={t('workspace.settings')}
                 text={t('workspace.settings.short')}
-                onClick={() => void navigate(`/projects/${project.id}/settings`)}
+                onClick={openSettings}
               />
             </>
           )}

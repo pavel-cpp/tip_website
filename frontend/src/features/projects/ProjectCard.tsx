@@ -25,11 +25,11 @@ export const ONLINE_SHOWN = 3
 
 /**
  * Width of the avatars + menu cluster on the footer row (px), so the caption on the left never runs
- * under it. Mirrors the CSS: 32px button, 6px dot, 20px per overlapping 26px avatar plus 6px, 8px gaps.
+ * under it. Mirrors the CSS: 32px button, 20px per overlapping 26px avatar plus 6px, 8px gap.
  */
 export function asideWidth(onlineCount: number, hasMenu: boolean): number {
   const chips = Math.min(onlineCount, ONLINE_SHOWN) + (onlineCount > ONLINE_SHOWN ? 1 : 0)
-  const online = onlineCount > 0 ? 6 + 6 + 20 * chips + 6 : 0
+  const online = onlineCount > 0 ? 20 * chips + 6 : 0
   return (hasMenu ? 32 : 0) + online + (hasMenu && online > 0 ? 8 : 0)
 }
 
@@ -132,7 +132,6 @@ export function ProjectCard({ project, actions, onAction, dragProps, dragging }:
             aria-label={t('projects.card.online', { names })}
             title={t('projects.card.online', { names })}
           >
-            <span className="project-card-online-dot" aria-hidden="true" />
             <AvatarStack
               max={ONLINE_SHOWN}
               users={online.map((u) => ({

@@ -5,12 +5,34 @@
   padding: 0;
   list-style: none;
 }
+/* The avatars overlap like a stack. On hover, focus or (on touch) after a tap they spread to the left
+   one step each, so a single person can be picked; the last avatar never moves. Only transform animates. */
+.rt-online {
+  position: relative;
+  z-index: 1;
+}
 .rt-online-item {
   display: flex;
   animation: rt-pop-in var(--dur-base) var(--ease-standard) both;
+  transition: transform var(--dur-fast) var(--ease-standard);
+  /* The first avatar lies on top of the next one. */
+  z-index: var(--k, 0);
 }
 .rt-online-item + .rt-online-item {
-  margin-left: 6px;
+  margin-left: -10px;
+}
+.rt-online[data-open] .rt-online-item,
+.rt-online:focus-within .rt-online-item {
+  transform: translateX(calc(var(--k, 0) * -14px));
+}
+@media (hover: hover) {
+  .rt-online:hover .rt-online-item {
+    transform: translateX(calc(var(--k, 0) * -14px));
+  }
+}
+/* A ring in the bar colour separates neighbours where they overlap. */
+.rt-online-btn .avatar {
+  box-shadow: 0 0 0 2px var(--bg-elev);
 }
 .rt-online-more {
   display: inline-flex;
@@ -29,17 +51,9 @@
     transform: scale(0.6);
   }
 }
-/* The green dot marks a colleague who is in the project right now; people who are away have none. */
-.rt-online-dot {
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 0 2px var(--bg-elev);
-  pointer-events: none;
+/* No dot on the avatars: a colleague who is away is simply dimmer than the ones who are in the project. */
+.rt-online-btn:not([data-online]) .avatar {
+  opacity: 0.55;
 }
 
 .rt-conn {
@@ -79,7 +93,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rt-online-item,
   .rt-conn,
   .rt-conn-dot {
     animation: none;

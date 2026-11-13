@@ -1,15 +1,17 @@
-import { type CSSProperties, useMemo, useRef, useSyncExternalStore } from 'react'
+import { type CSSProperties, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Tooltip } from '../../components/Tooltip'
 import { useI18n } from '../../i18n'
 import { useRealtime } from '../realtime/RealtimeProvider'
 import '../realtime/realtime.css'
 
-const MAX_SHOWN = 5
+const MAX_SHOWN = 6
 /** The phone top bar also holds the language, theme and user buttons, so it fits fewer avatars. */
 const MAX_SHOWN_PHONE = 3
 /** Two clicks on one colleague this close together are a double click (tap), which starts following. */
 const DOUBLE_CLICK_MS = 400
+/** Phones and tablets have no hover: the first tap on the stack spreads it, the next tap picks someone. */
+const NO_HOVER = '(hover: none)'
 const PHONE = '(max-width: 699px), (orientation: landscape) and (max-height: 500px)'
 
 function subscribePhone(cb: () => void) {
@@ -18,6 +20,7 @@ function subscribePhone(cb: () => void) {
   mq.addEventListener('change', cb)
   return () => mq.removeEventListener('change', cb)
 }
+const noHover = () => typeof matchMedia === 'function' && matchMedia(NO_HOVER).matches
 const isPhone = () => typeof matchMedia === 'function' && matchMedia(PHONE).matches
 
 export interface Contributor {
@@ -61,6 +64,21 @@ export function WorkspacePeople({
   const you = rt?.snapshot.you
   const peers = rt?.snapshot.peers
   const lastClick = useRef<{ id: string; at: number } | null>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => {
+      if (!listRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', away)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open])
   const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
   const people = useMemo<Person[]>(() => {
     const online = (peers ?? [])
@@ -81,11 +99,13 @@ export function WorkspacePeople({
   const onlineCount = people.filter((p) => p.online).length
   return (
     <ul
+      ref={listRef}
       className="rt-online"
+      data-open={open || undefined}
       data-testid="people-list"
       aria-label={t('realtime.online.label', { count: onlineCount })}
     >
-      {visible.map((p) => {
+      {visible.map((p, index) => {
         const lastRowId = p.lastRowId ?? null
         const target = p.online ? p.id : lastRowId
         const label = p.online
@@ -94,7 +114,12 @@ export function WorkspacePeople({
         const tip =
           p.online && canFollow ? `${p.displayName} · ${t('workspace.people.followHint')}` : p.displayName
         return (
-          <li key={p.id} className="rt-online-item">
+          <li
+            key={p.id}
+            className="rt-online-item"
+            // How many places the avatar sits from the end of the stack; the spread shifts it by that many steps.
+            style={{ '--k': visible.length + (hidden.length > 0 ? 1 : 0) - 1 - index } as CSSProperties}
+          >
             <Tooltip content={tip} side="bottom">
               <button
                 type="button"
@@ -105,6 +130,11 @@ export function WorkspacePeople({
                 aria-disabled={!target || undefined}
                 style={{ '--peer': p.color } as CSSProperties}
                 onClick={() => {
+                  // With no hover the stack must be opened first, or a tap would pick whoever lies on top.
+                  if (!open && noHover() && people.length > 1) {
+                    setOpen(true)
+                    return
+                  }
                   if (!target) return
                   if (!p.online) {
                     onSelectLastRow(target)
@@ -122,14 +152,13 @@ export function WorkspacePeople({
                 }}
               >
                 <UserAvatar user={p} size={28} noTitle />
-                {p.online && <span className="rt-online-dot" aria-hidden="true" />}
               </button>
             </Tooltip>
           </li>
         )
       })}
       {hidden.length > 0 && (
-        <li className="rt-online-item">
+        <li className="rt-online-item" style={{ '--k': 0 } as CSSProperties}>
           <Tooltip content={hidden.map((p) => p.displayName).join(', ')} side="bottom">
             <span className="rt-online-more" style={{ '--size': '28px' } as CSSProperties}>
               +{hidden.length}

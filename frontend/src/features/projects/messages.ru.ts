@@ -100,7 +100,7 @@ export const projectsRu = {
   'settings.readOnly': 'Проект завершён — настройки доступны только для просмотра',
   'settings.error.title': 'Не удалось загрузить настройки',
 
-  'ticket.sample.number': '5',
-  'ticket.sample.name': 'Шарафутдин Азимов',
-  'ticket.sample.phone': '+998 90 123-45-67',
+  'ticket.sample.number': '1',
+  'ticket.sample.name': 'Имя Фамилия',
+  'ticket.sample.phone': '+7 (888) 888-88-88',
 } as const satisfies Record<string, Message>

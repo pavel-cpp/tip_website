@@ -88,8 +88,8 @@ describe('asideWidth', () => {
   it('is 0 without avatars and menu, and grows with the shown avatars (capped, plus a +N chip)', () => {
     expect(asideWidth(0, false)).toBe(0)
     expect(asideWidth(0, true)).toBe(32)
-    expect(asideWidth(1, true)).toBe(32 + 8 + 12 + 26)
-    expect(asideWidth(3, false)).toBe(12 + 20 * 3 + 6)
-    expect(asideWidth(9, false)).toBe(12 + 20 * 4 + 6)
+    expect(asideWidth(1, true)).toBe(32 + 8 + 20 + 6)
+    expect(asideWidth(3, false)).toBe(20 * 3 + 6)
+    expect(asideWidth(9, false)).toBe(20 * 4 + 6)
   })
 })

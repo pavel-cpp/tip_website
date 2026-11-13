@@ -18,6 +18,7 @@ import { PreviewStage } from '../features/projects/PreviewStage'
 import { useAuthedImage } from '../features/projects/useAuthedImage'
 import { usePermissions } from '../features/projects/usePermissions'
 import { useUnsavedGuard } from '../features/projects/useUnsavedGuard'
+import { useParticipants } from '../features/workspace/api'
 import { useI18n } from '../i18n'
 import { errorText } from '../i18n/apiError'
 import { PLACEHOLDER_KEYS, type PlaceholderKey, useImageElement } from '../lib/ticket'
@@ -103,11 +104,19 @@ function SettingsEditor({
     [project.image],
   )
 
-  const values = {
-    number: t('ticket.sample.number'),
-    name: t('ticket.sample.name'),
-    phone: t('ticket.sample.phone'),
-  }
+  // Coming from the workspace the preview shows the participant that was on screen there; coming from
+  // anywhere else it shows neutral sample text. The list is already cached after a visit to the workspace.
+  const fromRowId = (location.state as { rowId?: string | null } | null)?.rowId ?? null
+  const perms = usePermissions()
+  const rows = useParticipants(project.id, !!fromRowId && perms.can('participant.view'))
+  const fromRow = fromRowId ? rows.data?.items.find((r) => r.id === fromRowId) : undefined
+  const values = fromRow
+    ? { number: String(fromRow.number), name: fromRow.name, phone: fromRow.phone }
+    : {
+        number: t('ticket.sample.number'),
+        name: t('ticket.sample.name'),
+        phone: t('ticket.sample.phone'),
+      }
 
   const patchPlaceholder = (key: PlaceholderKey, patch: Partial<Draft['placeholders'][PlaceholderKey]>) =>
     setDraft((d) => ({

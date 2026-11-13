@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useRealtime } from '../realtime/RealtimeProvider'
 import { WorkspacePeople } from './WorkspacePeople'
 
@@ -39,19 +39,20 @@ function setup(contributors = [you, alice, bob], canFollow = true) {
 describe('WorkspacePeople', () => {
   beforeEach(() => online([]))
 
-  it('lists everyone who worked in the project except yourself, with no dot when nobody is online', () => {
+  it('lists everyone who worked in the project except yourself, none marked online when nobody is', () => {
     setup()
     expect(screen.getAllByRole('button')).toHaveLength(2)
-    expect(document.querySelector('.rt-online-dot')).toBeNull()
+    expect(document.querySelector('[data-online]')).toBeNull()
   })
 
-  it('puts a green dot on colleagues who are online and lists them first', () => {
+  it('lists colleagues who are online first and marks them, with no dot on the avatars', () => {
     online([you, { ...bob }])
     setup()
     const buttons = screen.getAllByRole('button')
-    expect(buttons[0]?.querySelector('.rt-online-dot')).not.toBeNull()
+    expect(buttons[0]).toHaveAttribute('data-online')
+    expect(document.querySelector('.rt-online-dot')).toBeNull()
     expect(buttons[0]?.querySelector('[aria-label="Bob"]')).not.toBeNull()
-    expect(buttons[1]?.querySelector('.rt-online-dot')).toBeNull()
+    expect(buttons[1]).not.toHaveAttribute('data-online')
   })
 
   it('a click on an online colleague goes to them, on an away one it opens their last row', async () => {
@@ -102,5 +103,35 @@ describe('WorkspacePeople', () => {
     setup()
     await userEvent.hover(screen.getAllByRole('button')[0] as HTMLElement)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Alice')
+  })
+
+  describe('on a touch screen', () => {
+    beforeEach(() => {
+      vi.stubGlobal('matchMedia', (q: string) => ({
+        matches: q === '(hover: none)',
+        addEventListener() {},
+        removeEventListener() {},
+      }))
+    })
+    afterEach(() => vi.unstubAllGlobals())
+
+    it('the first tap spreads the stack and only the next tap picks a colleague', async () => {
+      online([you, bob])
+      const { onSelectOnline } = setup()
+      const [first] = screen.getAllByRole('button')
+      await userEvent.click(first as HTMLElement)
+      expect(onSelectOnline).not.toHaveBeenCalled()
+      expect(screen.getByTestId('people-list')).toHaveAttribute('data-open')
+      await userEvent.click(first as HTMLElement)
+      expect(onSelectOnline).toHaveBeenCalledWith('u2')
+    })
+
+    it('a tap outside closes the spread stack', async () => {
+      online([you, bob])
+      setup()
+      await userEvent.click(screen.getAllByRole('button')[0] as HTMLElement)
+      await userEvent.click(document.body)
+      expect(screen.getByTestId('people-list')).not.toHaveAttribute('data-open')
+    })
   })
 })

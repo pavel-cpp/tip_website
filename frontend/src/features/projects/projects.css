@@ -152,13 +152,6 @@
 .project-card-online .avatar-stack > * + * {
   margin-left: -6px;
 }
-.project-card-online-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
-}
 .project-card-menu .btn {
   width: var(--foot-h);
   min-height: var(--foot-h);
