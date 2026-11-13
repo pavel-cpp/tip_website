@@ -186,8 +186,6 @@ export const workspaceUz: Record<keyof typeof workspaceRu, Message> = {
   'workspace.row.retryLabel': '№ {number} qatorni saqlashni takrorlash',
   'workspace.people.online': 'Hozir onlayn',
   'workspace.people.contributors': 'Loyiha hamkasblari',
-  'workspace.people.jumpLast': 'Oxirgi tahrirga oʻtish: {name}',
-  'workspace.people.noEdits': '{name}: tahrirlar hali yoʻq',
   'workspace.people.followHint': 'ikki marta bosing: kuzatish',
   'workspace.import.confirmEmpty': 'Import qilish',
   'workspace.ticket.noImageAdmin': 'Chipta rasmini loyiha sozlamalarida yuklang',

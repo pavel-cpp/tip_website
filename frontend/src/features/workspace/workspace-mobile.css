@@ -471,9 +471,25 @@
 }
 /* The current-card marker and the followed colleague's card are layers over the list (CardLayer in RowGlide.tsx),
    so they glide from card to card. The marker stands on the card's left edge, inside its border. */
+.pc-hilite,
 .pc-curmark,
 .pc-spot {
   animation: pt-cursor-in var(--dur-fast) var(--ease-standard) both;
+}
+/* The current card as a whole: a soft accent frame that glides to the tapped card. Its height follows the card's
+   (cards differ in height), the one place a size is animated; it is a single decorative element without content. */
+.pc-hilite {
+  position: absolute;
+  top: 0;
+  left: var(--space-3);
+  width: calc(100% - 2 * var(--space-3));
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--accent) 75%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  transition:
+    transform var(--dur-base) var(--ease-standard),
+    height var(--dur-base) var(--ease-standard);
 }
 .pc-curmark {
   position: absolute;

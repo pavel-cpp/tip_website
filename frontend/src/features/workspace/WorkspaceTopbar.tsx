@@ -1,29 +1,25 @@
 import { AppLink } from '../../components/AppLink'
 import { useI18n } from '../../i18n'
-import { type Contributor, WorkspacePeople } from './WorkspacePeople'
+import { WorkspacePeople } from './WorkspacePeople'
 import './workspace-topbar.css'
 
 interface WorkspaceTopbarProps {
   projectId: string
   title: string
-  contributors: readonly Contributor[]
   followingId: string | null
   canFollow: boolean
   onSelectOnline: (id: string) => void
   onFollow: (id: string) => void
-  onSelectLastRow: (rowId: string) => void
 }
 
-/** Project path and the colleagues who worked in the project, shown in the top bar while the workspace is open. */
+/** Project path and the colleagues who are in the project now, shown in the top bar while the workspace is open. */
 export function WorkspaceTopbar({
   projectId,
   title,
-  contributors,
   followingId,
   canFollow,
   onSelectOnline,
   onFollow,
-  onSelectLastRow,
 }: WorkspaceTopbarProps) {
   const { t } = useI18n()
   return (
@@ -42,12 +38,10 @@ export function WorkspaceTopbar({
       <div className="wsbar-people">
         <div className="wsbar-group" data-testid="online-users">
           <WorkspacePeople
-            contributors={contributors}
             followingId={followingId}
             canFollow={canFollow}
             onSelectOnline={onSelectOnline}
             onFollow={onFollow}
-            onSelectLastRow={onSelectLastRow}
           />
         </div>
       </div>

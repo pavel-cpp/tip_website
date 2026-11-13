@@ -52,21 +52,29 @@ describe('UnderLayer and CurrentMark', () => {
 describe('CardLayer', () => {
   it('places the marker and the followed card with transform, one element each', () => {
     const { container } = render(
-      <CardLayer mark={{ y: 110, h: 40 }} spot={{ y: 100, h: 76, color: '#00ff00' }} />,
+      <CardLayer
+        hilite={{ y: 100, h: 76 }}
+        mark={{ y: 110, h: 40 }}
+        spot={{ y: 100, h: 76, color: '#00ff00' }}
+      />,
     )
     const mark = container.querySelector<HTMLElement>('.pc-curmark')
     expect(mark?.style.transform).toBe('translateY(110px)')
     expect(mark?.style.height).toBe('40px')
+    expect(container.querySelector<HTMLElement>('.pc-hilite')?.style.transform).toBe('translateY(100px)')
     const spot = container.querySelector<HTMLElement>('.pc-spot')
     expect(spot?.style.transform).toBe('translateY(100px)')
     expect(spot?.style.getPropertyValue('--spot')).toBe('#00ff00')
   })
 
   it('keeps the same marker element when the current card changes', () => {
-    const { container, rerender } = render(<CardLayer mark={{ y: 10, h: 40 }} spot={null} />)
+    const { container, rerender } = render(
+      <CardLayer hilite={{ y: 0, h: 60 }} mark={{ y: 10, h: 40 }} spot={null} />,
+    )
     const before = container.querySelector('.pc-curmark')
-    rerender(<CardLayer mark={{ y: 94, h: 40 }} spot={null} />)
+    rerender(<CardLayer hilite={{ y: 84, h: 60 }} mark={{ y: 94, h: 40 }} spot={null} />)
     expect(container.querySelector('.pc-curmark')).toBe(before)
     expect(container.querySelector<HTMLElement>('.pc-curmark')?.style.transform).toBe('translateY(94px)')
+    expect(container.querySelector<HTMLElement>('.pc-hilite')?.style.transform).toBe('translateY(84px)')
   })
 })

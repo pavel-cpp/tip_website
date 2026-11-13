@@ -942,6 +942,7 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                   )
                 })}
                 <CardLayer
+                  hilite={cardMark}
                   mark={cardMark && { y: cardMark.y + 10, h: Math.max(3, cardMark.h - 20) }}
                   spot={cardSpot && spotlight ? { ...cardSpot, color: spotlight.color } : null}
                 />

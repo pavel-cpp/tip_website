@@ -23,42 +23,19 @@ function subscribePhone(cb: () => void) {
 const noHover = () => typeof matchMedia === 'function' && matchMedia(NO_HOVER).matches
 const isPhone = () => typeof matchMedia === 'function' && matchMedia(PHONE).matches
 
-export interface Contributor {
-  id: string
-  displayName: string
-  color: string
-  avatarUrl: string | null
-  /** The row this person edited last; null when none remains. */
-  lastRowId?: string | null
-}
-
-interface Person extends Contributor {
-  online: boolean
-}
-
 interface WorkspacePeopleProps {
-  contributors: readonly Contributor[]
   /** The colleague the view is following right now. */
   followingId: string | null
   /** Following needs the permission; without it a double click does nothing more than a click. */
   canFollow: boolean
-  /** A click on someone who is online: go to what they are doing now. */
+  /** A click on a colleague: go to what they are doing now. */
   onSelectOnline: (id: string) => void
-  /** A double click on someone who is online: start following them. */
+  /** A double click on a colleague: start following them. */
   onFollow: (id: string) => void
-  /** A click on someone who is away: go to the row they edited last. */
-  onSelectLastRow: (rowId: string) => void
 }
 
-/** Everyone who has worked in the project: colleagues online (green dot) first, then the rest. */
-export function WorkspacePeople({
-  contributors,
-  followingId,
-  canFollow,
-  onSelectOnline,
-  onFollow,
-  onSelectLastRow,
-}: WorkspacePeopleProps) {
+/** The colleagues who are in the project right now, as a stack of avatars that spreads on hover or tap. */
+export function WorkspacePeople({ followingId, canFollow, onSelectOnline, onFollow }: WorkspacePeopleProps) {
   const { t } = useI18n()
   const rt = useRealtime()
   const you = rt?.snapshot.you
@@ -80,23 +57,13 @@ export function WorkspacePeople({
     }
   }, [open])
   const phone = useSyncExternalStore(subscribePhone, isPhone, () => false)
-  const people = useMemo<Person[]>(() => {
-    const online = (peers ?? [])
-      .filter((p) => p.id !== you)
-      .map((p) => ({ ...p, lastRowId: null, online: true }))
-    const seen = new Set(online.map((p) => p.id))
-    // A colleague who just arrived may not be in the project's contributor list yet; the live peer wins.
-    const away = contributors
-      .filter((c) => c.id !== you && !seen.has(c.id))
-      .map((c) => ({ ...c, online: false }))
-    return [...online, ...away]
-  }, [peers, you, contributors])
+  // Only people who are connected to this project: nobody who is away or offline is listed.
+  const people = useMemo(() => (peers ?? []).filter((p) => p.id !== you), [peers, you])
 
   const max = phone ? MAX_SHOWN_PHONE : MAX_SHOWN
   if (people.length === 0) return null
   const visible = people.slice(0, max)
   const hidden = people.slice(max)
-  const onlineCount = people.filter((p) => p.online).length
   return (
     <ul
       ref={listRef}
@@ -105,16 +72,11 @@ export function WorkspacePeople({
       // Number of avatars in the stack, for the plate that fades in behind them when it spreads.
       style={{ '--n': visible.length + (hidden.length > 0 ? 1 : 0) } as CSSProperties}
       data-testid="people-list"
-      aria-label={t('realtime.online.label', { count: onlineCount })}
+      aria-label={t('realtime.online.label', { count: people.length })}
     >
       {visible.map((p, index) => {
-        const lastRowId = p.lastRowId ?? null
-        const target = p.online ? p.id : lastRowId
-        const label = p.online
-          ? t('realtime.follow.jump', { name: p.displayName })
-          : t(lastRowId ? 'workspace.people.jumpLast' : 'workspace.people.noEdits', { name: p.displayName })
-        const tip =
-          p.online && canFollow ? `${p.displayName} · ${t('workspace.people.followHint')}` : p.displayName
+        const label = t('realtime.follow.jump', { name: p.displayName })
+        const tip = canFollow ? `${p.displayName} · ${t('workspace.people.followHint')}` : p.displayName
         return (
           <li
             key={p.id}
@@ -126,20 +88,13 @@ export function WorkspacePeople({
               <button
                 type="button"
                 className="rt-online-btn"
-                data-online={p.online || undefined}
-                aria-pressed={p.online && canFollow ? followingId === p.id : undefined}
+                aria-pressed={canFollow ? followingId === p.id : undefined}
                 aria-label={label}
-                aria-disabled={!target || undefined}
                 style={{ '--peer': p.color } as CSSProperties}
                 onClick={() => {
                   // With no hover the stack must be opened first, or a tap would pick whoever lies on top.
                   if (!open && noHover() && people.length > 1) {
                     setOpen(true)
-                    return
-                  }
-                  if (!target) return
-                  if (!p.online) {
-                    onSelectLastRow(target)
                     return
                   }
                   const now = Date.now()

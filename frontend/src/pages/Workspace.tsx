@@ -484,12 +484,6 @@ function WorkspaceView({ project }: { project: Project }) {
     const rowId = peerRowId(id)
     if (rowId) jumpTo(rowId)
   }
-  // A colleague who is away: show the row they edited last, without following anyone.
-  const goToLastRow = (rowId: string) => {
-    if (!rows.some((r) => r.id === rowId)) return
-    setFollowId(null)
-    jumpTo(rowId)
-  }
   useEffect(() => {
     if (!followId) return
     const target = followJump(followRowId, lastAuto.current, (rid) => rows.some((r) => r.id === rid))
@@ -594,12 +588,10 @@ function WorkspaceView({ project }: { project: Project }) {
     <WorkspaceTopbar
       projectId={project.id}
       title={project.title}
-      contributors={project.contributors}
       followingId={followId}
       canFollow={canFollow}
       onSelectOnline={selectPeer}
       onFollow={followPeer}
-      onSelectLastRow={goToLastRow}
     />
   )
   const names = { first: t('workspace.panel.picture'), second: t('workspace.panel.db') }

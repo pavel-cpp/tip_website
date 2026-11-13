@@ -89,9 +89,12 @@ export interface CardSlot {
 export function CardLayer({
   mark,
   spot,
+  hilite,
 }: {
   mark: CardSlot | null
   spot: (CardSlot & { color: string }) | null
+  /** The current card as a whole: a soft accent frame that follows the selection from card to card. */
+  hilite: CardSlot | null
 }) {
   return (
     <span className="pt-layer" aria-hidden="true">
@@ -104,6 +107,9 @@ export function CardLayer({
             ['--spot' as string]: SAFE_COLOR.test(spot.color) ? spot.color : 'var(--accent)',
           }}
         />
+      )}
+      {hilite && (
+        <span className="pc-hilite" style={{ height: hilite.h, transform: `translateY(${hilite.y}px)` }} />
       )}
       {mark && (
         <span className="pc-curmark" style={{ height: mark.h, transform: `translateY(${mark.y}px)` }} />

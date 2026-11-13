@@ -6,9 +6,10 @@
   list-style: none;
 }
 /* The avatars overlap like a stack, the later one over the earlier. On hover, focus or (on touch) after a
-   tap they spread to the left, one step each, so a single person can be picked; the last avatar never
-   moves. A plate in the bar colour fades in behind them so they never sit on top of the title text.
-   Only transform and opacity animate. */
+   tap they fan out to the left one by one, nearest first, with a little overshoot; a plate in the bar
+   colour grows out of the right edge behind them so they never sit on the title text. Closing waits 120 ms,
+   so a pointer that strays between two avatars does not make the stack flutter. Only transform and
+   opacity animate. */
 .rt-online {
   position: relative;
   z-index: 1;
@@ -25,31 +26,42 @@
   border-radius: var(--radius-pill);
   background: var(--bg-elev);
   opacity: 0;
+  transform: scaleX(0.5);
+  transform-origin: right center;
   pointer-events: none;
-  transition: opacity var(--dur-fast) var(--ease-standard);
-}
-.rt-online[data-open]::before,
-.rt-online:focus-within::before {
-  opacity: 1;
+  transition:
+    opacity 180ms var(--ease-out) 120ms,
+    transform 220ms var(--ease-out) 120ms;
 }
 .rt-online-item {
   display: flex;
-  animation: rt-pop-in var(--dur-base) var(--ease-standard) both;
-  transition: transform var(--dur-fast) var(--ease-standard);
+  /* `backwards`, not `both`: a filling animation on transform would swallow the spread's transition. */
+  animation: rt-pop-in var(--dur-base) var(--ease-standard) backwards;
+  transition: transform 220ms var(--ease-out) 120ms;
 }
 .rt-online-item + .rt-online-item {
   margin-left: -4px;
 }
+.rt-online[data-open]::before,
+.rt-online:focus-within::before {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0s;
+}
 .rt-online[data-open] .rt-online-item,
 .rt-online:focus-within .rt-online-item {
   transform: translateX(calc(var(--k, 0) * -8px));
+  transition: transform 380ms cubic-bezier(0.3, 1.35, 0.5, 1) calc(var(--k, 0) * 28ms);
 }
 @media (hover: hover) {
   .rt-online:hover::before {
     opacity: 1;
+    transform: none;
+    transition-delay: 0s;
   }
   .rt-online:hover .rt-online-item {
     transform: translateX(calc(var(--k, 0) * -8px));
+    transition: transform 380ms cubic-bezier(0.3, 1.35, 0.5, 1) calc(var(--k, 0) * 28ms);
   }
 }
 /* A ring in the bar colour separates neighbours where they overlap. */
@@ -73,11 +85,6 @@
     transform: scale(0.6);
   }
 }
-/* No dot on the avatars: a colleague who is away is simply dimmer than the ones who are in the project. */
-.rt-online-btn:not([data-online]) .avatar {
-  opacity: 0.55;
-}
-
 .rt-conn {
   display: inline-flex;
   align-items: center;
