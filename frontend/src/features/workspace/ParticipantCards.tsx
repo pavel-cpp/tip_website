@@ -1,5 +1,5 @@
 // biome-ignore-all lint/a11y/useSemanticElements: virtualized absolutely positioned items cannot be <li> inside the measured wrapper
-import { type CSSProperties, memo, useRef } from 'react'
+import { type CSSProperties, memo, useRef, useState } from 'react'
 import { UserAvatar } from '../../auth/UserAvatar'
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
@@ -92,6 +92,15 @@ function ParticipantCardImpl({
     .filter(Boolean)
     .join(', ')
 
+  // Entering or leaving selection mode swaps the number and the checkbox; only a card that was on screen
+  // when the mode changed animates the swap, so cards scrolled in later do not flash.
+  const [modeSeen, setModeSeen] = useState(selectMode)
+  const [swap, setSwap] = useState<'in' | 'out' | null>(null)
+  if (modeSeen !== selectMode) {
+    setModeSeen(selectMode)
+    setSwap(selectMode ? 'in' : 'out')
+  }
+
   // Long press enters selection mode; a press that moves is a scroll and never fires.
   const press = useRef<{ x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null)
   const longFired = useRef(false)
@@ -125,7 +134,7 @@ function ParticipantCardImpl({
       data-tip={tipOpen || undefined}
       style={style}
     >
-      <div className="pc-card">
+      <div className="pc-card" data-swap={swap ?? undefined}>
         {fresh && <span className="pt-fresh" aria-hidden="true" />}
         <span key={shake} className="pt-lock-ring" data-shake={shake > 0 || undefined} aria-hidden="true" />
         {selectMode && (

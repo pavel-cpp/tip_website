@@ -132,8 +132,42 @@
     border-top: 1px solid var(--border);
     background: var(--bg);
   }
+  .ws-toolbar-phone,
   .pc-bar {
     animation: pc-bar-in var(--dur-fast) var(--ease-standard) both;
+  }
+  /* Buttons that become available (a card gets selected) fade up instead of snapping. */
+  .ws-toolbar-phone .btn,
+  .pc-bar .btn {
+    transition:
+      transform var(--dur-press) var(--ease-standard),
+      opacity var(--dur-fast) var(--ease-standard);
+  }
+
+  /* Phone tabs: the panels share one cell and cross-fade with a short slide in the direction of the tab. */
+  /* The hidden panel waits 16px to the side; clipping keeps that from widening the page. */
+  .ws-grid {
+    overflow-x: clip;
+  }
+  .ws-grid > .ws-slot {
+    grid-area: 1 / 1;
+    transition:
+      opacity var(--dur-base) var(--ease-standard),
+      transform var(--dur-base) var(--ease-drawer),
+      visibility 0s linear 0s;
+  }
+  .ws-grid > .ws-slot[inert] {
+    display: flex;
+    transition:
+      opacity var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out),
+      visibility 0s linear var(--dur-fast);
+  }
+  .ws-grid > .ws-slot[data-panel="picture"][inert] {
+    transform: translateX(-16px);
+  }
+  .ws-grid > .ws-slot[data-panel="db"][inert] {
+    transform: translateX(16px);
   }
   .ws-main {
     flex: 1 1 0;
@@ -173,6 +207,13 @@
 @keyframes pc-bar-in {
   from {
     opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes pc-rail-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
   }
 }
 
@@ -201,6 +242,7 @@
     padding: 0 0 0 var(--space-2);
     border-top: 0;
     border-left: 1px solid var(--border);
+    animation-name: pc-rail-in;
   }
   .ws-main {
     flex: none;
@@ -290,12 +332,44 @@
 }
 .pc-card {
   position: relative;
+  /* The selection layer (::before) sits under the content but above the card's own background. */
+  isolation: isolate;
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-input);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+/* Selection: an accent frame with a soft fill that fades and settles in, like the lock ring. It is a layer
+   so only opacity and transform change; the fill is opaque (soft accent over the panel) like the old state. */
+.pc-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-elev);
+  opacity: 0;
+  transform: scale(0.985);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.pc-item[data-selected] .pc-card::before {
+  opacity: 1;
+  transform: none;
+}
+.pc-item[data-failed] .pc-card::before {
+  border-color: var(--danger);
+}
+/* Press feedback: the card gives a little under the finger. Locked cards do not react. */
+.pc-item:not([data-locked]) .pc-card:has(.pc-main:active, .pc-check:active) {
+  transform: scale(0.98);
+  transition-duration: var(--dur-press);
 }
 .pc-main {
   flex: 1 1 0;
@@ -358,9 +432,29 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 52px;
+  /* As wide as the number it replaces (padding, number and gap), so the text stays put when the mode changes. */
+  width: 60px;
   min-height: 64px;
   cursor: pointer;
+}
+/* Only cards on screen at the moment of the change swap: the checkbox pops in, the number slides back. */
+.pc-card[data-swap="in"] .pc-check {
+  animation: pc-pop-in var(--dur-fast) var(--ease-standard) both;
+}
+.pc-card[data-swap="out"] .pc-num {
+  animation: pc-num-in var(--dur-fast) var(--ease-standard) both;
+}
+@keyframes pc-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes pc-num-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
 }
 .pc-check input {
   width: 24px;
@@ -375,19 +469,27 @@
   /* Card inset (--space-3) + its 1px border + the 3px marker of the current card + a 3px gap. */
   left: calc(var(--space-3) + 7px);
 }
-.pc-item[data-selected] .pc-card {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+/* The current-card marker and the followed colleague's card are layers over the list (CardLayer in RowGlide.tsx),
+   so they glide from card to card. The marker stands on the card's left edge, inside its border. */
+.pc-curmark,
+.pc-spot {
+  animation: pt-cursor-in var(--dur-fast) var(--ease-standard) both;
 }
-.pc-item[data-current] .pc-card::before {
-  content: "";
+.pc-curmark {
   position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
+  top: 0;
+  left: calc(var(--space-3) + 1px);
   width: 3px;
   border-radius: 2px;
   background: var(--accent);
+  transition: transform var(--dur-base) var(--ease-standard);
+}
+.pc-spot {
+  left: var(--space-3);
+  width: calc(100% - 2 * var(--space-3));
+  border-radius: var(--radius);
+  /* The cards slide with --dur-base when rows are inserted; the glide matches. */
+  transition: transform var(--dur-base) var(--ease-standard);
 }
 .pc-item[data-editing] .pc-card {
   box-shadow: inset 0 0 0 2px var(--accent);
@@ -490,7 +592,8 @@
   border-radius: 20px 20px 0 0;
   background: var(--bg-elev);
   box-shadow: var(--shadow-pop);
-  animation: sheet-in var(--dur-base) var(--ease-standard) both;
+  /* A drawer curve: fast start, long settle, so the sheet feels like it lands rather than slides. */
+  animation: sheet-in var(--dur-base) var(--ease-drawer) both;
 }
 /* The dialog itself holds the initial focus (so no keyboard opens); it is not a control, so no ring. */
 .sheet:focus {

@@ -161,6 +161,7 @@ describe('phone cards', () => {
     render(<Harness onSelectModeChange={onMode} />)
     const main = within(card('Timur')).getByRole('button')
     expect(within(card('Timur')).getByText('1')).toBeInTheDocument()
+    expect(card('Timur').querySelector('.pc-card')).not.toHaveAttribute('data-swap')
     fireEvent.pointerDown(main)
     act(() => {
       vi.advanceTimersByTime(600)
@@ -172,6 +173,8 @@ describe('phone cards', () => {
     expect(card('Timur')).toHaveAttribute('data-selected', 'true')
     // The number is gone from the card (the box stands in its place) but stays in the accessible name.
     expect(card('Timur').querySelector('.pc-num')).toBeNull()
+    // Cards that were on screen swap with a short animation; the card keeps no swap mark before the change.
+    expect(card('Timur').querySelector('.pc-card')).toHaveAttribute('data-swap', 'in')
     expect(main).toHaveAccessibleName(/^№ 1, Timur/)
     expect(screen.getByText('Выбрано: 1 из 3')).toBeInTheDocument()
 

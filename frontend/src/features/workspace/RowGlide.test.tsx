@@ -1,6 +1,6 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { CurrentMark, selectionRuns, UnderLayer } from './RowGlide'
+import { CardLayer, CurrentMark, selectionRuns, UnderLayer } from './RowGlide'
 
 const ids = ['a', 'b', 'c', 'd', 'e', 'f']
 
@@ -46,5 +46,27 @@ describe('UnderLayer and CurrentMark', () => {
   it('draws no marker without a current row', () => {
     const { container } = render(<CurrentMark index={null} rowHeight={44} />)
     expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('CardLayer', () => {
+  it('places the marker and the followed card with transform, one element each', () => {
+    const { container } = render(
+      <CardLayer mark={{ y: 110, h: 40 }} spot={{ y: 100, h: 76, color: '#00ff00' }} />,
+    )
+    const mark = container.querySelector<HTMLElement>('.pc-curmark')
+    expect(mark?.style.transform).toBe('translateY(110px)')
+    expect(mark?.style.height).toBe('40px')
+    const spot = container.querySelector<HTMLElement>('.pc-spot')
+    expect(spot?.style.transform).toBe('translateY(100px)')
+    expect(spot?.style.getPropertyValue('--spot')).toBe('#00ff00')
+  })
+
+  it('keeps the same marker element when the current card changes', () => {
+    const { container, rerender } = render(<CardLayer mark={{ y: 10, h: 40 }} spot={null} />)
+    const before = container.querySelector('.pc-curmark')
+    rerender(<CardLayer mark={{ y: 94, h: 40 }} spot={null} />)
+    expect(container.querySelector('.pc-curmark')).toBe(before)
+    expect(container.querySelector<HTMLElement>('.pc-curmark')?.style.transform).toBe('translateY(94px)')
   })
 })

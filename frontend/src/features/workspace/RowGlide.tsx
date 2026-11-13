@@ -74,3 +74,40 @@ export function CurrentMark({ index, rowHeight }: { index: number | null; rowHei
     />
   )
 }
+
+/** Where a card sits inside the list, in px from its top, without the gap that follows it. */
+export interface CardSlot {
+  y: number
+  h: number
+}
+
+/**
+ * Phone cards have measured, different heights, so their markers take positions from the virtualizer instead
+ * of a fixed row height. The current-card marker and a followed colleague's card are two elements that
+ * keep their identity and glide with `transform`; the card selection is drawn by the cards themselves.
+ */
+export function CardLayer({
+  mark,
+  spot,
+}: {
+  mark: CardSlot | null
+  spot: (CardSlot & { color: string }) | null
+}) {
+  return (
+    <span className="pt-layer" aria-hidden="true">
+      {spot && (
+        <span
+          className="pt-spot pc-spot"
+          style={{
+            height: spot.h,
+            transform: `translateY(${spot.y}px)`,
+            ['--spot' as string]: SAFE_COLOR.test(spot.color) ? spot.color : 'var(--accent)',
+          }}
+        />
+      )}
+      {mark && (
+        <span className="pc-curmark" style={{ height: mark.h, transform: `translateY(${mark.y}px)` }} />
+      )}
+    </span>
+  )
+}

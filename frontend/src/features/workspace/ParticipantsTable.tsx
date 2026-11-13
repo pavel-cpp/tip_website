@@ -34,7 +34,7 @@ import {
 } from './ParticipantRow'
 import { hasCommandKey } from './platform'
 import { type RowLockOwner, type RowPresence, useRowCollab } from './presence'
-import { CurrentMark, selectionRuns, UnderLayer } from './RowGlide'
+import { CardLayer, CurrentMark, selectionRuns, UnderLayer } from './RowGlide'
 import { RowSheet, type SheetSaveResult } from './RowSheet'
 import {
   allVisibleSelected,
@@ -741,6 +741,14 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
       )}
     />
   )
+  // Cards are laid out by measurement; the gap after a card is 8px of its wrapper, the marker is inset 10px.
+  const cardSlot = (id: string | null | undefined) => {
+    const i = id ? indexOfId.get(id) : undefined
+    const m = i === undefined ? undefined : rowVirtualizer.measurementsCache[i]
+    return m ? { y: m.start, h: m.size - 8 } : null
+  }
+  const cardMark = cardSlot(currentId)
+  const cardSpot = spotlight ? cardSlot(spotlight.rowId) : null
   const activeDescendant = activeRow && active ? cellId(activeRow.id, active.col) : undefined
 
   // ---- realtime: row lock lifecycle, cursor and denied locks
@@ -933,6 +941,10 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
                     />
                   )
                 })}
+                <CardLayer
+                  mark={cardMark && { y: cardMark.y + 10, h: Math.max(3, cardMark.h - 20) }}
+                  spot={cardSpot && spotlight ? { ...cardSpot, color: spotlight.color } : null}
+                />
                 {cursorLayer}
               </div>
             )}
