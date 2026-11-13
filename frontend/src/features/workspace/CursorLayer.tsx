@@ -11,14 +11,15 @@ export interface CursorSlot {
 export interface PlacedCursor {
   id: string
   color: string
-  /** Top of the strip and its height, in px from the top of the list. */
+  /** Top of the marker and its height, in px from the top of the list. */
   y: number
   h: number
 }
 
 /**
- * Lays out the colleagues' cursors: one thin strip on the left edge of the row each colleague looks at.
- * A row shows a single cursor (the one of whoever pointed at it last), so the strip never crowds.
+ * Lays out the colleagues' cursors. A colleague's cursor is drawn like your own current-row marker (same
+ * width, height and rounding) and stands to the right of it. A row shows a single colleague (the one who
+ * pointed at it last), so with you and two others on one row you see your marker and that colleague's.
  */
 export function placeCursors(
   byRow: ReadonlyMap<string, RowCursor>,
@@ -37,8 +38,8 @@ export function placeCursors(
 }
 
 /**
- * One element per colleague, keyed by person, so a strip glides from row to row instead of
- * disappearing and reappearing. Only `transform` changes: the 1px-tall element is stretched to `h`.
+ * One element per colleague, keyed by person, so a marker glides from row to row instead of
+ * disappearing and reappearing. Only `transform` changes while it moves; the height is the row's.
  */
 export function CursorLayer({ items }: { items: readonly PlacedCursor[] }) {
   if (items.length === 0) return null
@@ -48,7 +49,7 @@ export function CursorLayer({ items }: { items: readonly PlacedCursor[] }) {
         <span
           key={c.id}
           className="pt-cursor"
-          style={{ background: c.color, transform: `translateY(${c.y}px) scaleY(${c.h})` }}
+          style={{ background: c.color, height: c.h, transform: `translateY(${c.y}px)` }}
         />
       ))}
     </span>

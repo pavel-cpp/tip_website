@@ -735,8 +735,9 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
           const m = i === undefined ? undefined : rowVirtualizer.measurementsCache[i]
           return m ? { start: m.start, size: m.size } : null
         },
-        // A card's bottom 8px is the gap to the next card.
-        cards ? { top: 4, bottom: 12 } : { top: 4, bottom: 4 },
+        // The same inset as the current-row marker: 8px in a grid row; 10px in a card, whose bottom 8px is
+        // the gap to the next card.
+        cards ? { top: 10, bottom: 18 } : { top: 8, bottom: 8 },
       )}
     />
   )

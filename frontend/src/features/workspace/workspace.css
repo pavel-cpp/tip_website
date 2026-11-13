@@ -505,8 +505,8 @@
   }
 }
 
-/* Colleagues who merely look at a row: one layer over the list, one thin segment per person.
-   A segment is 1px tall and stretched by its transform, so moving it never touches layout. */
+/* A colleague's cursor: the same bar as the current-row marker (3px, rounded), standing to its right.
+   One layer over the list; each bar moves with a transform only. */
 .pt-cursors {
   position: absolute;
   inset: 0;
@@ -515,11 +515,9 @@
 .pt-cursor {
   position: absolute;
   top: 0;
-  /* Right of the 3px marker of the current row. */
-  left: 4px;
-  width: 4px;
-  height: 1px;
-  transform-origin: 0 0;
+  left: 6px;
+  width: 3px;
+  border-radius: 2px;
   transition: transform var(--dur-base) var(--ease-standard);
   animation: pt-cursor-in var(--dur-fast) var(--ease-standard) both;
 }

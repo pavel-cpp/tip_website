@@ -9,12 +9,12 @@ const peer = (i: number) => ({
 })
 const slotOf = (id: string) =>
   id === 'r1' ? { start: 0, size: 44 } : id === 'r2' ? { start: 44, size: 44 } : null
-const inset = { top: 4, bottom: 4 }
+const inset = { top: 8, bottom: 8 }
 
 describe('placeCursors', () => {
-  it('gives the colleague the whole strip of their row', () => {
+  it('draws the colleague as tall as the current-row marker: the row minus 8px at each end', () => {
     const [c] = placeCursors(new Map([['r2', peer(1)]]), slotOf, inset)
-    expect(c).toMatchObject({ y: 48, h: 36 })
+    expect(c).toMatchObject({ y: 52, h: 28 })
   })
 
   it('skips rows that are not in the list', () => {
@@ -41,9 +41,10 @@ describe('CursorLayer', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('draws one strip per person, positioned with transform only', () => {
-    const { container } = render(<CursorLayer items={[{ id: 'u1', color: '#fff', y: 48, h: 36 }]} />)
+  it('draws one bar per person, positioned with transform', () => {
+    const { container } = render(<CursorLayer items={[{ id: 'u1', color: '#fff', y: 52, h: 28 }]} />)
     const seg = container.querySelector<HTMLElement>('.pt-cursor')
-    expect(seg?.style.transform).toBe('translateY(48px) scaleY(36)')
+    expect(seg?.style.transform).toBe('translateY(52px)')
+    expect(seg?.style.height).toBe('28px')
   })
 })

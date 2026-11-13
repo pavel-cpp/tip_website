@@ -122,7 +122,7 @@ describe('row lock presentation (realtime seam)', () => {
     const cursor = document.querySelector('.pt-cursors .pt-cursor') as HTMLElement
     expect(cursor).not.toBeNull()
     expect(cursor.style.background).not.toBe('')
-    expect(cursor.style.transform).toMatch(/^translateY\(\d+px\) scaleY\(36\)$/)
+    expect(cursor.style.transform).toMatch(/^translateY\(\d+px\)$/)
     expect(rowOf('Timur')).not.toHaveAttribute('data-locked')
   })
 })
