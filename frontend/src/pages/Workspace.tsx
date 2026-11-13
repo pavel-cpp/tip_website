@@ -469,8 +469,8 @@ function WorkspaceView({ project }: { project: Project }) {
     return rowId && rows.some((r) => r.id === rowId) ? rowId : null
   }
   const selectPeer = (id: string) => {
-    // Going to someone else's cell by hand ends following; a click on the one being followed does not.
-    if (followId && followId !== id) setFollowId(null)
+    // A click on any colleague, the followed one included, ends following (a double click starts it again).
+    if (followId) setFollowId(null)
     const rowId = peerRowId(id)
     if (rowId) jumpTo(rowId)
   }

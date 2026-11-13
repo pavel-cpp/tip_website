@@ -218,6 +218,8 @@
 }
 .pt-head {
   flex: none;
+  /* The width of the rows' scrollbar (set from script), so header and cells share the same columns. */
+  padding-right: var(--sbw, 0px);
   height: 40px;
   color: var(--text-muted);
   font-size: var(--fs-xs);

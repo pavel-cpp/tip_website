@@ -100,7 +100,8 @@ export function WorkspacePeople({ followingId, canFollow, onSelectOnline, onFoll
                   const now = Date.now()
                   const prev = lastClick.current
                   if (canFollow && prev?.id === p.id && now - prev.at < DOUBLE_CLICK_MS) {
-                    lastClick.current = null
+                    // Kept (not cleared), so a further quick click is still part of this gesture and does not end it.
+                    lastClick.current = { id: p.id, at: now }
                     onFollow(p.id)
                     return
                   }

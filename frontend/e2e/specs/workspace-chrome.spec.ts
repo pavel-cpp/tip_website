@@ -131,6 +131,14 @@ test('online colleagues are in the top bar: a click goes to their row, a double 
   await expect(avatar).toHaveAttribute('aria-pressed', 'false')
   await peerWs.cell(peerRow(4), 'name').click()
   await expect(row(1)).toHaveAttribute('data-current', 'true')
+
+  // A click on a colleague ends it as well, the followed one included.
+  await avatar.dblclick()
+  await expect(avatar).toHaveAttribute('aria-pressed', 'true')
+  // A click right after the double click still belongs to that gesture (400 ms); a later one ends following.
+  await me.waitForTimeout(500)
+  await avatar.click()
+  await expect(avatar).toHaveAttribute('aria-pressed', 'false')
 })
 
 test('splitter: drag, keyboard, double click, drag to the edge hides a panel, drag back restores', async ({

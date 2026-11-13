@@ -230,6 +230,20 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
 
   const focusGrid = useCallback(() => grid.current?.focus({ preventScroll: true }), [])
 
+  // A classic scrollbar narrows the rows but not the header, which would shift its columns; the header gets the
+  // same width as padding. Overlay scrollbars (phones, macOS) measure 0 and nothing changes.
+  useEffect(() => {
+    const el = scroller.current
+    const gridEl = grid.current
+    if (!el || !gridEl) return
+    const sync = () => gridEl.style.setProperty('--sbw', `${el.offsetWidth - el.clientWidth}px`)
+    sync()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(sync)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [cards, visible.length > 0])
+
   const focusSeen = useRef(0)
   useEffect(() => {
     if (focusNonce === focusSeen.current) return

@@ -168,6 +168,10 @@ main:focus {
   are absolute, so the layer clips them to the viewport. Positions,
   sizes, transforms and timings are set from script (CSSOM, so the server's CSP is satisfied).
 */
+.route-pushing,
+.route-pushing body {
+  overflow-x: clip;
+}
 .route-layer {
   position: fixed;
   inset: 0;

@@ -19,12 +19,16 @@ import { EASE, prefersReducedMotion } from './motion'
  * a 120 ms opacity fade.
  */
 
-export type MotionMode = 'full' | 'fade' | 'off'
+/** `push` is the phone transition: the old page slides away to one side while the new one slides in from it. */
+export type MotionMode = 'full' | 'push' | 'fade' | 'off'
 
 export function motionMode(): MotionMode {
   if (typeof document === 'undefined' || typeof matchMedia !== 'function') return 'off'
   if (typeof Element === 'undefined' || typeof Element.prototype.animate !== 'function') return 'off'
-  if (!matchMedia('(hover: hover) and (pointer: fine) and (min-width: 700px)').matches) return 'off'
+  if (!matchMedia('(hover: hover) and (pointer: fine) and (min-width: 700px)').matches) {
+    // Touch screens: the sliding transition, or the CSS fade of `.route-enter` when motion is reduced.
+    return prefersReducedMotion() ? 'off' : 'push'
+  }
   return prefersReducedMotion() ? 'fade' : 'full'
 }
 
@@ -44,6 +48,8 @@ export const ROUTE_MS = {
   stagger: 40,
   crumb: 220,
   fade: 120,
+  /** Phone push: the whole page change. */
+  push: 380,
 } as const
 const MAX_BLOCKS = 5
 /** Marks that show up this late after the commit (a title set by an effect, a card thumb) still join. */
@@ -210,6 +216,7 @@ const isFrame = (key: string): boolean => key.startsWith('hero')
 function finish(): void {
   const a = active
   active = null
+  if (typeof document !== 'undefined') document.documentElement.classList.remove('route-pushing')
   if (!a) return
   clearTimeout(a.timer)
   clearTimeout(a.hard)
@@ -398,10 +405,11 @@ function takeSnapshot(to: string): void {
     slot: null,
     slotRect: null,
   }
-  if (mode === 'full') {
+  if (mode === 'full' || mode === 'push') {
     const main = document.querySelector<HTMLElement>('main.page')
     if (!main) return
-    snap.marks = readMarks([projectIdOf(to), projectIdOf(committed)])
+    // Phones slide whole pages; only the desktop flies shared elements.
+    snap.marks = mode === 'full' ? readMarks([projectIdOf(to), projectIdOf(committed)]) : new Map()
     const rect = rectOf(main.getBoundingClientRect())
     const clone = main.cloneNode(true) as HTMLElement
     snap.scrolls = sanitize(main, clone)
@@ -597,7 +605,69 @@ function mount(snap: Snapshot, main: HTMLElement): Run {
 }
 
 /** The motion proper: the old page settles out, shared elements fly, the new page is revealed. */
+/**
+ * Phone transition, like a native push: going deeper (list -> project -> settings) the old page slides out to the
+ * left while the new one comes in from the right; going back it is the other way round, and neighbours of the
+ * same level cross-fade with a small slide. The backdrop clears at once so the new page shows beneath the old one.
+ */
+function startPush(run: Run): void {
+  const { snap, main } = run
+  const sign = snap.dir.kind === 'out' ? -1 : 1
+  const travel = snap.dir.kind === 'side' ? 8 : 32
+  // The page that waits outside the screen must not give the document a horizontal scrollbar meanwhile.
+  document.documentElement.classList.add('route-pushing')
+  const opts = { duration: ROUTE_MS.push, easing: EASE.drawer, fill: 'both' as const }
+  if (run.backdrop) {
+    run.anims.push(run.backdrop.animate([{ opacity: 1 }, { opacity: 0 }], { ...opts, duration: 90 }))
+  }
+  if (run.box) {
+    run.anims.push(
+      run.box.animate(
+        [
+          { opacity: 1, transform: 'none' },
+          { opacity: 0, transform: `translateX(${-travel * sign}%)` },
+        ],
+        opts,
+      ),
+    )
+  }
+  if (snap.slot) {
+    run.anims.push(snap.slot.animate([{ opacity: 1 }, { opacity: 0 }], { ...opts, duration: 160 }))
+  }
+  run.anims.push(
+    main.animate(
+      [
+        { opacity: 0.4, transform: `translateX(${travel * 1.6 * sign}%)` },
+        { opacity: 1, transform: 'none' },
+      ],
+      { ...opts, fill: 'backwards' },
+    ),
+  )
+  const topbarSlot = document.querySelector<HTMLElement>('.topbar-slot')
+  if (topbarSlot) {
+    run.anims.push(
+      topbarSlot.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 220,
+        delay: 120,
+        easing: EASE.out,
+        fill: 'backwards',
+      }),
+    )
+  }
+  clearTimeout(run.hard)
+  run.hard = setTimeout(() => {
+    if (active === run) finish()
+  }, ROUTE_MS.push + 500)
+  void Promise.all(run.anims.map((a) => a.finished.catch(() => undefined))).then(() => {
+    if (active === run) finish()
+  })
+}
+
 function start(run: Run): void {
+  if (run.snap.mode === 'push') {
+    startPush(run)
+    return
+  }
   const { snap, main } = run
   const started = performance.now()
 
