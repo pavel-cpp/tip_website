@@ -5,29 +5,51 @@
   padding: 0;
   list-style: none;
 }
-/* The avatars overlap like a stack. On hover, focus or (on touch) after a tap they spread to the left
-   one step each, so a single person can be picked; the last avatar never moves. Only transform animates. */
+/* The avatars overlap like a stack, the later one over the earlier. On hover, focus or (on touch) after a
+   tap they spread to the left, one step each, so a single person can be picked; the last avatar never
+   moves. A plate in the bar colour fades in behind them so they never sit on top of the title text.
+   Only transform and opacity animate. */
 .rt-online {
   position: relative;
   z-index: 1;
+}
+.rt-online::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -4px;
+  bottom: -4px;
+  right: -4px;
+  /* Spread width: the last avatar (28px) plus 32px per further one (24px stacked + 8px of spread), 4px padding each side. */
+  width: calc(var(--n, 1) * 32px + 4px);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.rt-online[data-open]::before,
+.rt-online:focus-within::before {
+  opacity: 1;
 }
 .rt-online-item {
   display: flex;
   animation: rt-pop-in var(--dur-base) var(--ease-standard) both;
   transition: transform var(--dur-fast) var(--ease-standard);
-  /* The first avatar lies on top of the next one. */
-  z-index: var(--k, 0);
 }
 .rt-online-item + .rt-online-item {
-  margin-left: -10px;
+  margin-left: -4px;
 }
 .rt-online[data-open] .rt-online-item,
 .rt-online:focus-within .rt-online-item {
-  transform: translateX(calc(var(--k, 0) * -14px));
+  transform: translateX(calc(var(--k, 0) * -8px));
 }
 @media (hover: hover) {
+  .rt-online:hover::before {
+    opacity: 1;
+  }
   .rt-online:hover .rt-online-item {
-    transform: translateX(calc(var(--k, 0) * -14px));
+    transform: translateX(calc(var(--k, 0) * -8px));
   }
 }
 /* A ring in the bar colour separates neighbours where they overlap. */
@@ -112,6 +134,8 @@
   border-radius: 50%;
   background: none;
   cursor: pointer;
+  /* iOS flashes a rectangle around the tapped box, including the enlarged hit area below; the avatar is a circle. */
+  -webkit-tap-highlight-color: transparent;
   transition: transform var(--dur-fast) var(--ease-standard);
 }
 /* The visible avatar stays small; the invisible part makes the target larger on touch screens. */
@@ -119,6 +143,7 @@
   content: "";
   position: absolute;
   inset: -4px;
+  border-radius: 50%;
 }
 @media (pointer: coarse) {
   .rt-online-btn::after {

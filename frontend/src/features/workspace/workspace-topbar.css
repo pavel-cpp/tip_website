@@ -86,4 +86,14 @@
     font-size: 0;
     gap: 0;
   }
+  /* A bare dot says nothing, so the phone shows the TIP mark instead (the same file as the tab icon). */
+  .topbar:has(.wsbar-crumbs) .brand::before {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    background: url("/favicon-dark.svg") center / contain no-repeat;
+  }
+  :root[data-theme="light"] .topbar:has(.wsbar-crumbs) .brand::before {
+    background-image: url("/favicon-light.svg");
+  }
 }

@@ -102,6 +102,8 @@ export function WorkspacePeople({
       ref={listRef}
       className="rt-online"
       data-open={open || undefined}
+      // Number of avatars in the stack, for the plate that fades in behind them when it spreads.
+      style={{ '--n': visible.length + (hidden.length > 0 ? 1 : 0) } as CSSProperties}
       data-testid="people-list"
       aria-label={t('realtime.online.label', { count: onlineCount })}
     >
