@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 import { adminCreds, uniq } from '../support/api'
 import { Topbar, tr } from '../support/pages'
+import { settledBox } from '../support/settle'
 import { expect, test } from '../support/test'
 
 const t = tr('ru')
@@ -18,15 +19,41 @@ async function titles(page: Page, prefix: string): Promise<string[]> {
   return all.filter((x) => x.startsWith(prefix))
 }
 
+/**
+ * Other tests add projects to the same list at the same time, which pushes the cards this test drags around (or
+ * below the fold). The page therefore only gets this test's own projects; saving the order still goes to the server.
+ */
+async function onlyMine(page: Page, prefix: string) {
+  await page.route(/\/api\/v1\/projects(\?.*)?$/, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue()
+    const res = await route.fetch()
+    const all = (await res.json()) as Array<{ title: string }>
+    return route.fulfill({ response: res, json: all.filter((p) => p.title.startsWith(prefix)) })
+  })
+  await page.reload()
+}
+
 async function drag(page: Page, from: Locator, to: Locator, where: 'left' | 'right' | 'center' = 'left') {
-  const a = await from.boundingBox()
-  const b = await to.boundingBox()
-  if (!a || !b) throw new Error('missing box')
-  const x = where === 'left' ? b.x + 12 : where === 'right' ? b.x + b.width - 12 : b.x + b.width / 2
-  await page.mouse.move(a.x + a.width / 2, a.y + 40)
+  // Other tests add projects to the same list, which pushes cards around; aim again until the pointer is on the card.
+  let a = await settledBox(from)
+  for (let attempt = 0; attempt < 8; attempt++) {
+    a = await settledBox(from)
+    await page.mouse.move(a.x + a.width / 2, a.y + 40)
+    const onCard = await from.evaluate(
+      (el, [x, y]) => el.contains(document.elementFromPoint(x as number, y as number)),
+      [a.x + a.width / 2, a.y + 40],
+    )
+    if (onCard) break
+  }
   await page.mouse.down()
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + 52, { steps: 3 })
+  // The target is measured once the drag has started, so a list that moved in the meantime is accounted for.
+  const b = await settledBox(to)
+  const x = where === 'left' ? b.x + 12 : where === 'right' ? b.x + b.width - 12 : b.x + b.width / 2
   await page.mouse.move(x, b.y + 60, { steps: 12 })
+  // The drop target is worked out on animation frames; releasing before the page has shown it (a busy machine)
+  // drops nowhere.
+  await expect(page.locator('.drop-line, .project-section.is-drop-target').first()).toBeAttached()
   await page.mouse.up()
 }
 
@@ -41,19 +68,20 @@ test('drag a card to a new place; the team order survives a reload', async ({
   await admin.createProject(`${prefix} B`)
   const c = await admin.createProject(`${prefix} C`)
   const page = await signedIn(adminCreds())
+  await onlyMine(page, prefix)
   await expect(card(page, `${prefix} A`)).toBeVisible()
   // Newest first: C, B, A.
-  expect(await titles(page, prefix)).toEqual([`${prefix} C`, `${prefix} B`, `${prefix} A`])
-
+  await expect.poll(() => titles(page, prefix)).toEqual([`${prefix} C`, `${prefix} B`, `${prefix} A`])
   await drag(page, card(page, `${prefix} A`), card(page, `${prefix} C`), 'left')
   await expect.poll(() => titles(page, prefix)).toEqual([`${prefix} A`, `${prefix} C`, `${prefix} B`])
 
   await page.reload()
   await expect(card(page, `${prefix} A`)).toBeVisible()
-  expect(await titles(page, prefix)).toEqual([`${prefix} A`, `${prefix} C`, `${prefix} B`])
+  await expect.poll(() => titles(page, prefix)).toEqual([`${prefix} A`, `${prefix} C`, `${prefix} B`])
   const api = await admin.call<{ id: string }[]>('GET', '/projects')
   const mine = api.map((p) => p.id).filter((id) => id === a.id || id === c.id)
   expect(mine).toEqual([a.id, c.id])
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
 test('drag a card to the other section to finish it and back to reopen it', async ({
@@ -66,9 +94,10 @@ test('drag a card to the other section to finish it and back to reopen it', asyn
   const p = await admin.createProject(`${prefix} P`)
   const done = await admin.createProject(`${prefix} Done`)
   await admin.finishProject(done.id)
+  // Something stays in the active section to drop the card back onto once P has left it.
+  await admin.createProject(`${prefix} Q`)
   const page = await signedIn(adminCreds())
-  // Tall enough that both sections are on screen: the test drags without scrolling.
-  await page.setViewportSize({ width: 1280, height: 2400 })
+  await onlyMine(page, prefix)
   const finishedSection = page.locator('[data-drop-section="finished"]')
   await expect(card(page, `${prefix} Done`)).toBeVisible()
 
@@ -92,6 +121,7 @@ test('drag a card to the other section to finish it and back to reopen it', asyn
           ?.status,
     )
     .toBe('active')
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
 test('the card menu moves a project up and down (keyboard path) on every device', async ({
@@ -102,12 +132,14 @@ test('the card menu moves a project up and down (keyboard path) on every device'
   await admin.createProject(`${prefix} A`)
   await admin.createProject(`${prefix} B`)
   const page = await signedIn(adminCreds())
+  await onlyMine(page, prefix)
   await expect(card(page, `${prefix} A`)).toBeVisible()
-  expect(await titles(page, prefix)).toEqual([`${prefix} B`, `${prefix} A`])
+  await expect.poll(() => titles(page, prefix)).toEqual([`${prefix} B`, `${prefix} A`])
 
   await page.getByRole('button', { name: t('projects.menu.label', { title: `${prefix} A` }) }).click()
   await page.getByRole('menuitem', { name: t('projects.menu.moveUp') }).click()
   await expect.poll(() => titles(page, prefix)).toEqual([`${prefix} A`, `${prefix} B`])
+  await page.unrouteAll({ behavior: 'ignoreErrors' })
 })
 
 test('a worker sees no drag affordance and no move entries', async ({ admin, signedIn }) => {

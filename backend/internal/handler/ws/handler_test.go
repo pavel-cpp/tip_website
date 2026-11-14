@@ -82,7 +82,13 @@ type env struct {
 
 func newEnv(t *testing.T, mod func(*Config)) *env {
 	t.Helper()
-	hub := memory.NewHub(memory.Config{SweepInterval: 10 * time.Millisecond})
+	return newEnvBuffered(t, mod, 0)
+}
+
+// newEnvBuffered is newEnv with the hub's per-session send buffer set (0 keeps the default).
+func newEnvBuffered(t *testing.T, mod func(*Config), sendBuffer int) *env {
+	t.Helper()
+	hub := memory.NewHub(memory.Config{SweepInterval: 10 * time.Millisecond, SendBuffer: sendBuffer})
 	svc := service.NewCollab(hub, fakeAccess{}, fakeDir{}, fakeAuth{})
 	cfg := Config{
 		Collab:        svc,

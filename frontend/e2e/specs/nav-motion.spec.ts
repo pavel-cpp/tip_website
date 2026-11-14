@@ -51,18 +51,22 @@ test.describe('phones', () => {
   test.skip(({ isMobile }) => !isMobile, 'touch devices only')
   test.use({ reducedMotion: 'no-preference' })
 
-  test('touch devices get the light CSS fade, never the route motion layers, and navigation works', async ({
+  test('touch devices slide pages in and out, leave no layers behind, and navigation works', async ({
     signedIn,
   }) => {
     const page = await signedIn(adminCreds())
     await page.goto('/')
     await new Topbar(page).goTo('profile')
     await expect(page).toHaveURL(/\/profile$/)
-    await expect(page.locator('main.page')).toHaveClass(/route-enter/)
-    await expect(page.locator('.route-layer')).toHaveCount(0)
+    // The sliding transition (lib/routeMotion.ts, mode "push") replaces the CSS fade of `.route-enter`...
+    await expect(page.locator('#main')).not.toHaveClass(/route-enter/)
+    // ...and everything it adds is gone once it has played, including the clip on the page width.
+    await expect.poll(() => page.locator('.route-layer').count()).toBe(0)
+    await expect(page.locator('html')).not.toHaveClass(/route-pushing/)
     await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('main')
     await page.goBack()
     await expect(page).toHaveURL(/\/$/)
+    await expect.poll(() => page.locator('.route-layer').count()).toBe(0)
   })
 })
 

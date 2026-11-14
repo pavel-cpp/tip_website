@@ -1,4 +1,5 @@
 import { adminCreds, uniq } from '../support/api'
+import { settledBox } from '../support/settle'
 import { expect, test } from '../support/test'
 import { WorkspacePage } from '../support/workspace'
 
@@ -165,8 +166,7 @@ test('splitter: drag, keyboard, double click, drag to the edge hides a panel, dr
   const width = async () => (await picture.boundingBox())?.width ?? 0
   const before = await width()
 
-  const box = await split.boundingBox()
-  if (!box) throw new Error('no splitter')
+  const box = await settledBox(split)
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   await page.mouse.move(x, y)
@@ -188,17 +188,14 @@ test('splitter: drag, keyboard, double click, drag to the edge hides a panel, dr
   expect(Number(await split.getAttribute('aria-valuenow'))).toBeGreaterThan(now)
 
   // Double click resets.
-  const b2 = await split.boundingBox()
-  if (!b2) throw new Error('no splitter')
+  const b2 = await settledBox(split)
   await page.mouse.dblclick(b2.x + b2.width / 2, b2.y + b2.height / 2)
   await expect(split).toHaveAttribute('aria-valuenow', '50')
 
   // Drag the handle to the right edge: the table hides and the picture fills the space with who is on it.
-  const b3 = await split.boundingBox()
-  if (!b3) throw new Error('no splitter')
+  const b3 = await settledBox(split)
   const y3 = b3.y + b3.height / 2
-  const grid = await page.locator('.ws-grid').boundingBox()
-  if (!grid) throw new Error('no grid')
+  const grid = await settledBox(page.locator('.ws-grid'))
   await page.mouse.move(b3.x + b3.width / 2, y3)
   await page.mouse.down()
   await page.mouse.move(grid.x + grid.width - 2, y3, { steps: 10 })
@@ -215,23 +212,20 @@ test('splitter: drag, keyboard, double click, drag to the edge hides a panel, dr
   await expect(who).toContainText('Person 2')
 
   // The same handle on the edge brings the table back (a click is enough), and the selection followed along.
-  const b4 = await split.boundingBox()
-  if (!b4) throw new Error('no splitter')
+  const b4 = await settledBox(split)
   await page.mouse.click(b4.x + b4.width / 2, b4.y + b4.height / 2)
   await expect(page.locator('.ws-slot[data-panel="db"]')).not.toHaveAttribute('inert', '')
   await expect(ws.rowByText('Person 2')).toHaveAttribute('data-current', 'true')
 
   // Dragging far to the left hides the picture; dragging back out restores it.
-  const b5 = await split.boundingBox()
-  if (!b5) throw new Error('no splitter')
+  const b5 = await settledBox(split)
   const y5 = b5.y + b5.height / 2
   await page.mouse.move(b5.x + b5.width / 2, y5)
   await page.mouse.down()
   await page.mouse.move(grid.x + 2, y5, { steps: 10 })
   await page.mouse.up()
   await expect(page.locator('.ws-slot[data-panel="picture"]')).toHaveAttribute('inert', '')
-  const b6 = await split.boundingBox()
-  if (!b6) throw new Error('no splitter')
+  const b6 = await settledBox(split)
   await page.mouse.move(b6.x + b6.width / 2, y5)
   await page.mouse.down()
   await page.mouse.move(grid.x + grid.width / 2, y5, { steps: 10 })

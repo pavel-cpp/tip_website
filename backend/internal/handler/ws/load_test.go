@@ -55,7 +55,10 @@ func TestLoad100ClientsOver10Rooms(t *testing.T) {
 	baseGoroutines := runtime.NumGoroutine()
 	baseHeap := heapMiB()
 
-	e := newEnv(t, func(c *Config) { c.IdleTimeout = 30 * time.Second })
+	// The fan-out is ten times the inbound rate (every client sees the whole room), and the default buffer of 64 frames
+	// is half a second of backlog here. A loaded CI machine can stall a reader for longer, and the hub then ends
+	// the slow session by design; this test checks delivery and leaks, not that policy, so the buffer is generous.
+	e := newEnvBuffered(t, func(c *Config) { c.IdleTimeout = 30 * time.Second }, 1024)
 	var stats loadStats
 	var readers sync.WaitGroup
 	received := make([][]atomic.Int64, loadRooms) // upserts seen per client
