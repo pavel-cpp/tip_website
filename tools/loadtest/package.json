@@ -1,0 +1,7 @@
+{
+  "name": "tip-loadtest",
+  "private": true,
+  "type": "module",
+  "description": "Load-test scripts for a TIP deployment (see README.md)",
+  "dependencies": { "ws": "8.18.3" }
+}
