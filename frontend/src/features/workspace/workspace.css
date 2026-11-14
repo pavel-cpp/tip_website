@@ -34,9 +34,23 @@
   margin: 6px var(--space-1);
   background: var(--border);
 }
+/* The hint takes whatever room is left and disappears as a whole when there is none. It must never wrap onto
+   a second line: the toolbar would grow by a row each time the buttons get wider (more tickets selected) and
+   the table below would jump under the pointer. The inner span cannot shrink, so when it does not fit it
+   wraps inside the fixed one-line box and is clipped away. */
 .ws-hint {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  height: 1.6em;
+  overflow: hidden;
   font-size: var(--fs-sm);
   color: var(--text-muted);
+}
+.ws-hint-in {
+  flex: none;
   white-space: nowrap;
 }
 .ws-hint kbd {

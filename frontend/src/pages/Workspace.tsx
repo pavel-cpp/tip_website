@@ -809,10 +809,11 @@ function WorkspaceView({ project }: { project: Project }) {
               />
             </>
           )}
-          <span className="spacer" />
           {canPrint && (
             <span className="ws-hint">
-              {t('workspace.copyHint')} <kbd>{shortcut}</kbd>+<kbd>C</kbd>
+              <span className="ws-hint-in">
+                {t('workspace.copyHint')} <kbd>{shortcut}</kbd>+<kbd>C</kbd>
+              </span>
             </span>
           )}
         </div>
