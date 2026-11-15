@@ -254,11 +254,11 @@ func (l *MemoryLoginLimiter) Reserve(ip, login string) (func(failed bool), time.
 	if wait > 0 {
 		return nil, wait
 	}
-	// A set full of live windows refuses an identity it has not seen instead of forgetting
-	// someone else's counter; an address that proved itself by logging in is let through uncounted.
-	if !trusted && !l.names.room(login, now) {
-		return nil, loginFullRetry
-	}
+	// A full per-login set is not a reason to refuse anybody: pinning it needs a botnet that keeps tens of
+	// thousands of invented logins above a handful of failures each, and refusing would hand it a lockout of
+	// every login it has not seen yet. The attempt is simply not counted towards that ceiling; the pair and
+	// address limits below still apply to it. An address that proved itself by logging in is let through
+	// uncounted when those two sets are full.
 	pw, aw := l.pairs.add(pair, now), l.addrs.add(addr, now)
 	if !trusted && (pw == nil || aw == nil) {
 		if pw != nil {
