@@ -188,7 +188,7 @@ func TestFontsFile(t *testing.T) {
 	}
 	hd := rec.Header()
 	if hd.Get("Content-Type") != "font/woff2" || hd.Get("ETag") != `"`+testSHA+`"` ||
-		hd.Get("Cache-Control") != "public, max-age=31536000, immutable" || fake.inm != `"x"` {
+		hd.Get("Cache-Control") != "private, max-age=31536000, immutable" || fake.inm != `"x"` {
 		t.Fatalf("headers %v inm=%q", hd, fake.inm)
 	}
 

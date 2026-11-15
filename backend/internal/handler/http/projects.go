@@ -49,7 +49,8 @@ type ProjectsService interface {
 const multipartOverhead = 64 << 10
 
 // imageCacheControl: image URLs carry ?v=<hash prefix>, so the content behind a URL never changes.
-const imageCacheControl = "public, max-age=31536000, immutable"
+// The resources require authentication, so shared caches (proxies, CDNs) must not store them.
+const imageCacheControl = "private, max-age=31536000, immutable"
 
 // ProjectsHandler implements the project operations of gen.ServerInterface.
 type ProjectsHandler struct {
