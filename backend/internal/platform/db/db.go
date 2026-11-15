@@ -14,10 +14,11 @@ import (
 	"github.com/pressly/goose/v3/lock"
 )
 
-// Pool limits sized for a 2 GB server running Postgres with max_connections=20.
+// Pool limits sized for a 2 GB server running Postgres with max_connections=20: 16 for the application leaves room
+// for the backup job, migrations and an admin session. Under 80 editing operators the former 10 were all in use.
 const (
-	maxOpenConns    = 10
-	maxIdleConns    = 5
+	maxOpenConns    = 16
+	maxIdleConns    = 8
 	connMaxLifetime = 30 * time.Minute
 )
 

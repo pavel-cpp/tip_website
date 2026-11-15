@@ -35,7 +35,16 @@
 (access_log) {
 	log {
 		output stdout
-		format json
+		# Participant search terms (names, phone numbers) travel in the query string of the list request; the
+		# access log is shipped to Loki, so the query is dropped from the logged URI (CLAUDE.md: no personal data).
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete q
+				}
+			}
+		}
 	}
 }
 

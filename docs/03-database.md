@@ -279,13 +279,15 @@ $DATA_DIR/tmp/                                           # загрузки до
 |---|---|---|
 | Очистка аудита | 1 сутки | Удалить записи старше `AUDIT_RETENTION_DAYS` (30) и сверх `AUDIT_MAX_ROWS` (100 000) — пачками по 5 000 (`DELETE … WHERE id IN (SELECT id … LIMIT 5000)`), чтобы не блокировать таблицу |
 | GC файлов | 1 сутки | см. выше |
-| `VACUUM`/`ANALYZE` | autovacuum | дефолты достаточны |
+| `VACUUM`/`ANALYZE` | autovacuum, `autovacuum_naptime=1d` | таблицы небольшие и правятся «на месте» (≈230 байт на строку участника), раз в сутки достаточно; на проде за 40 минут тестовой нагрузки с 20 тыс. правок мёртвые строки вычищались без вмешательства |
 
 ## 5. Настройки Postgres под ограниченные ресурсы
 
-`shared_buffers=32MB`, `work_mem=4MB`, `max_connections=20` (на сервере всего 2 ГБ RAM), `max_wal_size=256MB`, `min_wal_size=64MB` (диск сервера — 10 ГБ),
+`shared_buffers=96MB`, `effective_cache_size=512MB`, `work_mem=4MB`, `max_connections=20` (на сервере всего 2 ГБ RAM, контейнер Postgres — 256 МБ),
+`max_wal_size=256MB`, `min_wal_size=64MB`, `autovacuum_naptime=1d` (см. выше), `log_autovacuum_min_duration=1s`,
 `log_min_duration_statement=300ms` (медленные запросы → Loki), `log_connections=off`.
-Пул приложения: `SetMaxOpenConns(10)`, `SetMaxIdleConns(5)`, `SetConnMaxLifetime(30m)`.
+Пул приложения: `SetMaxOpenConns(16)` (при 80 одновременно правящих операторах прежние 10 соединений были заняты все),
+`SetMaxIdleConns(8)`, `SetConnMaxLifetime(30m)`.
 
 ## 6. Соответствие старой БД (для справки; данные не переносим)
 

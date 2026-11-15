@@ -69,11 +69,17 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
-    mem_limit: 96m
-    memswap_limit: 96m
+    # 160 MiB: under 60-80 operators editing at once the Go heap sat at 80-85 MiB of the former 96 MiB limit, and a
+    # list of 5000 rows is built in memory per request. GOMEMLIMIT leaves room for stacks and socket buffers.
+    mem_limit: 160m
+    memswap_limit: 160m
     oom_score_adj: -500
+    # tipd is distroless and runs as non-root; it needs no capabilities and must never gain any.
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
     environment:
-      GOMEMLIMIT: 80MiB
+      GOMEMLIMIT: 128MiB
       HTTP_ADDR: ":8080"
       INTERNAL_ADDR: ":9090"
       DATA_DIR: /data
@@ -90,7 +96,7 @@ services:
       FORCE_PASSWORD_CHANGE: ${FORCE_PASSWORD_CHANGE:-false}
       BOOTSTRAP_ADMIN_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       # Shown as a link in the admin menu.
       GRAFANA_URL: ${GRAFANA_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -128,15 +134,23 @@ services:
   postgres:
     image: postgres:18-alpine
     restart: unless-stopped
-    mem_limit: 160m
-    memswap_limit: 160m
+    mem_limit: 256m
+    memswap_limit: 256m
     oom_score_adj: -500
     # Tuning per docs/03-database.md section 5. Slow queries go to stdout and
     # on to Loki through Vector.
     command:
       - postgres
       - -c
-      - shared_buffers=32MB
+      - shared_buffers=96MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      # The tables are small and mostly updated in place; a daily pass is enough and keeps the 2 vCPU free for
+      # the application. The log line shows every run longer than a second.
+      - autovacuum_naptime=1d
+      - -c
+      - log_autovacuum_min_duration=1s
       - -c
       - work_mem=4MB
       - -c
@@ -175,8 +189,8 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
-    mem_limit: 32m
-    memswap_limit: 32m
+    mem_limit: 96m
+    memswap_limit: 96m
     oom_score_adj: -400
     # noeviction: eviction would silently un-revoke tokens. AOF keeps the
     # revocation state across restarts. The password is read from the
@@ -186,7 +200,7 @@ services:
       - -c
       - >-
         exec redis-server
-        --maxmemory 24mb
+        --maxmemory 64mb
         --maxmemory-policy noeviction
         --appendonly yes
         --appendfsync everysec
