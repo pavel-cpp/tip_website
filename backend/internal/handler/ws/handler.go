@@ -3,9 +3,11 @@
 package ws
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -50,10 +52,13 @@ type Config struct {
 	ReauthTimeout time.Duration
 	IdleTimeout   time.Duration
 	WriteTimeout  time.Duration
-	// MaxConnsPerUser caps one user's simultaneous connections; when a new one exceeds it, the
-	// oldest is closed with 1008 TOO_MANY_CONNECTIONS. Closing the oldest (not rejecting the
-	// newest) keeps a reconnect after a silent network drop working while the dead socket
-	// still waits for its idle timeout. Zero selects DefaultMaxConnsPerUser.
+	// MaxConnsPerUser caps the sockets of one user (live plus the ones still being closed).
+	// A connection arriving at the cap is rejected with 1008 TOO_MANY_CONNECTIONS and, so a
+	// dead tab or a dropped network cannot lock the user out, the oldest live connection is
+	// evicted (one at a time); the client's retry succeeds once that socket is gone, within
+	// about closeTimeout. Rejecting instead of admitting and then evicting is what keeps the
+	// number of sockets from ever exceeding the cap. Clients should retry with backoff.
+	// Zero selects DefaultMaxConnsPerUser.
 	MaxConnsPerUser int
 	// Now overrides time.Now for token expiry checks in tests.
 	Now func() time.Time
@@ -68,43 +73,79 @@ type Handler struct {
 	wg       sync.WaitGroup
 
 	connMu sync.Mutex
-	conns  map[string][]*connection // live connections per user, oldest first
+	conns  map[string]*userConns
 }
 
-// register records c as a live connection of the user and closes the oldest ones beyond the cap.
-// Victims are picked under connMu but closed after it is released, on their own goroutine: a
-// close runs a handshake with a timeout, and a client that does not read must not stall every
-// other connect and disconnect (or the connecting user) behind the mutex.
-func (h *Handler) register(userID string, c *connection) {
-	h.connMu.Lock()
-	list := append(h.conns[userID], c)
-	var victims []*connection
-	if over := len(list) - h.cfg.MaxConnsPerUser; over > 0 {
-		victims = list[:over:over]
-		list = list[over:]
-	}
-	h.conns[userID] = list
-	h.connMu.Unlock()
-	for _, v := range victims {
-		go v.closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
-	}
+// userConns tracks the sockets of one user. Evicted connections stay in closing until their
+// ServeProject really returns, so they keep counting against the cap while they linger.
+type userConns struct {
+	live    []*connection // oldest first
+	closing []*connection
 }
 
-func (h *Handler) unregister(userID string, c *connection) {
+// register admits c for userID or reports false when the user is at the cap (see
+// Config.MaxConnsPerUser). The eviction is started after connMu is released: no network call
+// ever runs under the lock.
+func (h *Handler) register(userID string, c *connection) bool {
 	h.connMu.Lock()
-	defer h.connMu.Unlock()
-	list := h.conns[userID]
-	for i, x := range list {
-		if x == c {
-			list = append(list[:i:i], list[i+1:]...)
-			break
+	u := h.conns[userID]
+	if u == nil {
+		u = &userConns{}
+		h.conns[userID] = u
+	}
+	if len(u.live)+len(u.closing) >= h.cfg.MaxConnsPerUser {
+		var victim *connection
+		if len(u.closing) == 0 && len(u.live) > 0 {
+			victim, u.live = u.live[0], u.live[1:]
+			u.closing = append(u.closing, victim)
 		}
+		h.connMu.Unlock()
+		if victim != nil {
+			go victim.closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
+		}
+		return false
 	}
-	if len(list) == 0 {
-		delete(h.conns, userID)
+	c.userID = userID
+	u.live = append(u.live, c)
+	h.connMu.Unlock()
+	return true
+}
+
+// unregister forgets c when its handler returns; it is a no-op for a connection that was never admitted.
+func (h *Handler) unregister(c *connection) {
+	if c.userID == "" {
 		return
 	}
-	h.conns[userID] = list
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
+	u := h.conns[c.userID]
+	if u == nil {
+		return
+	}
+	u.live = removeConn(u.live, c)
+	u.closing = removeConn(u.closing, c)
+	if len(u.live)+len(u.closing) == 0 {
+		delete(h.conns, c.userID)
+	}
+}
+
+func removeConn(list []*connection, c *connection) []*connection {
+	for i, x := range list {
+		if x == c {
+			return append(list[:i:i], list[i+1:]...)
+		}
+	}
+	return list
+}
+
+// userConnCount returns how many sockets of the user are registered (live plus closing).
+func (h *Handler) userConnCount(userID string) int {
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
+	if u := h.conns[userID]; u != nil {
+		return len(u.live) + len(u.closing)
+	}
+	return 0
 }
 
 // enter registers one live connection. It refuses once Shutdown has started.
@@ -138,7 +179,7 @@ func New(cfg Config) *Handler {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	h := &Handler{cfg: cfg, conns: make(map[string][]*connection)}
+	h := &Handler{cfg: cfg, conns: make(map[string]*userConns)}
 	for _, o := range cfg.AllowedOrigins {
 		if u, err := url.Parse(o); err == nil && u.Host != "" {
 			h.patterns = append(h.patterns, u.Host)
@@ -188,9 +229,11 @@ type outMsg struct {
 type connection struct {
 	h    *Handler
 	conn *websocket.Conn
+	raw  net.Conn // the hijacked socket, kept to force-close a peer that stalls the close handshake
 	ctx  context.Context
 	// projectID is the room this connection belongs to, needed to re-check access.
 	projectID string
+	userID    string // set once the connection is admitted by Handler.register
 	ctrl      chan outMsg
 	log       zerolog.Logger
 	// writerDone is closed when the writer goroutine has exited.
@@ -204,8 +247,47 @@ type connection struct {
 	expTimer    *time.Timer
 }
 
+// hijackRecorder remembers the socket the websocket library hijacks. The library offers no way to
+// abort a close frame that is stuck in a blocked write (CloseNow waits for it), so the only hard
+// stop is closing the raw socket underneath.
+type hijackRecorder struct {
+	http.ResponseWriter
+	conn net.Conn
+}
+
+func (h *hijackRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := h.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer does not support hijacking")
+	}
+	c, rw, err := hj.Hijack()
+	h.conn = c
+	return c, rw, err
+}
+
+// closeTimeout bounds the close handshake: a peer that never reads must not hold the socket
+// (or the goroutine that closes it) for the library's default of several seconds.
+const closeTimeout = time.Second
+
+// closeWith sends the close frame and waits at most closeTimeout for the peer's answer, then
+// drops the socket. It may block for that long, so never call it under a lock.
 func (c *connection) closeWith(code websocket.StatusCode, reason string) {
-	c.closeOnce.Do(func() { _ = c.conn.Close(code, reason) })
+	c.closeOnce.Do(func() {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			_ = c.conn.Close(code, reason)
+		}()
+		select {
+		case <-done:
+		case <-time.After(closeTimeout):
+			if c.raw != nil {
+				_ = c.raw.Close()
+			}
+			_ = c.conn.CloseNow()
+			<-done
+		}
+	})
 }
 
 func (c *connection) write(data []byte) error {
@@ -230,7 +312,8 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 	}
 	defer h.wg.Done()
 	log := logging.FromContext(r.Context())
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+	hj := &hijackRecorder{ResponseWriter: w}
+	conn, err := websocket.Accept(hj, r, &websocket.AcceptOptions{
 		OriginPatterns:  h.patterns,
 		CompressionMode: websocket.CompressionDisabled,
 	})
@@ -242,8 +325,9 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &connection{h: h, conn: conn, ctx: ctx, projectID: projectID, ctrl: make(chan outMsg, ctrlQueue), log: log, writerDone: make(chan struct{})}
+	c := &connection{h: h, conn: conn, raw: hj.conn, ctx: ctx, projectID: projectID, ctrl: make(chan outMsg, ctrlQueue), log: log, writerDone: make(chan struct{})}
 	defer conn.CloseNow() //nolint:errcheck // best-effort cleanup after the protocol close
+	defer h.unregister(c)
 
 	actor, sess, ok := h.handshake(c, projectID)
 	if !ok {
@@ -251,8 +335,6 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 	}
 	defer sess.Leave()
 	defer c.stopTimers()
-	h.register(actor.UserID, c)
-	defer h.unregister(actor.UserID, c)
 
 	go func() {
 		defer close(c.writerDone)
@@ -286,6 +368,10 @@ func (h *Handler) handshake(c *connection, projectID string) (domain.Actor, doma
 	}
 	if !actor.TokenExp.IsZero() && !h.cfg.Now().Before(actor.TokenExp) {
 		c.reject(domain.ErrTokenExpired)
+		return domain.Actor{}, nil, false
+	}
+	if !h.register(actor.UserID, c) {
+		c.closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
 		return domain.Actor{}, nil, false
 	}
 	sess, err := h.cfg.Collab.Join(c.ctx, actor, projectID)

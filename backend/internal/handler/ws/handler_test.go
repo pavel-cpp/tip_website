@@ -744,21 +744,106 @@ func TestReauthWithInvisibleProjectCloses(t *testing.T) {
 	}
 }
 
-func TestPerUserConnectionCapClosesOldest(t *testing.T) {
+// At the cap a new connection is rejected, and the oldest live one is evicted so the user is not locked out by a
+// dead tab; the retry succeeds once the evicted socket is gone.
+func TestPerUserConnectionCapRejectsNewAndEvictsOldest(t *testing.T) {
 	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 2 })
 	first, _ := e.join("p1", "alice")
 	second, _ := e.join("p1", "alice")
 	other, _ := e.join("p1", "bob") // another user does not count against alice
-	third, _ := e.join("p1", "alice")
 
+	rejected := e.connect("p1", "alice")
+	if code, reason := rejected.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("new connection close = %d %q", code, reason)
+	}
 	if code, reason := first.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
 		t.Fatalf("oldest close = %d %q", code, reason)
 	}
+	waitFor(t, func() bool { return e.h.userConnCount("alice") == 1 }, "evicted connection unregistered")
+
+	third, _ := e.join("p1", "alice") // the retry fits now
 	for name, cl := range map[string]*client{"second": second, "third": third, "bob": other} {
 		cl.send(map[string]any{"t": "ping"})
 		if f := cl.recvType("pong"); f["t"] != "pong" {
 			t.Fatalf("%s: %v", name, f)
 		}
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for: %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A burst of connects from one user must never register more sockets than the cap, however slowly the evicted ones
+// finish closing.
+func TestConnectionBurstNeverExceedsCap(t *testing.T) {
+	const capN, burst = 3, 40
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = capN })
+	sl, url := serveStalled(t, e.h, nil)
+
+	var maxSeen atomic.Int64
+	stop := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if n := int64(e.h.userConnCount("alice")); n > maxSeen.Load() {
+				maxSeen.Store(n)
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	var admitted atomic.Int64
+	for i := 0; i < burst; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c, _, err := websocket.Dial(ctx, url, nil)
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.CloseNow() }()
+			data, _ := json.Marshal(map[string]any{"t": "auth", "token": "alice"})
+			if c.Write(ctx, websocket.MessageText, data) != nil {
+				return
+			}
+			if _, data, err := c.Read(ctx); err == nil && strings.Contains(string(data), `"hello"`) {
+				admitted.Add(1)
+				time.Sleep(300 * time.Millisecond) // hold the socket while the burst continues
+			}
+		}()
+	}
+	// Freeze every server-side connection: evicted sockets cannot finish their close handshake quickly.
+	time.AfterFunc(20*time.Millisecond, func() {
+		sl.mu.Lock()
+		defer sl.mu.Unlock()
+		for _, c := range sl.conns {
+			c.stall.Store(true)
+		}
+	})
+	wg.Wait()
+	close(stop)
+	<-sampled
+	if got := maxSeen.Load(); got > capN {
+		t.Fatalf("registered %d sockets at once, cap is %d", got, capN)
+	}
+	if admitted.Load() == 0 {
+		t.Fatal("no connection was admitted")
 	}
 }
 
@@ -875,25 +960,57 @@ func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
 	}
 }
 
-// Closing the evicted connection runs a close handshake that a client which does not read can stall for
-// seconds; that must neither delay the connecting user nor block other users behind the registry lock.
-func TestSlowVictimDoesNotBlockOthers(t *testing.T) {
+// An evicted client that never reads must be gone within about two seconds (close frame with a short timeout, then a
+// hard close), and neither the connecting user nor other users may wait for it.
+func TestSlowVictimIsDroppedAndDoesNotBlockOthers(t *testing.T) {
 	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 1 })
 	sl, url := serveStalled(t, e.h, nil)
 	dialJoin(t, url, "alice")
 	sl.freeze(0)
 
-	pong := func(cl *client, who string) {
-		t.Helper()
-		start := time.Now()
-		cl.send(map[string]any{"t": "ping"})
-		cl.recvType("pong")
-		if d := time.Since(start); d > time.Second {
-			t.Fatalf("%s waited %v behind the stalled victim", who, d)
-		}
+	start := time.Now()
+	// Over the cap: rejected immediately, which evicts the frozen first connection.
+	rejected := e.dialRaw(t, url, "alice")
+	if code, reason := rejected.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("close = %d %q", code, reason)
 	}
-	second := dialJoin(t, url, "alice") // evicts the frozen first connection
-	pong(second, "the connecting user")
-	time.Sleep(50 * time.Millisecond)
-	pong(dialJoin(t, url, "bob"), "another user")
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("rejection took %v", d)
+	}
+
+	// Another user is not delayed by the victim's close.
+	bobStart := time.Now()
+	bob := dialJoin(t, url, "bob")
+	bob.send(map[string]any{"t": "ping"})
+	bob.recvType("pong")
+	if d := time.Since(bobStart); d > time.Second {
+		t.Fatalf("another user waited %v behind the stalled victim", d)
+	}
+
+	// The victim is dropped within ~closeTimeout even though it never reads.
+	deadline := start.Add(2 * time.Second)
+	for e.h.userConnCount("alice") != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the non-reading victim is still registered after 2s")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	alice := dialJoin(t, url, "alice") // and the retry is admitted
+	alice.send(map[string]any{"t": "ping"})
+	alice.recvType("pong")
+}
+
+// dialRaw dials url and sends the auth frame without waiting for a reply.
+func (e *env) dialRaw(t *testing.T, url, token string) *client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
+	cl := &client{t: t, c: c}
+	cl.send(map[string]any{"t": "auth", "token": token})
+	return cl
 }
