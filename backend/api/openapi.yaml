@@ -209,7 +209,7 @@ paths:
       description: |
         Exchanges the refresh cookie for a new pair. The family's state in Redis moves to the new token; presenting the
         previous one again within 10 seconds is idempotent, anything older is treated as reuse (`401 REFRESH_INVALID`,
-        chain closed). At most 30 refreshes per minute per family and 120 per client address (`429 RATE_LIMITED`).
+        chain closed). At most 30 refreshes per minute per family and 600 per client address (`429 RATE_LIMITED`).
         Roles and permissions in the new access token are read from the database.
       security:
         - refreshCookie: []

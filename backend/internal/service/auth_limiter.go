@@ -13,13 +13,14 @@ const (
 	loginNameLimit = 100 // failed attempts per login over all addresses
 	loginWindow    = 15 * time.Minute
 	// loginMaxInFlight bounds the logins and password changes running at once. argon2 admits only a
-	// couple of hashes at a time, so more than a few waiting requests just queue real users behind
-	// an unauthenticated flood; the surplus is rejected at once instead. loginReservedSlots of them
+	// couple of hashes at a time (about 60 ms each), so two dozen waiting requests are half a second of
+	// queue: enough for a shift of operators behind one office address to sign in together, while the
+	// surplus of an unauthenticated flood is rejected at once instead of queueing real users behind it. loginReservedSlots of them
 	// are kept for addresses that already logged in to that account successfully, and
 	// loginAddrInFlight stops a single address (an IPv6 /64) from taking the shared ones.
-	loginMaxInFlight   = 8
-	loginReservedSlots = 2
-	loginAddrInFlight  = 2
+	loginMaxInFlight   = 24
+	loginReservedSlots = 4
+	loginAddrInFlight  = 8
 	loginBusyRetry     = time.Second
 	// loginTrustTTL and loginTrustMax bound the memory of successful (login, address) pairs. Such a
 	// pair is not stopped by the per-login ceiling, so an attacker who locks a victim out from
@@ -37,7 +38,7 @@ const (
 // minutes) plus once per page load, so these are far above honest use and only stop a loop.
 const (
 	refreshFamilyLimit = 30
-	refreshIPLimit     = 120
+	refreshIPLimit     = 600
 	refreshWindow      = time.Minute
 )
 
@@ -96,6 +97,11 @@ func newWindowSet(span time.Duration, maxKeys int, evictable func(*window) bool)
 func farFromLimit(limit int) func(*window) bool {
 	return func(w *window) bool { return w.n*2 <= limit }
 }
+
+// fewFailures is the eviction policy of the per-login set: only a window with a handful of failures (a made-up
+// login or a typo) may be given up. Pushing a real target out needs a flood of invented logins that each keep
+// more than a handful of failures alive, which the per-address and per-pair limits make very expensive.
+func fewFailures(w *window) bool { return w.n <= 5 }
 
 // never is the eviction policy of sets whose live windows must all survive.
 func never(*window) bool { return false }
@@ -217,7 +223,7 @@ func NewMemoryLoginLimiter(clock Clock) *MemoryLoginLimiter {
 		clock:   clock,
 		pairs:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginPairLimit)),
 		addrs:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginIPLimit)),
-		names:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginNameLimit)),
+		names:   newWindowSet(loginWindow, limiterMaxKeys, fewFailures),
 		trusted: newWindowSet(loginTrustTTL, loginTrustMax, nil),
 		perAddr: make(map[string]int),
 	}

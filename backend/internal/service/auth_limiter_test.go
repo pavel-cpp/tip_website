@@ -58,26 +58,28 @@ func TestLoginInFlightCaps(t *testing.T) {
 		t.Fatal("an unknown address above the shared slots must be rejected, not queued")
 	}
 	// The reserved slots are for addresses that logged in to the account before.
-	l.Succeed("10.0.2.1", "admin")
-	l.Succeed("10.0.2.2", "admin")
-	for _, ip := range []string{"10.0.2.1", "10.0.2.2"} {
+	for i := range loginReservedSlots {
+		ip := fmt.Sprintf("10.0.2.%d", i)
+		l.Succeed(ip, "admin")
 		release, wait := l.Reserve(ip, "admin")
 		if wait != 0 {
 			t.Fatalf("trusted %s rejected", ip)
 		}
 		releases = append(releases, release)
 	}
-	l.Succeed("10.0.2.3", "admin")
-	if _, wait := l.Reserve("10.0.2.3", "admin"); wait <= 0 {
+	extra := fmt.Sprintf("10.0.3.%d", 1)
+	l.Succeed(extra, "admin")
+	if _, wait := l.Reserve(extra, "admin"); wait <= 0 {
 		t.Fatal("the global cap must hold for everybody")
 	}
 	releases[0](false)
 	releases[0](false) // a repeated release must not free a second slot
-	if _, wait := l.Reserve("10.0.2.3", "admin"); wait != 0 {
+	if _, wait := l.Reserve(extra, "admin"); wait != 0 {
 		t.Fatal("a freed slot must be reusable")
 	}
-	l.Succeed("10.0.2.4", "admin")
-	if _, wait := l.Reserve("10.0.2.4", "admin"); wait <= 0 {
+	other := "10.0.3.2"
+	l.Succeed(other, "admin")
+	if _, wait := l.Reserve(other, "admin"); wait <= 0 {
 		t.Fatal("a repeated release freed an extra slot")
 	}
 }
@@ -167,8 +169,11 @@ func TestLoginCeilingCountsFailuresOnlyAndSparesKnownAddresses(t *testing.T) {
 
 func TestLoginSetAdmitsRealLoginsDuringAFloodOfMadeUpOnes(t *testing.T) {
 	c := newClock()
-	names := newWindowSet(time.Minute, 10, farFromLimit(loginNameLimit))
-	for range loginNameLimit {
+	names := newWindowSet(time.Minute, 10, fewFailures)
+	for range 20 { // a login under real attack, well below the ceiling but far above a typo
+		names.add("admin", c.Now())
+	}
+	for range loginNameLimit - 20 {
 		names.add("admin", c.Now())
 	}
 	for i := range 200 { // an unauthenticated client invents logins, one failure each
@@ -178,7 +183,7 @@ func TestLoginSetAdmitsRealLoginsDuringAFloodOfMadeUpOnes(t *testing.T) {
 		t.Fatal("made-up logins must not lock real ones out")
 	}
 	if w := names.live("admin", c.Now()); w == nil || w.n != loginNameLimit {
-		t.Fatal("a login close to its ceiling must not be forgotten to make room")
+		t.Fatal("a login with many failures must not be forgotten to make room")
 	}
 }
 
