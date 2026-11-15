@@ -48,7 +48,7 @@ compactor:
   delete_request_store: filesystem
 
 limits_config:
-  retention_period: ${OBS_RETENTION_DAYS:-3}d
+  retention_period: ${OBS_RETENTION_DAYS:-30}d
   # Storm protection (docs/05-observability.md section 1).
   ingestion_rate_mb: 4
   ingestion_burst_size_mb: 8

@@ -109,7 +109,7 @@ services:
       UPLOADS_MAX_TOTAL_MB: ${UPLOADS_MAX_TOTAL_MB:-800}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
       AUDIT_MAX_ROWS: ${AUDIT_MAX_ROWS:-100000}
-      OBS_RETENTION_DAYS: ${OBS_RETENTION_DAYS:-3}
+      OBS_RETENTION_DAYS: ${OBS_RETENTION_DAYS:-30}
       # The admin status page reads the backup metrics file and probes Loki.
       BACKUP_METRICS_PATH: /backups/metrics/backup.prom
       LOKI_URL: ${LOKI_URL:-off}
@@ -227,18 +227,20 @@ services:
   prometheus:
     image: prom/prometheus:v3.1.0
     restart: unless-stopped
-    mem_limit: 128m
-    memswap_limit: 128m
+    mem_limit: 160m
+    memswap_limit: 160m
     oom_score_adj: 500
     environment:
-      GOMEMLIMIT: 100MiB
+      GOMEMLIMIT: 128MiB
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=${OBS_RETENTION_DAYS:-3}d
-      - --storage.tsdb.retention.size=300MB
+      - --storage.tsdb.retention.time=${OBS_RETENTION_DAYS:-30}d
+      # About 50 MB a day at the current 5 thousand series: 30 days fit in 1.5 GB, the cap leaves room to grow.
+      - --storage.tsdb.retention.size=2GB
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - promdata:/prometheus
     networks: [internal]
     healthcheck:
@@ -259,7 +261,7 @@ services:
     oom_score_adj: 500
     environment:
       GOMEMLIMIT: 200MiB
-      OBS_RETENTION_DAYS: ${OBS_RETENTION_DAYS:-3}
+      OBS_RETENTION_DAYS: ${OBS_RETENTION_DAYS:-30}
     command:
       - -config.file=/etc/loki/loki.yml
       - -config.expand-env=true

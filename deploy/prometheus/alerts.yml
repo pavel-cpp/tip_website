@@ -1,0 +1,40 @@
+# Alert rules. They are evaluated by Prometheus and show up under Alerting in Grafana and on the Prometheus
+# /alerts page; delivery to a person (mail or webhook) needs an Alertmanager or Grafana contact point, which is not
+# configured yet (Telegram is unreachable from the server).
+groups:
+  - name: tip
+    rules:
+      - alert: TipdMemoryHigh
+        expr: tip_container_memory_working_set_bytes{service="tipd"} / tip_container_memory_limit_bytes{service="tipd"} > 0.85
+        for: 5m
+        annotations:
+          summary: "tipd uses over 85 % of its memory limit (it is killed at 100 %)"
+      - alert: DatabasePoolSaturated
+        expr: tip_db_in_use / tip_db_max_open_connections > 0.9
+        for: 5m
+        annotations:
+          summary: "The application's database pool is almost fully in use; requests wait for a connection"
+      - alert: HighRequestLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(tip_http_request_duration_seconds_bucket{route!~".*/ws"}[5m]))) > 1
+        for: 10m
+        annotations:
+          summary: "p95 of HTTP requests (WebSocket excluded) is over one second"
+      - alert: ServerErrors
+        expr: sum(rate(tip_http_requests_total{status=~"5.."}[5m])) / sum(rate(tip_http_requests_total[5m])) > 0.02
+        for: 5m
+        annotations:
+          summary: "More than 2 % of requests end with a 5xx status"
+      - alert: DiskSpaceLow
+        expr: tip_data_dir_free_bytes < 8e9
+        for: 10m
+        annotations:
+          summary: "Less than 8 GB (20 %) free on the data disk"
+      - alert: BackupStale
+        expr: time() - backup_last_success_timestamp > 26 * 3600
+        annotations:
+          summary: "The last successful backup is older than 26 hours"
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        annotations:
+          summary: "A scrape target is down: {{ $labels.job }}"

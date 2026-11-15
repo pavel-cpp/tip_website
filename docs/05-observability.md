@@ -1,7 +1,7 @@
 # 05. Наблюдаемость, ресурсы и эксплуатация
 
 Требования: система наблюдаема; ресурсы (RAM/CPU) и диск сильно ограничены; логи и метрики хранятся
-**последние 3–5 дней, настраиваемо** (`OBS_RETENTION_DAYS`, по умолчанию **3**: на сервере всего **10 ГБ диска**, см. раздел 6.1).
+**последние 30 суток, настраиваемо** (`OBS_RETENTION_DAYS`, по умолчанию **30**: на сервере 40 ГБ диска; Prometheus ≈ 50 МБ в сутки, Loki ≈ 5 МБ в сутки, см. раздел 6.1). Правила алертов лежат в `deploy/prometheus/alerts.yml` (память tipd, пул БД, p95, 5xx, диск, бэкап, цели скрейпа); доставка человеку (почта или вебхук) не настроена.
 
 ## 1. Выбранная схема
 
@@ -13,8 +13,8 @@ flowchart LR
   caddy["Caddy access-log (JSON)"] -->|stdout| docker
   pg["Postgres (slow queries)"] -->|stdout| docker
   docker -->|docker_logs| vec["Vector\n(метки: service, level)"]
-  vec -->|loki sink| LOKI[("Loki\nmonolithic, filesystem\nretention 3d")]
-  tipd -.scrape 15s.-> PROM[("Prometheus\ntsdb.retention.time=3d\ntsdb.retention.size")]
+  vec -->|loki sink| LOKI[("Loki\nmonolithic, filesystem\nretention 30d")]
+  tipd -.scrape 15s.-> PROM[("Prometheus\ntsdb.retention.time=30d\ntsdb.retention.size")]
   ne["node_exporter"] -.scrape.-> PROM
   GRAF["Grafana :3000\nметрики + логи + алерты"] --> PROM
   GRAF --> LOKI
@@ -95,8 +95,8 @@ flowchart LR
 
 | Что | Где | Срок | Настройка |
 |---|---|---|---|
-| Логи приложений и инфраструктуры | Loki (compactor retention) | 3 дня | `OBS_RETENTION_DAYS` |
-| Метрики | Prometheus TSDB | 3 дня + `retention.size=300MB` | `OBS_RETENTION_DAYS` |
+| Логи приложений и инфраструктуры | Loki (compactor retention) | 30 суток | `OBS_RETENTION_DAYS` |
+| Метрики | Prometheus TSDB | 30 суток + `retention.size=2GB` | `OBS_RETENTION_DAYS` |
 | stdout-буфер Docker | json-file | 10 МБ на контейнер (`max-size=5m`, `max-file=2`) | `max-size`/`max-file` |
 | Refresh allow-list (`rt:*`), отзыв цепочек (`revfam:*`) | Redis (AOF) | 30 д | `REFRESH_TOKEN_TTL` |
 | Чёрный список access (`bl:jti:*`) | Redis (AOF) | остаток жизни токена (≤ 15 мин) | `ACCESS_TOKEN_TTL` |
@@ -152,7 +152,7 @@ flowchart LR
 | Docker-образы | ≈ 1,4 ГБ | tipd ≈ 25 МБ, Caddy, Postgres alpine, Redis, Prometheus, node_exporter, **Loki ≈ 0,1 ГБ, Vector ≈ 0,1 ГБ**, Grafana ≈ 0,4 ГБ (оценка, сверить `docker image ls`) |
 | PostgreSQL (данные + WAL) | ≈ 0,3 ГБ | `max_wal_size=256MB`; аудит ≲ 60 МБ |
 | Картинки проектов (`uploads/`) | ≤ 0,8 ГБ | потолок `UPLOADS_MAX_TOTAL_MB`; при превышении — `507 DISK_LOW` |
-| Prometheus | ≤ 0,3 ГБ | 3 дня + `retention.size` |
+| Prometheus | ≤ 2 ГБ | 30 суток + `retention.size` |
 | Loki (логи) | ≤ 0,5 ГБ | 3 дня, чанки сжаты |
 | Docker json-file | ≤ 0,1 ГБ | `max-size=5m`, `max-file=2` на контейнер |
 | Бэкапы | ≤ 0,9 ГБ | 3 дампа БД (небольшие, сжаты) + **1** снимок `uploads/` (картинки неизменяемы, копия одна и обновляется) |
