@@ -428,7 +428,7 @@ flowchart LR
 | CSRF / CSWSH | `CrossOriginProtection` (Sec-Fetch-Site/Origin) + `SameSite=Lax`; WS — проверка Origin |
 | Rate-limit | Логин: 5 неудач/15 мин на пару IP+логин и 20/15 мин на IP → 429 `Retry-After`; WS-сообщения; загрузки |
 | Загрузки | Лимит тела, magic-bytes + полное декодирование, лимит пикселей (защита от decompression-bomb), перекодирование аватара, перезапись имени файла (sha256), без исполнения |
-| Заголовки | CSP (`default-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'`; для `/api/docs` отдельная политика под Swagger UI), HSTS (Caddy), `X-Content-Type-Options`, `Referrer-Policy` |
+| Заголовки | CSP (`default-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'`; для `/api/docs` отдельная политика под Swagger UI), HSTS (Caddy), `X-Content-Type-Options`, `Referrer-Policy` |
 | SQL | Только параметризованные запросы |
 | ПДн участников | Не попадают в логи/метрики/аудит (только ID), доступ только по ролям |
 | Секреты | env/`.env` вне git: пароль БД, пароль Redis, `JWT_ACCESS_SECRET` и `JWT_REFRESH_SECRET` (по ≥ 32 случайных байт каждый). Смена access-секрета разлогинивает за ≤ 15 мин, refresh-секрета — всех сразу |
@@ -440,7 +440,8 @@ flowchart LR
 | Переменная | По умолчанию | Описание |
 |---|---|---|
 | `HTTP_ADDR` | `:8080` | Публичный listener (за Caddy) |
-| `INTERNAL_ADDR` | `:9090` | `/metrics`, `/debug/pprof` — только внутренняя сеть |
+| `INTERNAL_ADDR` | `:9090` | `/metrics` — только внутренняя сеть; `/debug/pprof` включается флагом `PPROF_ENABLED` |
+| `PPROF_ENABLED` | `false` | Отдавать `/debug/pprof/*` на внутреннем listener (для разбора проблем; включать на время) |
 | `DATABASE_URL` | — | DSN Postgres |
 | `AUTO_MIGRATE` | `true` | Применять миграции при старте |
 | `DATA_DIR` | `/data` | `uploads/` |

@@ -15,7 +15,7 @@ export class FakeSocket implements SocketLike {
   readyState = 0
   onopen: ((ev: unknown) => void) | null = null
   onmessage: ((ev: { data: unknown }) => void) | null = null
-  onclose: ((ev: { code: number }) => void) | null = null
+  onclose: ((ev: { code: number; reason?: string }) => void) | null = null
   onerror: ((ev: unknown) => void) | null = null
   sent: Array<Record<string, unknown>> = []
   closedWith: number | undefined
@@ -44,9 +44,9 @@ export class FakeSocket implements SocketLike {
     this.onmessage?.({ data: JSON.stringify(frame) })
   }
 
-  serverClose(code: number): void {
+  serverClose(code: number, reason?: string): void {
     this.readyState = 3
-    this.onclose?.({ code })
+    this.onclose?.({ code, reason })
   }
 
   frames(t: string): Array<Record<string, unknown>> {

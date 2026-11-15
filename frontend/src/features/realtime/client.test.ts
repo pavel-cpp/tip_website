@@ -289,6 +289,18 @@ describe('close codes', () => {
     expect(r.onAuthLost).not.toHaveBeenCalled()
   })
 
+  it('1008 TOO_MANY_CONNECTIONS backs off like a network drop: no refresh, no logout, no instant retry', async () => {
+    const r = rig()
+    const s = connect(r)
+    s.serverClose(1008, 'TOO_MANY_CONNECTIONS')
+    await flush()
+    expect(r.refresh).not.toHaveBeenCalled()
+    expect(r.onAuthLost).not.toHaveBeenCalled()
+    expect(FakeSocket.instances).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(FakeSocket.instances).toHaveLength(2)
+  })
+
   it('1008 with a failed refresh logs out and does not reconnect', async () => {
     const r = rig()
     r.refresh.mockRejectedValue(new Error('401'))

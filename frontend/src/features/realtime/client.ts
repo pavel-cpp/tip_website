@@ -38,7 +38,7 @@ export interface SocketLike {
   readonly readyState: number
   onopen: ((ev: unknown) => void) | null
   onmessage: ((ev: { data: unknown }) => void) | null
-  onclose: ((ev: { code: number }) => void) | null
+  onclose: ((ev: { code: number; reason?: string }) => void) | null
   onerror: ((ev: unknown) => void) | null
   send(data: string): void
   close(code?: number, reason?: string): void
@@ -236,7 +236,7 @@ export class RealtimeClient {
     }
     sock.onerror = () => undefined
     sock.onclose = (ev) => {
-      if (this.socket === sock) this.onClose(ev.code)
+      if (this.socket === sock) this.onClose(ev.code, ev.reason)
     }
   }
 
@@ -371,13 +371,19 @@ export class RealtimeClient {
     )
   }
 
-  private onClose(code: number): void {
+  private onClose(code: number, reason?: string): void {
     this.socket = null
     this.authed = false
     this.stopPing()
     clearTimeout(this.cursorTimer)
     this.cursorTimer = undefined
     if (this.stopped) return
+    // Too many sockets of this user (many tabs): not an authorisation problem. Retrying at once would only make
+    // the tabs evict each other in turn, so it backs off like a network drop.
+    if (code === CLOSE_POLICY && reason === 'TOO_MANY_CONNECTIONS') {
+      this.scheduleReconnect()
+      return
+    }
     if (code === CLOSE_POLICY) {
       this.policyClose()
       return
