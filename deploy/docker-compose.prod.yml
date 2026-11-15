@@ -101,7 +101,9 @@ services:
       GRAFANA_URL: ${GRAFANA_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MAX_IMAGE_MB: ${MAX_IMAGE_MB:-10}
-      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-16000000}
+      # 12 MP: a decoded RGBA image of that size is 48 MiB, and a source that must be scaled down needs a second
+      # buffer next to it, all of it inside the 160 MiB limit. Ticket pictures are a few megapixels.
+      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-12000000}
       MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-1024}
       UPLOADS_MAX_TOTAL_MB: ${UPLOADS_MAX_TOTAL_MB:-800}
       AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-30}
