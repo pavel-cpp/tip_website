@@ -15,8 +15,8 @@ import (
 
 // Key prefixes. The scheme is part of the operational contract (runbook, incident response).
 const (
-	keyBurnt     = "rb:"       // rb:{refresh jti}: rotated refresh token, value = burn time in unix ms
-	keyReplay    = "rg:"       // rg:{refresh jti}: refresh token issued in exchange, 10 s window
+	keyRotation  = "rf:"       // rf:{fam}: hash {c: current refresh jti, p: previous jti, t: rotation time in unix ms}
+	keyReplay    = "rg:"       // rg:{fam}: refresh token issued by the last rotation, kept for the replay window only
 	keyFamily    = "revfam:"   // revfam:{fam}: closed login chain
 	keyAccessBL  = "bl:jti:"   // bl:jti:{access jti}: blacklisted access token
 	keyUserBL    = "bl:user:"  // bl:user:{uid}: revocation cutoff in unix ms
@@ -67,7 +67,6 @@ func (s *TokenStore) Revocation(ctx context.Context, q domain.RevocationQuery) (
 	type slot int
 	const (
 		slotAccess slot = iota
-		slotBurnt
 		slotFamily
 		slotCutoff
 	)
@@ -79,9 +78,6 @@ func (s *TokenStore) Revocation(ctx context.Context, q domain.RevocationQuery) (
 	}
 	if q.AccessJTI != "" {
 		add(slotAccess, keyAccessBL+q.AccessJTI)
-	}
-	if q.RefreshJTI != "" {
-		add(slotBurnt, keyBurnt+q.RefreshJTI)
 	}
 	if q.Family != "" {
 		add(slotFamily, keyFamily+q.Family)
@@ -107,8 +103,6 @@ func (s *TokenStore) Revocation(ctx context.Context, q domain.RevocationQuery) (
 			st.AccessRevoked = true
 		case slotFamily:
 			st.FamilyClosed = true
-		case slotBurnt:
-			st.RefreshBurnedAt = parseMillis(str)
 		case slotCutoff:
 			st.UserCutoff = parseMillis(str)
 		}
@@ -126,51 +120,67 @@ func parseMillis(s string) time.Time {
 	return time.UnixMilli(n).UTC()
 }
 
-// BurnRefresh marks the refresh token as used with SET NX, so that exactly one of several
-// concurrent exchanges wins.
-func (s *TokenStore) BurnRefresh(ctx context.Context, jti string, at time.Time, ttl time.Duration) (bool, time.Time, error) {
-	key := keyBurnt + jti
-	ok, err := s.c.SetNX(ctx, key, ms(at), ttlOrMin(ttl)).Result()
+// rotateScript is the compare-and-swap on the current refresh jti of a family, run atomically
+// inside Redis. KEYS: rotation hash, closed-family marker, replay token. ARGV: presented jti,
+// new jti, new token, now (ms), replay window (ms), state TTL (ms), replay token TTL (ms).
+// It answers {outcome, replay token}; the outcome numbers match domain.RotateOutcome.
+//
+// The first rotation of a family finds no state (login writes none) and accepts any presented
+// token: it was signed by us and the family is not closed. A family whose state has expired has
+// no live token left, because the state outlives the newest token it issued.
+var rotateScript = goredis.NewScript(`
+if redis.call('EXISTS', KEYS[2]) == 1 then return {3, ''} end
+local st = redis.call('HMGET', KEYS[1], 'c', 'p', 't')
+local cur = st[1]
+if cur and cur ~= ARGV[1] then
+  if st[2] == ARGV[1] and tonumber(ARGV[4]) - tonumber(st[3]) <= tonumber(ARGV[5]) then
+    return {1, redis.call('GET', KEYS[3]) or ''}
+  end
+  return {2, ''}
+end
+redis.call('HSET', KEYS[1], 'c', ARGV[2], 'p', ARGV[1], 't', ARGV[4])
+redis.call('PEXPIRE', KEYS[1], ARGV[6])
+redis.call('SET', KEYS[3], ARGV[3], 'PX', ARGV[7])
+return {0, ''}
+`)
+
+// replayGrace keeps the replay token slightly beyond the window; the window itself is judged by
+// the stored rotation time, so an early expiry would only turn a replay into an error.
+const replayGrace = 2 * time.Second
+
+// RotateRefresh exchanges the current refresh token of a family for the next one. Per family
+// Redis holds one small hash and one short-lived replay token, however often it rotates.
+func (s *TokenStore) RotateRefresh(ctx context.Context, r domain.RefreshRotation) (domain.RotateResult, error) {
+	res, err := rotateScript.Run(ctx, s.c,
+		[]string{keyRotation + r.Family, keyFamily + r.Family, keyReplay + r.Family},
+		r.Presented, r.NextJTI, r.NextToken, r.At.UnixMilli(), r.Window.Milliseconds(),
+		ttlOrMin(r.TTL).Milliseconds(), (r.Window + replayGrace).Milliseconds(),
+	).Slice()
 	if err != nil {
-		return false, time.Time{}, fmt.Errorf("redis set nx: %w", err)
+		return domain.RotateResult{}, fmt.Errorf("redis rotate refresh: %w", err)
 	}
-	if ok {
-		return true, at, nil
+	if len(res) != 2 {
+		return domain.RotateResult{}, errors.New("redis rotate refresh: unexpected reply")
 	}
-	v, err := s.c.Get(ctx, key).Result()
-	if errors.Is(err, goredis.Nil) {
-		return false, at, nil // expired between the two calls: the token is dead anyway
+	code, ok := res[0].(int64)
+	if !ok {
+		return domain.RotateResult{}, errors.New("redis rotate refresh: unexpected reply")
 	}
-	if err != nil {
-		return false, time.Time{}, fmt.Errorf("redis get: %w", err)
-	}
-	return false, parseMillis(v), nil
+	token, _ := res[1].(string)
+	return domain.RotateResult{Outcome: domain.RotateOutcome(code), ReplayToken: token}, nil
 }
 
-// StoreReplay saves the replacement refresh token for the idempotency window.
-func (s *TokenStore) StoreReplay(ctx context.Context, jti, newRefresh string, ttl time.Duration) error {
-	if err := s.c.Set(ctx, keyReplay+jti, newRefresh, ttlOrMin(ttl)).Err(); err != nil {
-		return fmt.Errorf("redis set: %w", err)
-	}
-	return nil
-}
-
-// Replay returns the replacement refresh token while its window is open.
-func (s *TokenStore) Replay(ctx context.Context, jti string) (string, bool, error) {
-	v, err := s.c.Get(ctx, keyReplay+jti).Result()
-	if errors.Is(err, goredis.Nil) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("redis get: %w", err)
-	}
-	return v, true, nil
-}
-
-// CloseFamily revokes a login chain.
+// CloseFamily revokes a login chain and drops its rotation state, so a closed family costs one
+// marker key. The marker is set first: rotateScript checks it, so no rotation can slip in
+// between and recreate the state.
 func (s *TokenStore) CloseFamily(ctx context.Context, family string, ttl time.Duration) error {
-	if err := s.c.Set(ctx, keyFamily+family, "1", ttlOrMin(ttl)).Err(); err != nil {
-		return fmt.Errorf("redis set: %w", err)
+	_, err := s.c.TxPipelined(ctx, func(p goredis.Pipeliner) error {
+		p.Set(ctx, keyFamily+family, "1", ttlOrMin(ttl))
+		p.Del(ctx, keyRotation+family, keyReplay+family)
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("redis close family: %w", err)
 	}
 	return nil
 }

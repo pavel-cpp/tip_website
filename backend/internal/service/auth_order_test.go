@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
@@ -48,8 +49,8 @@ func TestChangePasswordRejectsTheSamePassword(t *testing.T) {
 	s := r.login(t, "worker1", "worker-pass")
 	a, _ := r.auth.Authenticate(context.Background(), s.Pair.AccessToken)
 	_, err := r.auth.ChangePassword(context.Background(), a, ChangePasswordInput{Current: "worker-pass", New: "worker-pass"})
-	ve, ok := err.(*domain.ValidationError)
-	if !ok || len(ve.Fields) != 1 || ve.Fields[0].Field != "new" {
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) || len(ve.Fields) != 1 || ve.Fields[0].Field != "new" {
 		t.Fatalf("err = %v", err)
 	}
 	if !r.db.users["u-worker"].temporary || r.db.users["u-worker"].hash != "hash:worker-pass" {

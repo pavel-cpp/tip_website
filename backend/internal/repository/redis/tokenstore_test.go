@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -67,6 +68,13 @@ func testClient(t *testing.T) *goredis.Client {
 	return c
 }
 
+func rotation(fam, presented, next string, at time.Time) domain.RefreshRotation {
+	return domain.RefreshRotation{
+		Family: fam, Presented: presented, NextJTI: next, NextToken: "TOKEN-" + next,
+		At: at, Window: 10 * time.Second, TTL: time.Hour,
+	}
+}
+
 func TestRevocationKeyScheme(t *testing.T) {
 	c := testClient(t)
 	s := NewTokenStore(c)
@@ -76,14 +84,11 @@ func TestRevocationKeyScheme(t *testing.T) {
 	if err := s.Ping(ctx); err != nil {
 		t.Fatal(err)
 	}
-	burned, when, err := s.BurnRefresh(ctx, "j1", at, time.Hour)
-	if err != nil || !burned || !when.Equal(at) {
-		t.Fatalf("burn = %v %v %v", burned, when, err)
+	res, err := s.RotateRefresh(ctx, rotation("f1", "j0", "j1", at))
+	if err != nil || res.Outcome != domain.RotateOK {
+		t.Fatalf("rotate = %+v %v", res, err)
 	}
-	if err := s.StoreReplay(ctx, "j1", "NEW-REFRESH", 10*time.Second); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.CloseFamily(ctx, "f1", time.Hour); err != nil {
+	if err := s.CloseFamily(ctx, "f2", time.Hour); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RevokeAccess(ctx, "a1", time.Minute); err != nil {
@@ -95,28 +100,37 @@ func TestRevocationKeyScheme(t *testing.T) {
 
 	// Exactly the documented keys exist, with the documented values and TTLs.
 	for key, want := range map[string]string{
-		"rb:j1": "1790000000123", "rg:j1": "NEW-REFRESH", "revfam:f1": "1", "bl:jti:a1": "1", "bl:user:u1": "1790000000123",
+		"rg:f1": "TOKEN-j1", "revfam:f2": "1", "bl:jti:a1": "1", "bl:user:u1": "1790000000123",
 	} {
 		got, err := c.Get(ctx, key).Result()
 		if err != nil || got != want {
 			t.Errorf("%s = %q, %v; want %q", key, got, err, want)
 		}
+	}
+	state, err := c.HGetAll(ctx, "rf:f1").Result()
+	if err != nil || len(state) != 3 || state["c"] != "j1" || state["p"] != "j0" || state["t"] != "1790000000123" {
+		t.Errorf("rf:f1 = %v, %v", state, err)
+	}
+	for _, key := range []string{"rf:f1", "rg:f1", "revfam:f2", "bl:jti:a1", "bl:user:u1"} {
 		if ttl := c.TTL(ctx, key).Val(); ttl <= 0 {
 			t.Errorf("%s has no TTL (%v)", key, ttl)
 		}
 	}
-	if ttl := c.TTL(ctx, "rg:j1").Val(); ttl > 10*time.Second {
+	if ttl := c.TTL(ctx, "rf:f1").Val(); ttl < 59*time.Minute || ttl > time.Hour {
+		t.Errorf("rf TTL = %v, want the new token's life", ttl)
+	}
+	if ttl := c.TTL(ctx, "rg:f1").Val(); ttl > 13*time.Second {
 		t.Errorf("rg TTL = %v", ttl)
 	}
 	if n := c.DBSize(ctx).Val(); n != 5 {
 		t.Errorf("unexpected extra keys: %d", n)
 	}
 
-	st, err := s.Revocation(ctx, domain.RevocationQuery{AccessJTI: "a1", RefreshJTI: "j1", UserID: "u1", Family: "f1"})
+	st, err := s.Revocation(ctx, domain.RevocationQuery{AccessJTI: "a1", UserID: "u1", Family: "f2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.AccessRevoked || !st.FamilyClosed || !st.RefreshBurnedAt.Equal(at) || !st.UserCutoff.Equal(at) {
+	if !st.AccessRevoked || !st.FamilyClosed || !st.UserCutoff.Equal(at) {
 		t.Fatalf("state = %+v", st)
 	}
 	if !st.RevokedByCutoff(at) || st.RevokedByCutoff(at.Add(time.Millisecond)) {
@@ -149,7 +163,7 @@ func TestRevocationSingleRoundTrip(t *testing.T) {
 	var cmds atomic.Int32
 	c.AddHook(countHook{&cmds})
 	s := NewTokenStore(c)
-	if _, err := s.Revocation(ctx, domain.RevocationQuery{AccessJTI: "a", RefreshJTI: "r", UserID: "u", Family: "f"}); err != nil {
+	if _, err := s.Revocation(ctx, domain.RevocationQuery{AccessJTI: "a", UserID: "u", Family: "f"}); err != nil {
 		t.Fatal(err)
 	}
 	if cmds.Load() != 1 {
@@ -173,73 +187,138 @@ func (h countHook) ProcessPipelineHook(next goredis.ProcessPipelineHook) goredis
 	}
 }
 
-func TestBurnRefreshIsExclusive(t *testing.T) {
+func TestRotateRefreshIsExclusive(t *testing.T) {
 	c := testClient(t)
 	s := NewTokenStore(c)
 	ctx := context.Background()
 	first := time.UnixMilli(1_790_000_000_000).UTC()
 
-	var wins atomic.Int32
+	var wins, replays atomic.Int32
 	var wg sync.WaitGroup
 	for i := range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ok, _, err := s.BurnRefresh(ctx, "race", first.Add(time.Duration(i)*time.Millisecond), time.Hour)
+			res, err := s.RotateRefresh(ctx, rotation("race", "j0", fmt.Sprintf("n%d", i), first.Add(time.Duration(i)*time.Millisecond)))
 			if err != nil {
 				t.Error(err)
 			}
-			if ok {
+			switch res.Outcome {
+			case domain.RotateOK:
 				wins.Add(1)
+			case domain.RotateReplay:
+				replays.Add(1)
 			}
 		}()
 	}
 	wg.Wait()
-	if wins.Load() != 1 {
-		t.Fatalf("%d winners, want exactly 1", wins.Load())
-	}
-	// A loser learns the winner's timestamp.
-	ok, at, err := s.BurnRefresh(ctx, "race", first.Add(time.Hour), time.Hour)
-	if err != nil || ok || at.Before(first) || at.After(first.Add(20*time.Millisecond)) {
-		t.Fatalf("loser = %v %v %v", ok, at, err)
+	if wins.Load() != 1 || replays.Load() != 19 {
+		t.Fatalf("%d winners and %d replays, want 1 and 19", wins.Load(), replays.Load())
 	}
 }
 
-func TestBurnRefreshTTLFollowsRemainingLife(t *testing.T) {
+func TestRotateRefreshSemantics(t *testing.T) {
 	c := testClient(t)
 	s := NewTokenStore(c)
 	ctx := context.Background()
-	if _, _, err := s.BurnRefresh(ctx, "ttl", time.Now(), 90*time.Minute); err != nil {
+	t0 := time.UnixMilli(1_790_000_000_000).UTC()
+	rot := func(presented, next string, at time.Time) domain.RotateResult {
+		t.Helper()
+		res, err := s.RotateRefresh(ctx, rotation("f", presented, next, at))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	if r := rot("j0", "j1", t0); r.Outcome != domain.RotateOK {
+		t.Fatalf("first rotation = %+v", r)
+	}
+	// The replaced token inside the window gets the replacement back, and stays harmless.
+	if r := rot("j0", "x", t0.Add(9*time.Second)); r.Outcome != domain.RotateReplay || r.ReplayToken != "TOKEN-j1" {
+		t.Fatalf("replay = %+v", r)
+	}
+	// Exactly at the edge is still a replay; one millisecond later it is reuse.
+	if r := rot("j0", "x", t0.Add(10*time.Second)); r.Outcome != domain.RotateReplay {
+		t.Fatalf("edge = %+v", r)
+	}
+	if r := rot("j0", "x", t0.Add(10*time.Second+time.Millisecond)); r.Outcome != domain.RotateReuse {
+		t.Fatalf("after the window = %+v", r)
+	}
+	// The current token keeps working, the one before the previous is reuse even inside the window.
+	if r := rot("j1", "j2", t0.Add(time.Minute)); r.Outcome != domain.RotateOK {
+		t.Fatalf("second rotation = %+v", r)
+	}
+	if r := rot("j0", "x", t0.Add(time.Minute+time.Second)); r.Outcome != domain.RotateReuse {
+		t.Fatalf("older token = %+v", r)
+	}
+	if r := rot("stranger", "x", t0.Add(time.Minute+time.Second)); r.Outcome != domain.RotateReuse {
+		t.Fatalf("unknown token = %+v", r)
+	}
+	// Closing the family wins over everything and frees the state.
+	if err := s.CloseFamily(ctx, "f", time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if ttl := c.TTL(ctx, "rb:ttl").Val(); ttl < 89*time.Minute || ttl > 90*time.Minute {
+	if r := rot("j2", "j3", t0.Add(2*time.Minute)); r.Outcome != domain.RotateClosed {
+		t.Fatalf("closed = %+v", r)
+	}
+	if keys := c.Keys(ctx, "*").Val(); len(keys) != 1 || keys[0] != "revfam:f" {
+		t.Fatalf("keys after close = %v", keys)
+	}
+}
+
+func TestRotateRefreshStateStaysConstant(t *testing.T) {
+	c := testClient(t)
+	s := NewTokenStore(c)
+	ctx := context.Background()
+	at := time.Now()
+	prev := "j0"
+	for i := range 200 {
+		next := fmt.Sprintf("j%d", i+1)
+		if res, err := s.RotateRefresh(ctx, rotation("loop", prev, next, at.Add(time.Duration(i)*time.Second))); err != nil || res.Outcome != domain.RotateOK {
+			t.Fatalf("rotation %d = %+v %v", i, res, err)
+		}
+		prev = next
+	}
+	if n := c.DBSize(ctx).Val(); n != 2 {
+		t.Fatalf("%d keys after 200 rotations, want 2 (state + replay token)", n)
+	}
+}
+
+func TestRotateRefreshTTLFollowsTokenLife(t *testing.T) {
+	c := testClient(t)
+	s := NewTokenStore(c)
+	ctx := context.Background()
+	r := rotation("ttl", "a", "b", time.Now())
+	r.TTL = 90 * time.Minute
+	if _, err := s.RotateRefresh(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if ttl := c.TTL(ctx, "rf:ttl").Val(); ttl < 89*time.Minute || ttl > 90*time.Minute {
 		t.Fatalf("ttl = %v", ttl)
 	}
-	// A non-positive remaining life still leaves a (short) mark.
-	if _, _, err := s.BurnRefresh(ctx, "dead", time.Now(), -time.Hour); err != nil {
+	// A non-positive life still leaves a (short) state.
+	r = rotation("dead", "a", "b", time.Now())
+	r.TTL = -time.Hour
+	if _, err := s.RotateRefresh(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if ttl := c.TTL(ctx, "rb:dead").Val(); ttl <= 0 {
+	if ttl := c.TTL(ctx, "rf:dead").Val(); ttl <= 0 {
 		t.Fatalf("ttl = %v", ttl)
 	}
 }
 
-func TestReplayWindowExpires(t *testing.T) {
+func TestReplayTokenExpires(t *testing.T) {
 	c := testClient(t)
 	s := NewTokenStore(c)
 	ctx := context.Background()
-	if _, ok, err := s.Replay(ctx, "none"); ok || err != nil {
-		t.Fatalf("missing replay = %v %v", ok, err)
-	}
-	if err := s.StoreReplay(ctx, "short", "tok", 1100*time.Millisecond); err != nil {
+	r := rotation("short", "a", "b", time.Now())
+	r.Window = 0 // the token is kept for the grace period only
+	if _, err := s.RotateRefresh(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if v, ok, err := s.Replay(ctx, "short"); !ok || v != "tok" || err != nil {
-		t.Fatalf("replay = %q %v %v", v, ok, err)
-	}
-	time.Sleep(1300 * time.Millisecond)
-	if _, ok, _ := s.Replay(ctx, "short"); ok {
-		t.Fatal("replay entry must expire")
+	if ttl := c.TTL(ctx, "rg:short").Val(); ttl <= 0 || ttl > replayGrace {
+		t.Fatalf("rg ttl = %v", ttl)
 	}
 }
 
@@ -258,14 +337,8 @@ func TestUnavailableRedisReturnsErrors(t *testing.T) {
 	if _, err := s.Revocation(ctx, domain.RevocationQuery{AccessJTI: "a"}); err == nil {
 		t.Error("revocation must fail")
 	}
-	if _, _, err := s.BurnRefresh(ctx, "j", time.Now(), time.Hour); err == nil {
-		t.Error("burn must fail")
-	}
-	if err := s.StoreReplay(ctx, "j", "t", time.Second); err == nil {
-		t.Error("store replay must fail")
-	}
-	if _, _, err := s.Replay(ctx, "j"); err == nil {
-		t.Error("replay must fail")
+	if _, err := s.RotateRefresh(ctx, rotation("f", "a", "b", time.Now())); err == nil {
+		t.Error("rotation must fail")
 	}
 	if err := s.CloseFamily(ctx, "f", time.Second); err == nil {
 		t.Error("close family must fail")
