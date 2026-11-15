@@ -185,7 +185,7 @@ func (p *Processor) Process(data []byte) (Processed, error) {
 	defer release()
 	b := img.Bounds()
 	w, h := b.Dx(), b.Dy()
-	out := data
+	var out []byte
 	if max(w, h) > p.maxSide {
 		nw, nh := fitSide(w, h, p.maxSide)
 		dst := image.NewNRGBA(image.Rect(0, 0, nw, nh))
