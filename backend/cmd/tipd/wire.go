@@ -197,7 +197,8 @@ func (a *app) wire(ctx context.Context) error {
 		Repo: participantRepo, Projects: projectRepo, Locks: a.hub, Notify: a.hub, Audit: auditSvc,
 		Tx: tx, Clock: clk, Sheets: sheets.Codec{},
 	})
-	collab := service.NewCollab(a.hub, projectAccess{projectRepo}, peerDirectory{a.userRepo}, authSvc)
+	// WithRows lets lock.acquire check that the row belongs to the room's project (never done for cursor frames).
+	collab := service.NewCollab(a.hub, projectAccess{projectRepo}, peerDirectory{a.userRepo}, authSvc).WithRows(participantRepo)
 	a.ws = ws.New(ws.Config{Collab: collab, AllowedOrigins: cfg.AllowedOrigins})
 
 	host := sysinfo.Host{BackupMetricsPath: cfg.BackupMetricsPath}

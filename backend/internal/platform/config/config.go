@@ -65,6 +65,8 @@ type Config struct {
 	RedisFailMode       FailMode
 	ForcePasswordChange bool
 	SwaggerEnabled      bool
+	// PprofEnabled serves /debug/pprof/* on the internal listener (default off: heap and goroutine dumps are for diagnosis).
+	PprofEnabled bool
 	// GrafanaURL is the public Grafana address shown as a link in the admin menu; empty hides it.
 	GrafanaURL string
 	// CookieSecure sets the Secure flag on the refresh cookie (default true). Turn it off only for
@@ -123,6 +125,7 @@ func Load(getenv func(string) string) (Config, error) {
 		RedisFailMode:       FailMode(l.str("REDIS_FAIL_MODE", string(FailOpen))),
 		ForcePasswordChange: l.boolean("FORCE_PASSWORD_CHANGE", false),
 		SwaggerEnabled:      l.boolean("SWAGGER_ENABLED", false),
+		PprofEnabled:        l.boolean("PPROF_ENABLED", false),
 		GrafanaURL:          l.optionalURL("GRAFANA_URL"),
 		CookieSecure:        l.boolean("COOKIE_SECURE", true),
 

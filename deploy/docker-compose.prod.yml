@@ -97,6 +97,7 @@ services:
       BOOTSTRAP_ADMIN_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      PPROF_ENABLED: ${PPROF_ENABLED:-false}
       # Shown as a link in the admin menu.
       GRAFANA_URL: ${GRAFANA_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}

@@ -196,7 +196,8 @@ func (s *windowSet) evict(now time.Time) {
 // is given back unless it failed on credentials. Only failures count towards the per-login
 // ceiling, and an address that already logged in to that account is exempt from it, so locking a
 // login from elsewhere does not lock out its owner. Each key type has its own size-limited set,
-// and the per-login one never drops a live window. State is lost on restart, which is acceptable
+// and each gives up only windows far below its limit, so a flood of made-up logins cannot fill the per-login set and
+// refuse real ones while a counter close to biting is never forgotten. State is lost on restart, which is acceptable
 // for brute-force throttling on a single instance.
 type MemoryLoginLimiter struct {
 	clock Clock
@@ -216,7 +217,7 @@ func NewMemoryLoginLimiter(clock Clock) *MemoryLoginLimiter {
 		clock:   clock,
 		pairs:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginPairLimit)),
 		addrs:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginIPLimit)),
-		names:   newWindowSet(loginWindow, limiterMaxKeys, never),
+		names:   newWindowSet(loginWindow, limiterMaxKeys, farFromLimit(loginNameLimit)),
 		trusted: newWindowSet(loginTrustTTL, loginTrustMax, nil),
 		perAddr: make(map[string]int),
 	}

@@ -134,7 +134,11 @@ func serve() error {
 	a.Start(ctx)
 
 	public := httpapi.NewServer(cfg.HTTPAddr, a.router, logging.NewStdLogger(logger, "http"))
-	internal := m.NewInternalServer(cfg.InternalAddr)
+	var internalOpts []metrics.InternalOption
+	if cfg.PprofEnabled {
+		internalOpts = append(internalOpts, metrics.WithPprof())
+	}
+	internal := m.NewInternalServer(cfg.InternalAddr, internalOpts...)
 	internal.ErrorLog = logging.NewStdLogger(logger, "internal")
 
 	// Listeners are opened here so that shutdown can stop accepting before it drains.

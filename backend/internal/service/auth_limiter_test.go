@@ -165,6 +165,23 @@ func TestLoginCeilingCountsFailuresOnlyAndSparesKnownAddresses(t *testing.T) {
 	}
 }
 
+func TestLoginSetAdmitsRealLoginsDuringAFloodOfMadeUpOnes(t *testing.T) {
+	c := newClock()
+	names := newWindowSet(time.Minute, 10, farFromLimit(loginNameLimit))
+	for range loginNameLimit {
+		names.add("admin", c.Now())
+	}
+	for i := range 200 { // an unauthenticated client invents logins, one failure each
+		names.add(fmt.Sprintf("made-up-%d", i), c.Now())
+	}
+	if !names.room("customer", c.Now()) || names.add("customer", c.Now()) == nil {
+		t.Fatal("made-up logins must not lock real ones out")
+	}
+	if w := names.live("admin", c.Now()); w == nil || w.n != loginNameLimit {
+		t.Fatal("a login close to its ceiling must not be forgotten to make room")
+	}
+}
+
 func TestLimiterSetsDoNotForgetLiveThrottlesUnderFlood(t *testing.T) {
 	c := newClock()
 	// The per-login set never drops a live window: a full set refuses unseen logins instead.
