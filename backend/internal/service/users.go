@@ -96,6 +96,23 @@ func (s *Users) revoke(ctx context.Context, userID string) error {
 	return nil
 }
 
+// ensureCanManage is the single guard for acting on another account. role.manage is effectively
+// full administrator, so only its holders may touch anyone; everybody else (user.manage alone)
+// may only touch accounts whose permissions the actor already holds. Without it a user.manage
+// holder could reset an administrator's password and sign in as that administrator. Acting on
+// yourself is self-service and stays allowed.
+func ensureCanManage(actor domain.Actor, target domain.UserRecord) error {
+	if actor.Can(domain.PermRoleManage) || actor.UserID == target.ID {
+		return nil
+	}
+	for _, p := range target.Permissions {
+		if !actor.Can(p) {
+			return domain.ErrForbidden
+		}
+	}
+	return nil
+}
+
 func (s *Users) revoked(userID string) {
 	if s.OnUserRevoked != nil {
 		s.OnUserRevoked(userID)
@@ -349,8 +366,9 @@ type UserUpdate struct {
 	IsActive    *bool
 }
 
-// UpdateUser edits a user or (de)activates the account (user.manage). Deactivation revokes the
-// user's tokens at once and may not remove the last administrator.
+// UpdateUser edits a user or (de)activates the account (user.manage, limited by ensureCanManage
+// to accounts the actor outranks). Deactivation revokes the user's tokens at once and may not
+// remove the last administrator.
 func (s *Users) UpdateUser(ctx context.Context, actor domain.Actor, id string, in UserUpdate) (Profile, error) {
 	if err := actor.Require(domain.PermUserManage); err != nil {
 		return Profile{}, err
@@ -368,6 +386,9 @@ func (s *Users) UpdateUser(ctx context.Context, actor domain.Actor, id string, i
 	err := s.Tx.Do(ctx, func(ctx context.Context) error {
 		rec, err := s.load(ctx, id)
 		if err != nil {
+			return err
+		}
+		if err := ensureCanManage(actor, rec); err != nil {
 			return err
 		}
 		if name != nil && *name != rec.DisplayName {
@@ -444,6 +465,9 @@ func (s *Users) SetRoles(ctx context.Context, actor domain.Actor, id string, rol
 		if err != nil {
 			return err
 		}
+		if err := ensureCanManage(actor, rec); err != nil {
+			return err
+		}
 		newRoles, err := s.Roles.GetMany(ctx, ids)
 		if err != nil {
 			return fmt.Errorf("load roles: %w", err)
@@ -493,8 +517,8 @@ func difference(a, b []string) []string {
 	return out
 }
 
-// ResetPassword issues a new temporary password for a user (user.manage) and revokes the
-// user's tokens. The password is returned once.
+// ResetPassword issues a new temporary password for a user (user.manage, limited by
+// ensureCanManage) and revokes the user's tokens. The password is returned once.
 func (s *Users) ResetPassword(ctx context.Context, actor domain.Actor, id string) (string, error) {
 	if err := actor.Require(domain.PermUserManage); err != nil {
 		return "", err
@@ -510,6 +534,9 @@ func (s *Users) ResetPassword(ctx context.Context, actor domain.Actor, id string
 	err = s.Tx.Do(ctx, func(ctx context.Context) error {
 		rec, err := s.load(ctx, id)
 		if err != nil {
+			return err
+		}
+		if err := ensureCanManage(actor, rec); err != nil {
 			return err
 		}
 		if err := s.Users.SetPassword(ctx, id, hash, true); err != nil {

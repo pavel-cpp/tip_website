@@ -171,7 +171,7 @@ func TestCreateUserAuditFailureAborts(t *testing.T) {
 
 func TestDeactivateUser(t *testing.T) {
 	r := newRig(t, rigOpts{})
-	mgr := acctActorWith("u-admin", domain.PermUserManage)
+	mgr := acctActorWith("u-admin", domain.PermUserManage, domain.PermRoleManage)
 	off := false
 	p, err := r.users.UpdateUser(ctx, mgr, "u-worker", UserUpdate{IsActive: &off})
 	if err != nil || p.User.IsActive {
@@ -199,7 +199,7 @@ func TestDeactivateUser(t *testing.T) {
 
 func TestDeactivateGuards(t *testing.T) {
 	r := newRig(t, rigOpts{})
-	mgr := acctActorWith("u-admin", domain.PermUserManage)
+	mgr := acctActorWith("u-admin", domain.PermUserManage, domain.PermRoleManage)
 	off := false
 	if _, err := r.users.UpdateUser(ctx, mgr, "u-admin", UserUpdate{IsActive: &off}); !isErr(err, domain.ErrValidation) {
 		t.Errorf("self: %v", err)
@@ -209,7 +209,7 @@ func TestDeactivateGuards(t *testing.T) {
 	if _, err := r.users.UpdateUser(ctx, mgr, "u-admin2", UserUpdate{IsActive: &off}); err != nil {
 		t.Fatalf("second admin: %v", err)
 	}
-	other := acctActorWith("someone-else", domain.PermUserManage)
+	other := acctActorWith("someone-else", domain.PermUserManage, domain.PermRoleManage)
 	if _, err := r.users.UpdateUser(ctx, other, "u-admin", UserUpdate{IsActive: &off}); !isErr(err, domain.ErrLastAdmin) {
 		t.Errorf("last admin: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestDeactivateRedisDownRollsBack(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	r.store.down = errBoom
 	off := false
-	_, err := r.users.UpdateUser(ctx, acctActorWith("u-admin", domain.PermUserManage), "u-worker", UserUpdate{IsActive: &off})
+	_, err := r.users.UpdateUser(ctx, acctActorWith("u-admin", domain.PermUserManage, domain.PermRoleManage), "u-worker", UserUpdate{IsActive: &off})
 	if !isErr(err, domain.ErrAuthUnavailable) || err.Error() != domain.ErrAuthUnavailable.Message {
 		t.Fatalf("err = %v", err)
 	}
@@ -237,12 +237,12 @@ func TestDeactivateRedisDownRollsBack(t *testing.T) {
 func TestUpdateUserName(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	n := " Renamed "
-	p, err := r.users.UpdateUser(ctx, acctActorWith("m", domain.PermUserManage), "u-worker", UserUpdate{DisplayName: &n})
+	p, err := r.users.UpdateUser(ctx, acctActorWith("m", domain.PermUserManage, domain.PermRoleManage), "u-worker", UserUpdate{DisplayName: &n})
 	if err != nil || p.User.DisplayName != "Renamed" {
 		t.Fatalf("p=%+v err=%v", p, err)
 	}
 	empty := ""
-	if _, err := r.users.UpdateUser(ctx, acctActorWith("m", domain.PermUserManage), "u-worker", UserUpdate{DisplayName: &empty}); !isErr(err, domain.ErrValidation) {
+	if _, err := r.users.UpdateUser(ctx, acctActorWith("m", domain.PermUserManage, domain.PermRoleManage), "u-worker", UserUpdate{DisplayName: &empty}); !isErr(err, domain.ErrValidation) {
 		t.Fatal(err)
 	}
 }
@@ -294,7 +294,7 @@ func TestSetRolesGuards(t *testing.T) {
 func TestResetPassword(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	s := r.login(t, "worker1", "worker-pass")
-	pw, err := r.users.ResetPassword(ctx, acctActorWith("u-admin", domain.PermUserManage), "u-worker")
+	pw, err := r.users.ResetPassword(ctx, acctActorWith("u-admin", domain.PermUserManage, domain.PermRoleManage), "u-worker")
 	if err != nil || pw == "" {
 		t.Fatalf("pw=%q err=%v", pw, err)
 	}
@@ -317,7 +317,7 @@ func TestResetPassword(t *testing.T) {
 	if _, err := r.users.ResetPassword(ctx, acctActorWith("x"), "u-worker"); !isErr(err, domain.ErrForbidden) {
 		t.Errorf("forbidden: %v", err)
 	}
-	if _, err := r.users.ResetPassword(ctx, acctActorWith("m", domain.PermUserManage), "ghost"); !isErr(err, domain.ErrNotFound) {
+	if _, err := r.users.ResetPassword(ctx, acctActorWith("m", domain.PermUserManage, domain.PermRoleManage), "ghost"); !isErr(err, domain.ErrNotFound) {
 		t.Errorf("not found: %v", err)
 	}
 }
