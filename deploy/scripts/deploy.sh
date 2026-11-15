@@ -59,6 +59,23 @@ if ! { compose up -d --no-build --remove-orphans && wait_healthy; }; then
   die "deploy of $TAG failed, rolled back to $prev"
 fi
 
+# Config files are bind-mounted into the containers. The tar that delivers deploy/ replaces them with new inodes,
+# and a running container keeps showing the OLD content of a replaced bind-mounted file (the Caddy access-log filter
+# went unnoticed for a day this way). When any of them changed, recreate the services that read them.
+cfg_sum="$(find Caddyfile caddy.d prometheus loki vector grafana hostmetrics -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)"
+if [[ $cfg_sum != "$(read_state .config_sum)" ]]; then
+  active="$(compose config --services)"
+  recreate=()
+  for svc in caddy prometheus loki vector grafana hostmetrics; do
+    if grep -qx "$svc" <<<"$active"; then recreate+=("$svc"); fi
+  done
+  if ((${#recreate[@]})); then
+    log "config files changed: recreating ${recreate[*]}"
+    compose up -d --no-deps --force-recreate "${recreate[@]}" || log "NOTE: recreating ${recreate[*]} failed; check the containers by hand"
+  fi
+  printf '%s\n' "$cfg_sum" >.config_sum
+fi
+
 if [[ -n $prev && $prev != "$TAG" ]]; then printf '%s\n' "$prev" >.previous_tag; fi
 printf '%s\n' "$TAG" >.current_tag
 printf '%s\n' "$IMAGE_BASE" >.image_base

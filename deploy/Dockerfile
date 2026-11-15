@@ -7,7 +7,7 @@
 # backend/web/dist), the final stage is distroless/static running as non-root.
 
 ARG NODE_VERSION=22
-ARG GO_VERSION=1.27
+ARG GO_VERSION=1.27.4
 
 # ---------------------------------------------------------------- frontend --
 FROM node:${NODE_VERSION}-alpine AS web
