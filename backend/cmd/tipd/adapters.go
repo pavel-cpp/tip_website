@@ -49,8 +49,8 @@ func (a accountAudit) Record(ctx context.Context, e domain.AccountAuditEntry) er
 // avatarProcessor adapts the imaging package to the avatar port of the users service.
 type avatarProcessor struct{ img *imaging.Processor }
 
-func (p avatarProcessor) ProcessAvatar(_ context.Context, raw []byte) (string, []byte, error) {
-	out, _, err := p.img.Avatar(raw)
+func (p avatarProcessor) ProcessAvatar(ctx context.Context, raw []byte) (string, []byte, error) {
+	out, _, err := p.img.Avatar(ctx, raw)
 	if err != nil {
 		return "", nil, err
 	}

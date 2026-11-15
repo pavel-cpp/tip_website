@@ -1,8 +1,10 @@
 package sheets
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -13,6 +15,7 @@ import (
 	"github.com/xuri/excelize/v2"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
+	"github.com/pavel-cpp/tip_website/backend/internal/platform/gate"
 )
 
 // Export formats.
@@ -23,11 +26,17 @@ const (
 
 // Limits protecting the 2 GB server from hostile or accidental huge files.
 const (
-	// maxXLSXBytes bounds the compressed workbook held in memory by the XLSX reader.
-	maxXLSXBytes = 32 << 20
-	// maxUnzipBytes and maxUnzipXMLBytes bound the decompressed size (zip bombs).
-	maxUnzipBytes    = 128 << 20
-	maxUnzipXMLBytes = 48 << 20
+	// maxXLSXBytes bounds the compressed workbook held in memory by the XLSX reader. The import
+	// handler already rejects uploads above service.MaxImportBytes (10 MiB); a 20 000-row
+	// participant sheet is well under 2 MiB, so this is a second line of defence with margin.
+	maxXLSXBytes = 16 << 20
+	// maxUnzipBytes bounds the sum of the uncompressed parts and maxUnzipPartBytes each single
+	// part (zip bombs). The largest parts of a 20 000-row sheet (the worksheet and the shared
+	// strings) are a few MiB; no part is allowed to reach excelize's spill-to-disk threshold.
+	maxUnzipBytes     = 40 << 20
+	maxUnzipPartBytes = 16 << 20
+	// maxZipEntries bounds the number of parts; a real workbook has about ten.
+	maxZipEntries = 1024
 	// maxCSVRecordBytes bounds a single CSV record so a file without line breaks cannot exhaust memory.
 	maxCSVRecordBytes = 256 << 10
 )
@@ -164,7 +173,56 @@ func (l *recordLimiter) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// xlsxGate is the process-wide slot shared with image decoding; a variable so tests can use a
+// short-lived gate.
+var xlsxGate = gate.Heavy
+
+// checkZip inflates every part once under hard limits before excelize does it for real.
+// excelize trusts the sizes declared in the zip headers, which a hostile file can understate,
+// so here the declared sizes are checked first and the bytes actually produced are counted
+// and must match them exactly; afterwards excelize's own inflate is bounded by the same sizes.
+func checkZip(data []byte) error {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return fileProblem("the workbook cannot be read")
+	}
+	if len(zr.File) > maxZipEntries {
+		return fileProblem("the workbook has too many parts")
+	}
+	var total int64
+	for _, zf := range zr.File {
+		if zf.UncompressedSize64 > maxUnzipPartBytes {
+			return domain.ErrTooLarge
+		}
+		declared := int64(zf.UncompressedSize64)
+		if total += declared; total > maxUnzipBytes {
+			return domain.ErrTooLarge
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			return fileProblem("the workbook cannot be read")
+		}
+		n, err := io.Copy(io.Discard, io.LimitReader(rc, declared+1))
+		_ = rc.Close()
+		switch {
+		case n > declared:
+			return domain.ErrTooLarge // the header lied about the size
+		case err != nil || n != declared:
+			return fileProblem("the workbook cannot be read")
+		}
+	}
+	return nil
+}
+
 func readXLSX(r io.Reader, maxRows int, emit func(int, string, string) error) error {
+	// Parsing keeps the whole workbook and its inflated parts in memory, so only one workbook is
+	// processed at a time. The gate is taken before the upload is buffered.
+	release, err := xlsxGate.Acquire(context.Background())
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	data, err := io.ReadAll(io.LimitReader(r, maxXLSXBytes+1))
 	if err != nil {
 		return fmt.Errorf("read xlsx: %w", err)
@@ -172,9 +230,12 @@ func readXLSX(r io.Reader, maxRows int, emit func(int, string, string) error) er
 	if len(data) > maxXLSXBytes {
 		return domain.ErrTooLarge
 	}
+	if err := checkZip(data); err != nil {
+		return err
+	}
 	f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{
 		UnzipSizeLimit:    maxUnzipBytes,
-		UnzipXMLSizeLimit: maxUnzipXMLBytes,
+		UnzipXMLSizeLimit: maxUnzipPartBytes,
 	})
 	if err != nil {
 		return fileProblem("the workbook cannot be read")

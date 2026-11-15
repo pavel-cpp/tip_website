@@ -1,17 +1,23 @@
 package sheets
 
 import (
+	"archive/zip"
 	"bytes"
+	"compress/flate"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/encoding/unicode"
 
 	"github.com/pavel-cpp/tip_website/backend/internal/domain"
+	"github.com/pavel-cpp/tip_website/backend/internal/platform/gate"
 )
 
 type row struct {
@@ -234,6 +240,149 @@ func TestReadCorruptXLSXIsValidationError(t *testing.T) {
 	_, err := readAll(t, []byte("PK\x03\x04 not really a zip"), 10)
 	if !errors.Is(err, domain.ErrValidation) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// zeroReader yields endless zero bytes, which deflate squeezes to almost nothing.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+// zipOfZeros builds a zip whose parts are the given sizes of zero bytes, without holding
+// them in memory.
+func zipOfZeros(t *testing.T, sizes ...int64) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for i, n := range sizes {
+		w, err := zw.Create(fmt.Sprintf("part%d.xml", i))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.CopyN(w, zeroReader{}, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// zipLyingAboutSize builds a zip whose only part inflates to actual bytes while its headers
+// declare declared bytes.
+func zipLyingAboutSize(t *testing.T, actual int64, declared uint64) []byte {
+	t.Helper()
+	var packed bytes.Buffer
+	fw, err := flate.NewWriter(&packed, flate.BestSpeed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.CopyN(fw, zeroReader{}, actual); err != nil {
+		t.Fatal(err)
+	}
+	if err := fw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateRaw(&zip.FileHeader{
+		Name: "xl/worksheets/sheet1.xml", Method: zip.Deflate,
+		CompressedSize64: uint64(packed.Len()), UncompressedSize64: declared,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write(packed.Bytes()); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestCheckZipLimits(t *testing.T) {
+	var manyEntries bytes.Buffer
+	zw := zip.NewWriter(&manyEntries)
+	for i := range maxZipEntries + 1 {
+		if _, err := zw.Create(fmt.Sprint(i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		data []byte
+		want error // nil: accepted
+	}{
+		{"small workbook parts", zipOfZeros(t, 1<<20, 1<<20), nil},
+		{"parts at the limits", zipOfZeros(t, maxUnzipPartBytes, maxUnzipPartBytes, maxUnzipBytes-2*maxUnzipPartBytes), nil},
+		{"one part over the part limit", zipOfZeros(t, maxUnzipPartBytes+1), domain.ErrTooLarge},
+		{"parts over the total limit", zipOfZeros(t, maxUnzipPartBytes, maxUnzipPartBytes, maxUnzipBytes-2*maxUnzipPartBytes+1), domain.ErrTooLarge},
+		{"header understates a large part", zipLyingAboutSize(t, 64<<20, 100), domain.ErrValidation},
+		{"header overstates the part", zipLyingAboutSize(t, 100, 5000), domain.ErrValidation},
+		{"too many entries", manyEntries.Bytes(), domain.ErrValidation},
+		{"not a zip", []byte("PK\x03\x04 nope"), domain.ErrValidation},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkZip(tc.data)
+			if tc.want == nil {
+				if err != nil {
+					t.Fatalf("got %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("got %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestReadXLSXRejectsBomb(t *testing.T) {
+	// The whole path, not just checkZip: the bomb must not reach excelize.
+	_, err := readAll(t, zipLyingAboutSize(t, 64<<20, 100), 10)
+	if !errors.Is(err, domain.ErrValidation) {
+		t.Fatalf("got %v", err)
+	}
+	_, err = readAll(t, zipOfZeros(t, maxUnzipPartBytes+1), 10)
+	if !errors.Is(err, domain.ErrTooLarge) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestReadXLSXIsSerialized(t *testing.T) {
+	g := gate.New(20 * time.Millisecond)
+	old := xlsxGate
+	xlsxGate = g
+	t.Cleanup(func() { xlsxGate = old })
+
+	var buf bytes.Buffer
+	if err := (Codec{}).Write(&buf, FormatXLSX, []domain.Participant{{Number: 1, Name: "A", Phone: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	release, err := g.Acquire(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readAll(t, buf.Bytes(), 10); !errors.Is(err, domain.ErrRateLimited) {
+		t.Fatalf("busy gate: got %v", err)
+	}
+	// CSV is streamed and never waits for the gate.
+	if _, err := readAll(t, []byte("name;phone\nA;1\n"), 10); err != nil {
+		t.Fatalf("csv: %v", err)
+	}
+	release()
+	if _, err := readAll(t, buf.Bytes(), 10); err != nil {
+		t.Fatalf("free gate: %v", err)
+	}
+	if _, err := readAll(t, buf.Bytes(), 10); err != nil {
+		t.Fatalf("slot leaked: %v", err)
 	}
 }
 

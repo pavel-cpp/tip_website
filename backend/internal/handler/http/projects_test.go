@@ -390,7 +390,7 @@ func TestProjectsGetImage(t *testing.T) {
 	if rec.Code != 200 || rec.Body.String() != "pixels" {
 		t.Fatalf("%d %q", rec.Code, rec.Body)
 	}
-	if rec.Header().Get("ETag") != etag || rec.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" ||
+	if rec.Header().Get("ETag") != etag || rec.Header().Get("Cache-Control") != "private, max-age=31536000, immutable" ||
 		rec.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("headers %v", rec.Header())
 	}
