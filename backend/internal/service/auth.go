@@ -64,6 +64,10 @@ type AuthDeps struct {
 	// OnTokenStoreError is called with the underlying error whenever the token store fails, in
 	// any mode. The service does not log; the composition root wires logging and metrics here.
 	OnTokenStoreError func(op string, err error)
+	// OnUserRevoked is called after logout or a password change so the realtime hub can close the
+	// user's sockets (the same hook Users uses for deactivation). It must not block. A logout closes
+	// every socket of the user, including other devices, which reconnect with their own valid token.
+	OnUserRevoked func(userID string)
 	// OnRefresh receives the outcome of every refresh attempt, one of the Refresh* constants.
 	// The service does not count; the composition root wires metrics here.
 	OnRefresh func(result string)
@@ -139,6 +143,11 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 		return Session{}, a.storeErr("login", err)
 	}
 
+	// The epoch is read before the user: the password check below can queue for seconds, and a role
+	// change that commits meanwhile bumps the epoch. Read in this order, the token can only carry
+	// permissions that are at least as fresh as its epoch, so a stale grant is rejected as
+	// TOKEN_STALE instead of passing with a current epoch.
+	epoch := a.Epoch.Load()
 	rec, err := a.Users.GetByLogin(ctx, login)
 	hash := rec.PasswordHash
 	switch {
@@ -170,7 +179,6 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	}
 	rec.LastLoginAt = &now
 
-	epoch := a.Epoch.Load()
 	pair, err := a.issuePair(rec, a.IDs.NewID(), epoch, now, "")
 	if err != nil {
 		return Session{}, err
@@ -364,7 +372,15 @@ func (a *Auth) Logout(ctx context.Context, actor domain.Actor) error {
 	if err := a.Tokens.CloseFamily(ctx, actor.Family, a.Config.RefreshTTL); err != nil {
 		return a.storeErr("logout", err)
 	}
+	// Open sockets would otherwise outlive the session until their access token expires.
+	a.userRevoked(actor.UserID)
 	return nil
+}
+
+func (a *Auth) userRevoked(userID string) {
+	if a.OnUserRevoked != nil {
+		a.OnUserRevoked(userID)
+	}
 }
 
 // ChangePasswordInput carries the own-password change request.
@@ -380,10 +396,17 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 	if err := domain.ValidatePassword("new", in.New); err != nil {
 		return Session{}, err
 	}
+	// A temporary password must really be replaced, otherwise FORCE_PASSWORD_CHANGE is a no-op. Both
+	// values come from the caller, so comparing them leaks nothing about the stored hash.
+	if in.New == in.Current {
+		return Session{}, domain.NewValidation(domain.FieldError{Field: "new", Reason: "must differ from the current password"})
+	}
 	throttleKey := "pw:" + actor.UserID
 	if wait := a.Limiter.Check(in.IP, throttleKey); wait > 0 {
 		return Session{}, domain.NewRateLimited(wait)
 	}
+	// Epoch before user, as in Login: hashing below can take long enough for a role change to land.
+	epoch := a.Epoch.Load()
 	rec, err := a.Users.GetByID(ctx, actor.UserID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return Session{}, domain.ErrUnauthenticated
@@ -420,11 +443,12 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 	rec.PasswordTemporary = false
 
 	iat := cutoff.Add(time.Millisecond)
-	pair, err := a.issuePair(rec, a.IDs.NewID(), a.Epoch.Load(), iat, "")
+	pair, err := a.issuePair(rec, a.IDs.NewID(), epoch, iat, "")
 	if err != nil {
 		return Session{}, err
 	}
 	a.audit(ctx, domain.AccountAuditEntry{Action: "password.change", ActorID: rec.ID, TargetID: rec.ID, IP: in.IP})
+	a.userRevoked(rec.ID)
 	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 

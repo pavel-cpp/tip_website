@@ -173,7 +173,7 @@ func (a *app) wire(ctx context.Context) error {
 		},
 		Users: a.userRepo, Tokens: a.tokens, Codec: codec, Hasher: a.hasher,
 		Limiter: service.NewMemoryLoginLimiter(clk), Audit: accounts, Epoch: epoch,
-		Clock: clk, IDs: a.ids, OnTokenStoreError: onStoreError,
+		Clock: clk, IDs: a.ids, OnTokenStoreError: onStoreError, OnUserRevoked: a.hub.KickUser,
 		OnRefresh: func(result string) { m.TokenRefresh.WithLabelValues(result).Inc() },
 	})
 	a.users = service.NewUsers(service.UsersDeps{

@@ -53,9 +53,14 @@ func (acctFakeTx) Do(ctx context.Context, fn func(context.Context) error) error 
 type fakeHasher struct {
 	rehash   bool
 	failHash error
+	// slow runs inside Hash and Verify, standing in for argon2 queueing behind other requests.
+	slow func()
 }
 
 func (h fakeHasher) Hash(_ context.Context, pw string) (string, error) {
+	if h.slow != nil {
+		h.slow()
+	}
 	if h.failHash != nil {
 		return "", h.failHash
 	}
@@ -63,6 +68,9 @@ func (h fakeHasher) Hash(_ context.Context, pw string) (string, error) {
 }
 
 func (h fakeHasher) Verify(_ context.Context, pw, hash string) (bool, bool, error) {
+	if h.slow != nil {
+		h.slow()
+	}
 	if hash == "" {
 		return false, false, nil
 	}
