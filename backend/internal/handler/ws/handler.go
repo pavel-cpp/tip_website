@@ -30,6 +30,11 @@ const (
 	DefaultIdleTimeout   = 45 * time.Second
 	DefaultWriteTimeout  = 10 * time.Second
 
+	// DefaultMaxConnsPerUser bounds the simultaneous connections of one user across all rooms:
+	// enough for several tabs and devices, small enough that one stolen or buggy account cannot
+	// exhaust sockets and goroutines of a 2 GB server.
+	DefaultMaxConnsPerUser = 8
+
 	// ctrlQueue bounds the replies the reader may queue for the writer.
 	ctrlQueue = 16
 )
@@ -45,6 +50,11 @@ type Config struct {
 	ReauthTimeout time.Duration
 	IdleTimeout   time.Duration
 	WriteTimeout  time.Duration
+	// MaxConnsPerUser caps one user's simultaneous connections; when a new one exceeds it, the
+	// oldest is closed with 1008 TOO_MANY_CONNECTIONS. Closing the oldest (not rejecting the
+	// newest) keeps a reconnect after a silent network drop working while the dead socket
+	// still waits for its idle timeout. Zero selects DefaultMaxConnsPerUser.
+	MaxConnsPerUser int
 	// Now overrides time.Now for token expiry checks in tests.
 	Now func() time.Time
 }
@@ -56,6 +66,38 @@ type Handler struct {
 	mu       sync.Mutex // guards closing together with wg.Add, so Add never runs concurrently with Wait
 	closing  bool
 	wg       sync.WaitGroup
+
+	connMu sync.Mutex
+	conns  map[string][]*connection // live connections per user, oldest first
+}
+
+// register records c as a live connection of the user and closes the oldest ones beyond the cap.
+func (h *Handler) register(userID string, c *connection) {
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
+	list := append(h.conns[userID], c)
+	for len(list) > h.cfg.MaxConnsPerUser {
+		list[0].closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
+		list = list[1:]
+	}
+	h.conns[userID] = list
+}
+
+func (h *Handler) unregister(userID string, c *connection) {
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
+	list := h.conns[userID]
+	for i, x := range list {
+		if x == c {
+			list = append(list[:i:i], list[i+1:]...)
+			break
+		}
+	}
+	if len(list) == 0 {
+		delete(h.conns, userID)
+		return
+	}
+	h.conns[userID] = list
 }
 
 // enter registers one live connection. It refuses once Shutdown has started.
@@ -83,10 +125,13 @@ func New(cfg Config) *Handler {
 	if cfg.WriteTimeout <= 0 {
 		cfg.WriteTimeout = DefaultWriteTimeout
 	}
+	if cfg.MaxConnsPerUser <= 0 {
+		cfg.MaxConnsPerUser = DefaultMaxConnsPerUser
+	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
-	h := &Handler{cfg: cfg}
+	h := &Handler{cfg: cfg, conns: make(map[string][]*connection)}
 	for _, o := range cfg.AllowedOrigins {
 		if u, err := url.Parse(o); err == nil && u.Host != "" {
 			h.patterns = append(h.patterns, u.Host)
@@ -137,8 +182,10 @@ type connection struct {
 	h    *Handler
 	conn *websocket.Conn
 	ctx  context.Context
-	ctrl chan outMsg
-	log  zerolog.Logger
+	// projectID is the room this connection belongs to, needed to re-check access.
+	projectID string
+	ctrl      chan outMsg
+	log       zerolog.Logger
 	// writerDone is closed when the writer goroutine has exited.
 	writerDone chan struct{}
 
@@ -188,7 +235,7 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &connection{h: h, conn: conn, ctx: ctx, ctrl: make(chan outMsg, ctrlQueue), log: log, writerDone: make(chan struct{})}
+	c := &connection{h: h, conn: conn, ctx: ctx, projectID: projectID, ctrl: make(chan outMsg, ctrlQueue), log: log, writerDone: make(chan struct{})}
 	defer conn.CloseNow() //nolint:errcheck // best-effort cleanup after the protocol close
 
 	actor, sess, ok := h.handshake(c, projectID)
@@ -197,9 +244,14 @@ func (h *Handler) ServeProject(w http.ResponseWriter, r *http.Request, projectID
 	}
 	defer sess.Leave()
 	defer c.stopTimers()
+	h.register(actor.UserID, c)
+	defer h.unregister(actor.UserID, c)
 
 	go func() {
 		defer close(c.writerDone)
+		// Cancel first (defers run last-in first): when the writer dies on a write timeout the
+		// reader may be blocked in enqueue on a full queue, and only the cancelled context frees it.
+		defer cancel()
 		c.writeLoop(sess)
 	}()
 	c.readLoop(sess, actor)
@@ -436,7 +488,7 @@ func (c *connection) handleFrame(sess domain.RoomSession, actor domain.Actor, f 
 			c.enqueue(outMsg{data: encodeError(string(domain.CodeValidation), "rowId is required")})
 			return actor, true
 		}
-		if _, err := svc.Acquire(actor, sess, *f.RowID); err != nil {
+		if _, err := svc.Acquire(c.ctx, actor, sess, c.projectID, *f.RowID); err != nil {
 			c.replyLockError(*f.RowID, err)
 		}
 	case frameLockRelease:
@@ -453,7 +505,8 @@ func (c *connection) handleFrame(sess domain.RoomSession, actor domain.Actor, f 
 
 // reauthenticate handles an auth frame on a live connection (after a token
 // refresh or in answer to reauth). The new token must belong to the same user
-// and still carry the rights the connection needs.
+// and still carry the rights the connection needs, including visibility of the project
+// (the join rules), so a revoked project.view_finished ends the connection.
 func (c *connection) reauthenticate(cur domain.Actor, token string) (domain.Actor, bool) {
 	svc := c.h.cfg.Collab
 	fresh, err := svc.Authenticate(c.ctx, token)
@@ -461,7 +514,7 @@ func (c *connection) reauthenticate(cur domain.Actor, token string) (domain.Acto
 		err = domain.ErrForbidden
 	}
 	if err == nil {
-		err = svc.EnsureMember(fresh)
+		err = svc.Revalidate(c.ctx, fresh, c.projectID)
 	}
 	if err == nil && !fresh.TokenExp.IsZero() && !c.h.cfg.Now().Before(fresh.TokenExp) {
 		err = domain.ErrTokenExpired

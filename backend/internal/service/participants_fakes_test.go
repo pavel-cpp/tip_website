@@ -42,7 +42,7 @@ func (f *fakeProjects) Get(_ context.Context, id string) (domain.Project, error)
 
 type fakeLocks struct{ locks map[string]domain.RowLock }
 
-func (f *fakeLocks) EnsureFree(_ context.Context, rowID, userID string) error {
+func (f *fakeLocks) EnsureFree(_ context.Context, _, rowID, userID string) error {
 	l, ok := f.locks[rowID]
 	if !ok {
 		return nil

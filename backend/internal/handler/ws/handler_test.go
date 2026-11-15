@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,10 +61,13 @@ func (fakeAuth) Authenticate(_ context.Context, token string) (domain.Actor, err
 	return domain.Actor{UserID: user, Perms: domain.NewPermissionSet(perms...), TokenExp: exp}, nil
 }
 
-type fakeAccess struct{}
+type fakeAccess struct {
+	// hideAll makes every project invisible, as when a project is finished and view_finished is revoked.
+	hideAll atomic.Bool
+}
 
-func (fakeAccess) EnsureVisible(_ context.Context, _ domain.Actor, projectID string) error {
-	if projectID == "hidden" {
+func (f *fakeAccess) EnsureVisible(_ context.Context, _ domain.Actor, projectID string) error {
+	if projectID == "hidden" || f.hideAll.Load() {
 		return domain.ErrNotFound
 	}
 	return nil
@@ -77,6 +83,7 @@ type env struct {
 	t   *testing.T
 	hub *memory.Hub
 	h   *Handler
+	acc *fakeAccess
 	srv *httptest.Server
 }
 
@@ -89,7 +96,8 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 func newEnvBuffered(t *testing.T, mod func(*Config), sendBuffer int) *env {
 	t.Helper()
 	hub := memory.NewHub(memory.Config{SweepInterval: 10 * time.Millisecond, SendBuffer: sendBuffer})
-	svc := service.NewCollab(hub, fakeAccess{}, fakeDir{}, fakeAuth{})
+	acc := &fakeAccess{}
+	svc := service.NewCollab(hub, acc, fakeDir{}, fakeAuth{})
 	cfg := Config{
 		Collab:        svc,
 		AuthTimeout:   300 * time.Millisecond,
@@ -105,7 +113,7 @@ func newEnvBuffered(t *testing.T, mod func(*Config), sendBuffer int) *env {
 		h.ServeProject(w, r, r.PathValue("id"))
 	})
 	srv := httptest.NewServer(mux)
-	e := &env{t: t, hub: hub, h: h, srv: srv}
+	e := &env{t: t, hub: hub, h: h, acc: acc, srv: srv}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -403,7 +411,7 @@ func TestLockProtocol(t *testing.T) {
 	}
 
 	// The REST path sees the same lock through the hub.
-	if err := e.hub.EnsureFree(context.Background(), "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
+	if err := e.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
 		t.Fatalf("EnsureFree = %v", err)
 	}
 
@@ -719,4 +727,115 @@ func TestPingKeepsConnectionAlive(t *testing.T) {
 		}
 	}
 	a.expectQuiet()
+}
+
+// A user who can no longer see the project (for example a finished one after view_finished was revoked) must
+// be dropped at re-authentication, as the initial join would have refused them.
+func TestReauthWithInvisibleProjectCloses(t *testing.T) {
+	e := newEnv(t, nil)
+	a, _ := e.join("p1", "alice")
+	e.acc.hideAll.Store(true)
+	a.send(map[string]any{"t": "auth", "token": "alice"})
+	if f := a.recv(); f["code"] != "NOT_FOUND" {
+		t.Fatalf("frame = %v", f)
+	}
+	if code, _ := a.expectClose(); code != websocket.StatusPolicyViolation {
+		t.Fatalf("close code = %d", code)
+	}
+}
+
+func TestPerUserConnectionCapClosesOldest(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 2 })
+	first, _ := e.join("p1", "alice")
+	second, _ := e.join("p1", "alice")
+	other, _ := e.join("p1", "bob") // another user does not count against alice
+	third, _ := e.join("p1", "alice")
+
+	if code, reason := first.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("oldest close = %d %q", code, reason)
+	}
+	for name, cl := range map[string]*client{"second": second, "third": third, "bob": other} {
+		cl.send(map[string]any{"t": "ping"})
+		if f := cl.recvType("pong"); f["t"] != "pong" {
+			t.Fatalf("%s: %v", name, f)
+		}
+	}
+}
+
+// stallListener hands out connections whose writes can be frozen, to model a client that stops reading
+// without waiting for the kernel buffers to fill.
+type stallListener struct {
+	net.Listener
+	stall  atomic.Bool
+}
+
+func (l *stallListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return &stallConn{Conn: c, l: l, done: make(chan struct{})}, nil
+}
+
+type stallConn struct {
+	net.Conn
+	l    *stallListener
+	once sync.Once
+	done chan struct{}
+}
+
+func (c *stallConn) Write(p []byte) (int, error) {
+	if c.l.stall.Load() {
+		<-c.done
+		return 0, net.ErrClosed
+	}
+	return c.Conn.Write(p)
+}
+
+func (c *stallConn) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return c.Conn.Close()
+}
+
+// When the writer dies on a write timeout while the reader sits in enqueue on a full control queue, the
+// reader used to block forever and the connection leaked.
+func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.WriteTimeout = 150 * time.Millisecond })
+	inner, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl := &stallListener{Listener: inner}
+	done := make(chan struct{})
+	var once sync.Once
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		e.h.ServeProject(w, r, "p1")
+		once.Do(func() { close(done) })
+	})}
+	go func() { _ = srv.Serve(sl) }()
+	t.Cleanup(func() { _ = srv.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, "ws://"+inner.Addr().String()+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
+	cl := &client{t: t, c: c}
+	cl.send(map[string]any{"t": "auth", "token": "alice"})
+	if hello := cl.recv(); hello["t"] != "hello" {
+		t.Fatalf("hello = %v", hello)
+	}
+
+	// The first pong blocks the writer; the next ctrlQueue fill the queue; one more blocks the reader.
+	sl.stall.Store(true)
+	for i := 0; i < ctrlQueue+2; i++ {
+		cl.send(map[string]any{"t": "ping"})
+	}
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("connection handler is stuck after the writer timed out")
+	}
 }
