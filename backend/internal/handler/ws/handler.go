@@ -72,15 +72,22 @@ type Handler struct {
 }
 
 // register records c as a live connection of the user and closes the oldest ones beyond the cap.
+// Victims are picked under connMu but closed after it is released, on their own goroutine: a
+// close runs a handshake with a timeout, and a client that does not read must not stall every
+// other connect and disconnect (or the connecting user) behind the mutex.
 func (h *Handler) register(userID string, c *connection) {
 	h.connMu.Lock()
-	defer h.connMu.Unlock()
 	list := append(h.conns[userID], c)
-	for len(list) > h.cfg.MaxConnsPerUser {
-		list[0].closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
-		list = list[1:]
+	var victims []*connection
+	if over := len(list) - h.cfg.MaxConnsPerUser; over > 0 {
+		victims = list[:over:over]
+		list = list[over:]
 	}
 	h.conns[userID] = list
+	h.connMu.Unlock()
+	for _, v := range victims {
+		go v.closeWith(websocket.StatusPolicyViolation, "TOO_MANY_CONNECTIONS")
+	}
 }
 
 func (h *Handler) unregister(userID string, c *connection) {

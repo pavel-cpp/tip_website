@@ -762,11 +762,12 @@ func TestPerUserConnectionCapClosesOldest(t *testing.T) {
 	}
 }
 
-// stallListener hands out connections whose writes can be frozen, to model a client that stops reading
-// without waiting for the kernel buffers to fill.
+// stallListener hands out connections whose server-side writes can be frozen, to model a client that stops
+// reading without waiting for the kernel buffers to fill.
 type stallListener struct {
 	net.Listener
-	stall  atomic.Bool
+	mu    sync.Mutex
+	conns []*stallConn
 }
 
 func (l *stallListener) Accept() (net.Conn, error) {
@@ -774,18 +775,29 @@ func (l *stallListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &stallConn{Conn: c, l: l, done: make(chan struct{})}, nil
+	sc := &stallConn{Conn: c, done: make(chan struct{})}
+	l.mu.Lock()
+	l.conns = append(l.conns, sc)
+	l.mu.Unlock()
+	return sc, nil
+}
+
+// freeze stalls the writes of the n-th accepted connection (0-based).
+func (l *stallListener) freeze(n int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.conns[n].stall.Store(true)
 }
 
 type stallConn struct {
 	net.Conn
-	l    *stallListener
-	once sync.Once
-	done chan struct{}
+	stall atomic.Bool
+	once  sync.Once
+	done  chan struct{}
 }
 
 func (c *stallConn) Write(p []byte) (int, error) {
-	if c.l.stall.Load() {
+	if c.stall.Load() {
 		<-c.done
 		return 0, net.ErrClosed
 	}
@@ -797,39 +809,62 @@ func (c *stallConn) Close() error {
 	return c.Conn.Close()
 }
 
-// When the writer dies on a write timeout while the reader sits in enqueue on a full control queue, the
-// reader used to block forever and the connection leaked.
-func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
-	e := newEnv(t, func(c *Config) { c.WriteTimeout = 150 * time.Millisecond })
+// serveStalled serves the handler for project p1 on a listener with freezable connections;
+// onDone runs after each ServeProject call returns.
+func serveStalled(t *testing.T, h *Handler, onDone func()) (*stallListener, string) {
+	t.Helper()
 	inner, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sl := &stallListener{Listener: inner}
-	done := make(chan struct{})
-	var once sync.Once
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		e.h.ServeProject(w, r, "p1")
-		once.Do(func() { close(done) })
+		h.ServeProject(w, r, "p1")
+		if onDone != nil {
+			onDone()
+		}
 	})}
 	go func() { _ = srv.Serve(sl) }()
-	t.Cleanup(func() { _ = srv.Close() })
+	t.Cleanup(func() {
+		_ = srv.Close()
+		sl.mu.Lock()
+		defer sl.mu.Unlock()
+		for _, c := range sl.conns {
+			_ = c.Close() // unblock frozen writes so the handlers can finish
+		}
+	})
+	return sl, "ws://" + inner.Addr().String() + "/"
+}
 
+// dialJoin dials url, authenticates as token and consumes the hello frame.
+func dialJoin(t *testing.T, url, token string) *client {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws://"+inner.Addr().String()+"/", nil)
+	c, _, err := websocket.Dial(ctx, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = c.CloseNow() })
 	cl := &client{t: t, c: c}
-	cl.send(map[string]any{"t": "auth", "token": "alice"})
+	cl.send(map[string]any{"t": "auth", "token": token})
 	if hello := cl.recv(); hello["t"] != "hello" {
 		t.Fatalf("hello = %v", hello)
 	}
+	return cl
+}
+
+// When the writer dies on a write timeout while the reader sits in enqueue on a full control queue, the
+// reader used to block forever and the connection leaked.
+func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.WriteTimeout = 150 * time.Millisecond })
+	done := make(chan struct{})
+	var once sync.Once
+	sl, url := serveStalled(t, e.h, func() { once.Do(func() { close(done) }) })
+	cl := dialJoin(t, url, "alice")
 
 	// The first pong blocks the writer; the next ctrlQueue fill the queue; one more blocks the reader.
-	sl.stall.Store(true)
+	sl.freeze(0)
 	for i := 0; i < ctrlQueue+2; i++ {
 		cl.send(map[string]any{"t": "ping"})
 	}
@@ -838,4 +873,27 @@ func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("connection handler is stuck after the writer timed out")
 	}
+}
+
+// Closing the evicted connection runs a close handshake that a client which does not read can stall for
+// seconds; that must neither delay the connecting user nor block other users behind the registry lock.
+func TestSlowVictimDoesNotBlockOthers(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 1 })
+	sl, url := serveStalled(t, e.h, nil)
+	dialJoin(t, url, "alice")
+	sl.freeze(0)
+
+	pong := func(cl *client, who string) {
+		t.Helper()
+		start := time.Now()
+		cl.send(map[string]any{"t": "ping"})
+		cl.recvType("pong")
+		if d := time.Since(start); d > time.Second {
+			t.Fatalf("%s waited %v behind the stalled victim", who, d)
+		}
+	}
+	second := dialJoin(t, url, "alice") // evicts the frozen first connection
+	pong(second, "the connecting user")
+	time.Sleep(50 * time.Millisecond)
+	pong(dialJoin(t, url, "bob"), "another user")
 }
