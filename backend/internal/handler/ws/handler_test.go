@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,10 +61,13 @@ func (fakeAuth) Authenticate(_ context.Context, token string) (domain.Actor, err
 	return domain.Actor{UserID: user, Perms: domain.NewPermissionSet(perms...), TokenExp: exp}, nil
 }
 
-type fakeAccess struct{}
+type fakeAccess struct {
+	// hideAll makes every project invisible, as when a project is finished and view_finished is revoked.
+	hideAll atomic.Bool
+}
 
-func (fakeAccess) EnsureVisible(_ context.Context, _ domain.Actor, projectID string) error {
-	if projectID == "hidden" {
+func (f *fakeAccess) EnsureVisible(_ context.Context, _ domain.Actor, projectID string) error {
+	if projectID == "hidden" || f.hideAll.Load() {
 		return domain.ErrNotFound
 	}
 	return nil
@@ -77,6 +83,7 @@ type env struct {
 	t   *testing.T
 	hub *memory.Hub
 	h   *Handler
+	acc *fakeAccess
 	srv *httptest.Server
 }
 
@@ -89,7 +96,8 @@ func newEnv(t *testing.T, mod func(*Config)) *env {
 func newEnvBuffered(t *testing.T, mod func(*Config), sendBuffer int) *env {
 	t.Helper()
 	hub := memory.NewHub(memory.Config{SweepInterval: 10 * time.Millisecond, SendBuffer: sendBuffer})
-	svc := service.NewCollab(hub, fakeAccess{}, fakeDir{}, fakeAuth{})
+	acc := &fakeAccess{}
+	svc := service.NewCollab(hub, acc, fakeDir{}, fakeAuth{})
 	cfg := Config{
 		Collab:        svc,
 		AuthTimeout:   300 * time.Millisecond,
@@ -105,7 +113,7 @@ func newEnvBuffered(t *testing.T, mod func(*Config), sendBuffer int) *env {
 		h.ServeProject(w, r, r.PathValue("id"))
 	})
 	srv := httptest.NewServer(mux)
-	e := &env{t: t, hub: hub, h: h, srv: srv}
+	e := &env{t: t, hub: hub, h: h, acc: acc, srv: srv}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -403,7 +411,7 @@ func TestLockProtocol(t *testing.T) {
 	}
 
 	// The REST path sees the same lock through the hub.
-	if err := e.hub.EnsureFree(context.Background(), "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
+	if err := e.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
 		t.Fatalf("EnsureFree = %v", err)
 	}
 
@@ -719,4 +727,299 @@ func TestPingKeepsConnectionAlive(t *testing.T) {
 		}
 	}
 	a.expectQuiet()
+}
+
+// A user who can no longer see the project (for example a finished one after view_finished was revoked) must
+// be dropped at re-authentication, as the initial join would have refused them.
+func TestReauthWithInvisibleProjectCloses(t *testing.T) {
+	e := newEnv(t, nil)
+	a, _ := e.join("p1", "alice")
+	e.acc.hideAll.Store(true)
+	a.send(map[string]any{"t": "auth", "token": "alice"})
+	if f := a.recv(); f["code"] != "NOT_FOUND" {
+		t.Fatalf("frame = %v", f)
+	}
+	if code, _ := a.expectClose(); code != websocket.StatusPolicyViolation {
+		t.Fatalf("close code = %d", code)
+	}
+}
+
+// At the cap a new connection is rejected, and the oldest live one is evicted so the user is not locked out by a
+// dead tab; the retry succeeds once the evicted socket is gone.
+func TestPerUserConnectionCapRejectsNewAndEvictsOldest(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 2 })
+	first, _ := e.join("p1", "alice")
+	second, _ := e.join("p1", "alice")
+	other, _ := e.join("p1", "bob") // another user does not count against alice
+
+	rejected := e.connect("p1", "alice")
+	if code, reason := rejected.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("new connection close = %d %q", code, reason)
+	}
+	if code, reason := first.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("oldest close = %d %q", code, reason)
+	}
+	waitFor(t, func() bool { return e.h.userConnCount("alice") == 1 }, "evicted connection unregistered")
+
+	third, _ := e.join("p1", "alice") // the retry fits now
+	for name, cl := range map[string]*client{"second": second, "third": third, "bob": other} {
+		cl.send(map[string]any{"t": "ping"})
+		if f := cl.recvType("pong"); f["t"] != "pong" {
+			t.Fatalf("%s: %v", name, f)
+		}
+	}
+}
+
+func waitFor(t *testing.T, cond func() bool, what string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for: %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A burst of connects from one user must never register more sockets than the cap, however slowly the evicted ones
+// finish closing.
+func TestConnectionBurstNeverExceedsCap(t *testing.T) {
+	const capN, burst = 3, 40
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = capN })
+	sl, url := serveStalled(t, e.h, nil)
+
+	var maxSeen atomic.Int64
+	stop := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if n := int64(e.h.userConnCount("alice")); n > maxSeen.Load() {
+				maxSeen.Store(n)
+			}
+		}
+	}()
+
+	var wg sync.WaitGroup
+	var admitted atomic.Int64
+	for i := 0; i < burst; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c, err := dialURL(ctx, url)
+			if err != nil {
+				return
+			}
+			defer func() { _ = c.CloseNow() }()
+			data, _ := json.Marshal(map[string]any{"t": "auth", "token": "alice"})
+			if c.Write(ctx, websocket.MessageText, data) != nil {
+				return
+			}
+			if _, data, err := c.Read(ctx); err == nil && strings.Contains(string(data), `"hello"`) {
+				admitted.Add(1)
+				time.Sleep(300 * time.Millisecond) // hold the socket while the burst continues
+			}
+		}()
+	}
+	// Freeze every server-side connection: evicted sockets cannot finish their close handshake quickly.
+	time.AfterFunc(20*time.Millisecond, func() {
+		sl.mu.Lock()
+		defer sl.mu.Unlock()
+		for _, c := range sl.conns {
+			c.stall.Store(true)
+		}
+	})
+	wg.Wait()
+	close(stop)
+	<-sampled
+	if got := maxSeen.Load(); got > capN {
+		t.Fatalf("registered %d sockets at once, cap is %d", got, capN)
+	}
+	if admitted.Load() == 0 {
+		t.Fatal("no connection was admitted")
+	}
+}
+
+// stallListener hands out connections whose server-side writes can be frozen, to model a client that stops
+// reading without waiting for the kernel buffers to fill.
+type stallListener struct {
+	net.Listener
+	mu    sync.Mutex
+	conns []*stallConn
+}
+
+func (l *stallListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	sc := &stallConn{Conn: c, done: make(chan struct{})}
+	l.mu.Lock()
+	l.conns = append(l.conns, sc)
+	l.mu.Unlock()
+	return sc, nil
+}
+
+// freeze stalls the writes of the n-th accepted connection (0-based).
+func (l *stallListener) freeze(n int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.conns[n].stall.Store(true)
+}
+
+type stallConn struct {
+	net.Conn
+	stall atomic.Bool
+	once  sync.Once
+	done  chan struct{}
+}
+
+func (c *stallConn) Write(p []byte) (int, error) {
+	if c.stall.Load() {
+		<-c.done
+		return 0, net.ErrClosed
+	}
+	return c.Conn.Write(p)
+}
+
+func (c *stallConn) Close() error {
+	c.once.Do(func() { close(c.done) })
+	return c.Conn.Close()
+}
+
+// serveStalled serves the handler for project p1 on a listener with freezable connections;
+// onDone runs after each ServeProject call returns.
+func serveStalled(t *testing.T, h *Handler, onDone func()) (*stallListener, string) {
+	t.Helper()
+	inner, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sl := &stallListener{Listener: inner}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeProject(w, r, "p1")
+		if onDone != nil {
+			onDone()
+		}
+	})}
+	go func() { _ = srv.Serve(sl) }()
+	t.Cleanup(func() {
+		_ = srv.Close()
+		sl.mu.Lock()
+		defer sl.mu.Unlock()
+		for _, c := range sl.conns {
+			_ = c.Close() // unblock frozen writes so the handlers can finish
+		}
+	})
+	return sl, "ws://" + inner.Addr().String() + "/"
+}
+
+// dialJoin dials url, authenticates as token and consumes the hello frame.
+func dialJoin(t *testing.T, url, token string) *client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, err := dialURL(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
+	cl := &client{t: t, c: c}
+	cl.send(map[string]any{"t": "auth", "token": token})
+	if hello := cl.recv(); hello["t"] != "hello" {
+		t.Fatalf("hello = %v", hello)
+	}
+	return cl
+}
+
+// When the writer dies on a write timeout while the reader sits in enqueue on a full control queue, the
+// reader used to block forever and the connection leaked.
+func TestReaderIsFreedWhenWriterTimesOut(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.WriteTimeout = 150 * time.Millisecond })
+	done := make(chan struct{})
+	var once sync.Once
+	sl, url := serveStalled(t, e.h, func() { once.Do(func() { close(done) }) })
+	cl := dialJoin(t, url, "alice")
+
+	// The first pong blocks the writer; the next ctrlQueue fill the queue; one more blocks the reader.
+	sl.freeze(0)
+	for i := 0; i < ctrlQueue+2; i++ {
+		cl.send(map[string]any{"t": "ping"})
+	}
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("connection handler is stuck after the writer timed out")
+	}
+}
+
+// An evicted client that never reads must be gone within about two seconds (close frame with a short timeout, then a
+// hard close), and neither the connecting user nor other users may wait for it.
+func TestSlowVictimIsDroppedAndDoesNotBlockOthers(t *testing.T) {
+	e := newEnv(t, func(c *Config) { c.MaxConnsPerUser = 1 })
+	sl, url := serveStalled(t, e.h, nil)
+	dialJoin(t, url, "alice")
+	sl.freeze(0)
+
+	start := time.Now()
+	// Over the cap: rejected immediately, which evicts the frozen first connection.
+	rejected := e.dialRaw(t, url, "alice")
+	if code, reason := rejected.expectClose(); code != websocket.StatusPolicyViolation || reason != "TOO_MANY_CONNECTIONS" {
+		t.Fatalf("close = %d %q", code, reason)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("rejection took %v", d)
+	}
+
+	// Another user is not delayed by the victim's close.
+	bobStart := time.Now()
+	bob := dialJoin(t, url, "bob")
+	bob.send(map[string]any{"t": "ping"})
+	bob.recvType("pong")
+	if d := time.Since(bobStart); d > time.Second {
+		t.Fatalf("another user waited %v behind the stalled victim", d)
+	}
+
+	// The victim is dropped within ~closeTimeout even though it never reads.
+	deadline := start.Add(2 * time.Second)
+	for e.h.userConnCount("alice") != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the non-reading victim is still registered after 2s")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	alice := dialJoin(t, url, "alice") // and the retry is admitted
+	alice.send(map[string]any{"t": "ping"})
+	alice.recvType("pong")
+}
+
+// dialRaw dials url and sends the auth frame without waiting for a reply.
+func (e *env) dialRaw(t *testing.T, url, token string) *client {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, err := dialURL(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
+	cl := &client{t: t, c: c}
+	cl.send(map[string]any{"t": "auth", "token": token})
+	return cl
+}
+
+// dialURL dials a WebSocket URL and releases the upgrade response body.
+func dialURL(ctx context.Context, url string) (*websocket.Conn, error) {
+	c, resp, err := websocket.Dial(ctx, url, nil)
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	return c, err
 }

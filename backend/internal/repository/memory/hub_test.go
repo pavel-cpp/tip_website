@@ -278,13 +278,13 @@ func TestLockLifecycle(t *testing.T) {
 	}
 
 	// EnsureFree for the REST path.
-	if err := h.hub.EnsureFree(context.Background(), "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
 		t.Fatalf("EnsureFree(bob) = %v", err)
 	}
-	if err := h.hub.EnsureFree(context.Background(), "r1", "alice"); err != nil {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "alice"); err != nil {
 		t.Fatalf("EnsureFree(alice) = %v", err)
 	}
-	if err := h.hub.EnsureFree(context.Background(), "other", "bob"); err != nil {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "other", "bob"); err != nil {
 		t.Fatalf("EnsureFree(other) = %v", err)
 	}
 
@@ -316,7 +316,7 @@ func TestLockExpiresWithoutHeartbeat(t *testing.T) {
 
 	h.clock.Advance(domain.LockTTL - time.Second)
 	expectNone(t, b)
-	if err := h.hub.EnsureFree(context.Background(), "r1", "bob"); err == nil {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); err == nil {
 		t.Fatal("lock must still be held")
 	}
 
@@ -325,7 +325,7 @@ func TestLockExpiresWithoutHeartbeat(t *testing.T) {
 	if !ok || ev.RowID != "r1" {
 		t.Fatalf("expected unlock, got %+v", ev)
 	}
-	if err := h.hub.EnsureFree(context.Background(), "r1", "bob"); err != nil {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); err != nil {
 		t.Fatalf("expired lock must be free: %v", err)
 	}
 }
@@ -349,7 +349,7 @@ func TestHeartbeatRenewsLocks(t *testing.T) {
 	}
 	h.clock.Advance(30 * time.Second) // 60 s after acquire, 30 s after the heartbeat
 	expectNone(t, b)
-	if err := h.hub.EnsureFree(context.Background(), "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); !errors.Is(err, domain.ErrRowLocked) {
 		t.Fatalf("lock must survive thanks to the heartbeat: %v", err)
 	}
 }
@@ -375,7 +375,7 @@ func TestLocksReleasedOnDisconnect(t *testing.T) {
 			t.Fatalf("unexpected %T", ev)
 		}
 	}
-	if err := h.hub.EnsureFree(context.Background(), "r1", "bob"); err != nil {
+	if err := h.hub.EnsureFree(context.Background(), "p1", "r1", "bob"); err != nil {
 		t.Fatalf("lock must be gone: %v", err)
 	}
 }
@@ -481,7 +481,7 @@ func TestSlowClientReleasesItsLocks(t *testing.T) {
 		h.hub.Publish("p1", domain.RowsDeleted("x"))
 	}
 	<-slow.Closed()
-	eventually(t, func() bool { return h.hub.EnsureFree(context.Background(), "r1", "bob") == nil }, "lock released")
+	eventually(t, func() bool { return h.hub.EnsureFree(context.Background(), "p1", "r1", "bob") == nil }, "lock released")
 }
 
 func TestKickUser(t *testing.T) {
@@ -510,7 +510,7 @@ func TestKickUser(t *testing.T) {
 		t.Fatal("bob must not be kicked")
 	default:
 	}
-	eventually(t, func() bool { return h.hub.EnsureFree(context.Background(), "r1", "bob") == nil }, "kicked user's lock released")
+	eventually(t, func() bool { return h.hub.EnsureFree(context.Background(), "p1", "r1", "bob") == nil }, "kicked user's lock released")
 }
 
 func TestBroadcastReauth(t *testing.T) {
@@ -696,7 +696,7 @@ func TestConcurrentTrafficRace(t *testing.T) {
 				s.SetCursor(domain.Cursor{RowID: "r1"})
 				s.Heartbeat()
 				h.hub.Publish(fmt.Sprintf("p%d", u%3), domain.RowsDeleted("x"))
-				_ = h.hub.EnsureFree(context.Background(), "r1", "zed")
+				_ = h.hub.EnsureFree(context.Background(), "p1", "r1", "zed")
 				s.Release(fmt.Sprintf("r%d", round%4))
 				s.Leave()
 				close(stop)

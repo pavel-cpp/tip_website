@@ -33,3 +33,10 @@ type PeerDirectory interface {
 type TokenAuthenticator interface {
 	Authenticate(ctx context.Context, token string) (domain.Actor, error)
 }
+
+// CollabRows resolves a row id to its participant so a lock request can be checked against the
+// room's project. repository/postgres.ParticipantRepo satisfies it; Get returns
+// domain.ErrNotFound for an unknown or malformed id.
+type CollabRows interface {
+	Get(ctx context.Context, id string) (domain.Participant, error)
+}

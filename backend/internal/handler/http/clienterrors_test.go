@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -121,6 +122,7 @@ func TestClientErrorRateLimitPerIP(t *testing.T) {
 	if rec.Header().Get("Retry-After") == "" {
 		t.Error("429 must carry Retry-After")
 	}
+	*e.now = e.now.Add(2 * time.Second) // the burst above also filled the one-second global ceiling
 	if rec := e.post(`{"message":"m"}`, "10.0.0.2:1"); rec.Code != http.StatusNoContent {
 		t.Errorf("another IP must not be limited: %d", rec.Code)
 	}
@@ -147,5 +149,25 @@ func TestClientErrorLimiterIsBounded(t *testing.T) {
 	}
 	if len(l.entries) > clientErrorLimiterCap {
 		t.Errorf("entries = %d", len(l.entries))
+	}
+}
+
+// Reports from many different IPs share one ceiling, so a flood from a botnet cannot turn the public sink into
+// an unbounded log writer; it resets with the next second.
+func TestClientErrorGlobalCeiling(t *testing.T) {
+	e := newClientErrorsEnv()
+	body := `{"message":"boom"}`
+	for i := 0; i < clientErrorGlobalPerSec; i++ {
+		if rec := e.post(body, fmt.Sprintf("10.0.%d.%d:1", i/200, i%200+1)); rec.Code != http.StatusNoContent {
+			t.Fatalf("report %d: status %d", i, rec.Code)
+		}
+	}
+	rec := e.post(body, "10.9.9.9:1")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("over the global ceiling: status %d, want 429", rec.Code)
+	}
+	*e.now = e.now.Add(1100 * time.Millisecond)
+	if rec := e.post(body, "10.9.9.9:1"); rec.Code != http.StatusNoContent {
+		t.Fatalf("after the window: status %d", rec.Code)
 	}
 }

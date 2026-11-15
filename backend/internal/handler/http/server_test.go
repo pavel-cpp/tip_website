@@ -78,7 +78,13 @@ func TestRequestID(t *testing.T) {
 func TestSecurityHeaders(t *testing.T) {
 	h, _, _ := newTestRouter(t)
 	rec := do(h, "GET", "/healthz", nil)
-	if !strings.Contains(rec.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") ||
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, d := range []string{"frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'"} {
+		if !strings.Contains(csp, d) {
+			t.Errorf("CSP lacks %q: %s", d, csp)
+		}
+	}
+	if !strings.Contains(csp, "frame-ancestors 'none'") ||
 		rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("Referrer-Policy") == "" {
 		t.Errorf("missing security headers: %v", rec.Header())
 	}

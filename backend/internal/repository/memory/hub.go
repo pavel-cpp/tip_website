@@ -56,7 +56,7 @@ type Hub struct {
 	wg     sync.WaitGroup
 
 	lockMu sync.RWMutex
-	locks  map[string]domain.RowLock
+	locks  map[lockKey]domain.RowLock
 
 	nextID atomic.Uint64
 }
@@ -78,7 +78,7 @@ func NewHub(cfg Config) *Hub {
 	if cfg.Clock == nil {
 		cfg.Clock = systemClock{}
 	}
-	return &Hub{cfg: cfg, rooms: make(map[string]*room), locks: make(map[string]domain.RowLock)}
+	return &Hub{cfg: cfg, rooms: make(map[string]*room), locks: make(map[lockKey]domain.RowLock)}
 }
 
 // Join adds a client to the room of projectID, creating the room on demand.
@@ -205,10 +205,10 @@ func (h *Hub) KickUser(userID string) {
 }
 
 // EnsureFree reports ROW_LOCKED (carrying the owner) when another user holds a
-// live lock on the row. It reads the lock index and does not touch rooms.
-func (h *Hub) EnsureFree(_ context.Context, rowID, userID string) error {
+// live lock on the row of the project. It reads the lock index and does not touch rooms.
+func (h *Hub) EnsureFree(_ context.Context, projectID, rowID, userID string) error {
 	h.lockMu.RLock()
-	l, ok := h.locks[rowID]
+	l, ok := h.locks[lockKey{projectID, rowID}]
 	h.lockMu.RUnlock()
 	if !ok {
 		return nil
@@ -250,14 +250,18 @@ func (h *Hub) ActiveLocks() int {
 	return len(h.locks)
 }
 
-func (h *Hub) setLock(l domain.RowLock) {
+// lockKey scopes the lock index by project: a client of one room can name any row id, so a
+// bare row id would let it block the editors of another project.
+type lockKey struct{ project, row string }
+
+func (h *Hub) setLock(projectID string, l domain.RowLock) {
 	h.lockMu.Lock()
-	h.locks[l.RowID] = l
+	h.locks[lockKey{projectID, l.RowID}] = l
 	h.lockMu.Unlock()
 }
 
-func (h *Hub) clearLock(rowID string) {
+func (h *Hub) clearLock(projectID, rowID string) {
 	h.lockMu.Lock()
-	delete(h.locks, rowID)
+	delete(h.locks, lockKey{projectID, rowID})
 	h.lockMu.Unlock()
 }

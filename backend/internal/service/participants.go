@@ -316,7 +316,7 @@ func (s *Participants) Update(ctx context.Context, a domain.Actor, in UpdateInpu
 			return err
 		}
 		now := s.d.Clock.Now()
-		if err := s.d.Locks.EnsureFree(ctx, cur.ID, a.UserID); err != nil {
+		if err := s.d.Locks.EnsureFree(ctx, cur.ProjectID, cur.ID, a.UserID); err != nil {
 			return err
 		}
 		name, phone := cur.Name, cur.Phone
@@ -427,7 +427,7 @@ func (s *Participants) UpdateBatch(ctx context.Context, a domain.Actor, projectI
 		if err != nil {
 			return BatchResult{}, err
 		}
-		if err := s.d.Locks.EnsureFree(ctx, it.ID, a.UserID); err != nil {
+		if err := s.d.Locks.EnsureFree(ctx, projectID, it.ID, a.UserID); err != nil {
 			if !errors.Is(err, domain.ErrRowLocked) {
 				return BatchResult{}, err
 			}
@@ -481,7 +481,7 @@ func (s *Participants) Clear(ctx context.Context, a domain.Actor, projectID stri
 	}
 	free := ids[:0:0]
 	for _, id := range ids {
-		if err := s.d.Locks.EnsureFree(ctx, id, a.UserID); err != nil {
+		if err := s.d.Locks.EnsureFree(ctx, projectID, id, a.UserID); err != nil {
 			if errors.Is(err, domain.ErrRowLocked) {
 				continue
 			}

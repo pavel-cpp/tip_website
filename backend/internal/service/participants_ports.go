@@ -48,8 +48,9 @@ type ProjectReader interface {
 // ParticipantLocks exposes the realtime row locks (held in memory by the Hub, which implements it).
 type ParticipantLocks interface {
 	// EnsureFree returns ROW_LOCKED (carrying the owner) when another user holds a live lock on
-	// the row; expired locks and locks of userID pass.
-	EnsureFree(ctx context.Context, rowID, userID string) error
+	// the row of the project; expired locks and locks of userID pass. Locks are scoped by
+	// project so a lock taken in one room never blocks another.
+	EnsureFree(ctx context.Context, projectID, rowID, userID string) error
 }
 
 // ParticipantNotifier publishes realtime events to the project's room. Publishing never

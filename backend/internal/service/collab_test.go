@@ -109,13 +109,13 @@ func TestCollabJoin(t *testing.T) {
 func TestCollabAcquireNeedsEdit(t *testing.T) {
 	c := NewCollab(&fakeRooms{}, fakeAccess{}, fakeDir{}, fakeAuth{})
 	s := &fakeSession{}
-	if _, err := c.Acquire(actorWith(domain.PermParticipantView), s, "r1"); !errors.Is(err, domain.ErrForbidden) {
+	if _, err := c.Acquire(context.Background(), actorWith(domain.PermParticipantView), s, "p1", "r1"); !errors.Is(err, domain.ErrForbidden) {
 		t.Fatalf("viewer acquire = %v", err)
 	}
 	if len(s.acquired) != 0 {
 		t.Fatal("session must not be touched without permission")
 	}
-	if _, err := c.Acquire(actorWith(domain.PermParticipantEdit), s, "r1"); err != nil || len(s.acquired) != 1 {
+	if _, err := c.Acquire(context.Background(), actorWith(domain.PermParticipantEdit), s, "p1", "r1"); err != nil || len(s.acquired) != 1 {
 		t.Fatalf("editor acquire = %v, %v", err, s.acquired)
 	}
 }
@@ -150,7 +150,48 @@ func TestCollabAuthenticate(t *testing.T) {
 	if _, err := c.Authenticate(context.Background(), "bad"); !errors.Is(err, domain.ErrUnauthenticated) {
 		t.Fatalf("bad token = %v", err)
 	}
-	if err := c.EnsureMember(actorWith(domain.PermProjectView)); !errors.Is(err, domain.ErrForbidden) {
-		t.Fatalf("EnsureMember = %v", err)
+}
+
+func TestCollabRevalidate(t *testing.T) {
+	view := actorWith(domain.PermProjectView, domain.PermParticipantView)
+	if err := NewCollab(&fakeRooms{}, fakeAccess{}, fakeDir{}, fakeAuth{}).Revalidate(context.Background(), actorWith(domain.PermProjectView), "p1"); !errors.Is(err, domain.ErrForbidden) {
+		t.Fatalf("missing participant.view = %v", err)
+	}
+	// A project that became invisible (for example finished, view_finished revoked) ends the connection.
+	c := NewCollab(&fakeRooms{}, fakeAccess{domain.ErrNotFound}, fakeDir{}, fakeAuth{})
+	if err := c.Revalidate(context.Background(), view, "p1"); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("hidden project = %v", err)
+	}
+	c = NewCollab(&fakeRooms{}, fakeAccess{}, fakeDir{}, fakeAuth{})
+	if err := c.Revalidate(context.Background(), view, "p1"); err != nil {
+		t.Fatalf("visible project = %v", err)
+	}
+}
+
+type fakeRows map[string]domain.Participant
+
+func (f fakeRows) Get(_ context.Context, id string) (domain.Participant, error) {
+	p, ok := f[id]
+	if !ok {
+		return domain.Participant{}, domain.ErrNotFound
+	}
+	return p, nil
+}
+
+func TestCollabAcquireChecksRowProject(t *testing.T) {
+	rows := fakeRows{"mine": {ID: "mine", ProjectID: "p1"}, "foreign": {ID: "foreign", ProjectID: "p2"}}
+	c := NewCollab(&fakeRooms{}, fakeAccess{}, fakeDir{}, fakeAuth{}).WithRows(rows)
+	s := &fakeSession{}
+	editor := actorWith(domain.PermParticipantEdit)
+	for _, id := range []string{"foreign", "unknown"} {
+		if _, err := c.Acquire(context.Background(), editor, s, "p1", id); !errors.Is(err, domain.ErrNotFound) {
+			t.Fatalf("acquire %s = %v, want not found", id, err)
+		}
+	}
+	if len(s.acquired) != 0 {
+		t.Fatalf("session touched for a foreign row: %v", s.acquired)
+	}
+	if _, err := c.Acquire(context.Background(), editor, s, "p1", "mine"); err != nil || len(s.acquired) != 1 {
+		t.Fatalf("own row acquire = %v, %v", err, s.acquired)
 	}
 }

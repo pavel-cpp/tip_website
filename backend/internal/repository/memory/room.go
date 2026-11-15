@@ -196,7 +196,7 @@ func (r *room) remove(m *member) {
 
 func (r *room) unlock(row string, l heldLock) {
 	delete(r.locks, row)
-	r.hub.clearLock(row)
+	r.hub.clearLock(r.id, row)
 	r.broadcast(domain.UnlockedEvent{RowID: row, By: l.lock.UserID, ExpiresAt: l.lock.ExpiresAt}, nil)
 }
 
@@ -237,7 +237,7 @@ func (r *room) acquire(m *member, rowID string) (domain.LockInfo, error) {
 		l = domain.NewRowLock(rowID, m.peer.ID, now)
 	}
 	r.locks[rowID] = heldLock{lock: l, member: m}
-	r.hub.setLock(l)
+	r.hub.setLock(r.id, l)
 	r.broadcast(domain.LockedEvent{RowID: rowID, By: l.UserID, ExpiresAt: l.ExpiresAt}, nil)
 	return domain.LockInfo{By: l.UserID, ExpiresAt: l.ExpiresAt}, nil
 }
@@ -268,7 +268,7 @@ func (r *room) heartbeat(m *member) {
 		}
 		l.lock = l.lock.Renew(now)
 		r.locks[row] = l
-		r.hub.setLock(l.lock)
+		r.hub.setLock(r.id, l.lock)
 		r.broadcast(domain.LockedEvent{RowID: row, By: l.lock.UserID, ExpiresAt: l.lock.ExpiresAt}, nil)
 	}
 }

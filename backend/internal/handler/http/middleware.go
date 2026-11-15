@@ -20,8 +20,10 @@ import (
 const requestIDHeader = "X-Request-Id"
 
 // defaultCSP is the strict policy for the SPA and the API. /api/docs gets its own relaxed
-// policy when Swagger UI is mounted.
-const defaultCSP = "default-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'"
+// policy when Swagger UI is mounted. base-uri, form-action and object-src are not covered by
+// default-src, so they are pinned explicitly: no injected <base>, no cross-origin form posts, no plugins.
+const defaultCSP = "default-src 'self'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; " +
+	"base-uri 'self'; form-action 'self'; object-src 'none'"
 
 type requestIDKey struct{}
 
