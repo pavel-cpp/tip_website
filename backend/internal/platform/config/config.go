@@ -140,7 +140,7 @@ func Load(getenv func(string) string) (Config, error) {
 		AuditMaxRows:       l.positiveInt("AUDIT_MAX_ROWS", 100000),
 
 		LogLevel:         strings.ToLower(l.str("LOG_LEVEL", "info")),
-		ObsRetentionDays: l.positiveInt("OBS_RETENTION_DAYS", 3),
+		ObsRetentionDays: l.positiveInt("OBS_RETENTION_DAYS", 30),
 		LokiURL:          l.str("LOKI_URL", "http://loki:3100"),
 
 		BackupMetricsPath: l.str("BACKUP_METRICS_PATH", "/backups/metrics/backup.prom"),
@@ -203,8 +203,8 @@ func (c Config) validate(l *loader) {
 	if c.RedisURL != "" && !hasScheme(c.RedisURL.Reveal(), "redis", "rediss") {
 		l.fail("REDIS_URL must be a redis:// URL")
 	}
-	if c.ObsRetentionDays > 5 {
-		l.fail("OBS_RETENTION_DAYS must not exceed 5")
+	if c.ObsRetentionDays > 90 {
+		l.fail("OBS_RETENTION_DAYS must not exceed 90")
 	}
 }
 

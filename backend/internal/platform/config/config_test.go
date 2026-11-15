@@ -42,7 +42,7 @@ func TestLoadDefaults(t *testing.T) {
 	}
 	if c.MaxImageMB != 10 || c.MaxImagePixels != 16000000 || c.MinFreeDiskMB != 1024 ||
 		c.UploadsMaxTotalMB != 800 || c.AuditRetentionDays != 30 || c.AuditMaxRows != 100000 ||
-		c.LogLevel != "info" || c.ObsRetentionDays != 3 {
+		c.LogLevel != "info" || c.ObsRetentionDays != 30 {
 		t.Errorf("unexpected limits: %v", c)
 	}
 }
@@ -91,7 +91,7 @@ func TestLoadErrors(t *testing.T) {
 			e["BOOTSTRAP_ADMIN_LOGIN"], e["BOOTSTRAP_ADMIN_PASSWORD"] = "root", "CHANGE_ME_strong_password"
 		}, "BOOTSTRAP_ADMIN_PASSWORD still contains"},
 		{"placeholder database password", func(e map[string]string) { e["DATABASE_URL"] = "postgres://tip:CHANGE_ME@db/tip" }, "DATABASE_URL still contains"},
-		{"retention too long", func(e map[string]string) { e["OBS_RETENTION_DAYS"] = "9" }, "OBS_RETENTION_DAYS"},
+		{"retention too long", func(e map[string]string) { e["OBS_RETENTION_DAYS"] = "91" }, "OBS_RETENTION_DAYS"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
