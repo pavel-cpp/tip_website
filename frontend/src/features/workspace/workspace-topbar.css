@@ -31,6 +31,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* On touch screens the crumb links are real tap targets: 44 px each way, with the bar's height taken back by margins. */
+@media (pointer: coarse) {
+  .wsbar-crumb .wsbar-parent {
+    padding-block: 12px;
+    margin-block: -12px;
+    min-width: var(--touch-target);
+    text-align: center;
+  }
+}
 .wsbar-title {
   min-width: 0;
   overflow: hidden;
