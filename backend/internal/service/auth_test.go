@@ -622,21 +622,33 @@ func TestEpochSubscribe(t *testing.T) {
 func TestMemoryLoginLimiterIPBudget(t *testing.T) {
 	c := newClock()
 	l := NewMemoryLoginLimiter(c)
-	for i := range 20 {
-		l.Fail("1.1.1.1", "user"+string(rune('a'+i)))
+	// check reserves and immediately gives the attempt back, like a request that did not fail.
+	check := func(ip, login string) time.Duration {
+		release, wait := l.Reserve(ip, login)
+		if wait == 0 {
+			release(false)
+		}
+		return wait
 	}
-	if l.Check("1.1.1.1", "fresh") <= 0 {
+	for i := range 20 {
+		release, wait := l.Reserve("1.1.1.1", "user"+string(rune('a'+i)))
+		if wait != 0 {
+			t.Fatalf("attempt %d rejected", i)
+		}
+		release(true)
+	}
+	if check("1.1.1.1", "fresh") <= 0 {
 		t.Fatal("per-IP budget must block other logins")
 	}
-	if l.Check("2.2.2.2", "fresh") != 0 {
+	if check("2.2.2.2", "fresh") != 0 {
 		t.Fatal("other IP must be free")
 	}
 	l.Succeed("1.1.1.1", "usera")
-	if l.Check("1.1.1.1", "fresh") <= 0 {
+	if check("1.1.1.1", "fresh") <= 0 {
 		t.Fatal("Succeed must not reset the IP budget")
 	}
 	c.Advance(loginWindow)
-	if l.Check("1.1.1.1", "fresh") != 0 {
+	if check("1.1.1.1", "fresh") != 0 {
 		t.Fatal("window must expire")
 	}
 }

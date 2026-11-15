@@ -57,10 +57,12 @@ type AuthDeps struct {
 	Codec   TokenCodec
 	Hasher  PasswordHasher
 	Limiter LoginLimiter
-	Audit   AccountAudit
-	Epoch   *Epoch
-	Clock   Clock
-	IDs     IDGen
+	// RefreshLimiter nil means the default in-memory limiter.
+	RefreshLimiter RefreshLimiter
+	Audit          AccountAudit
+	Epoch          *Epoch
+	Clock          Clock
+	IDs            IDGen
 	// OnTokenStoreError is called with the underlying error whenever the token store fails, in
 	// any mode. The service does not log; the composition root wires logging and metrics here.
 	OnTokenStoreError func(op string, err error)
@@ -78,6 +80,7 @@ type AuthDeps struct {
 // Auth implements login, token rotation, logout, password change and request authentication.
 type Auth struct {
 	AuthDeps
+	failures *failureAudit
 }
 
 // NewAuth builds the auth service.
@@ -88,7 +91,10 @@ func NewAuth(d AuthDeps) *Auth {
 	if d.Sleep == nil {
 		d.Sleep = time.Sleep
 	}
-	return &Auth{AuthDeps: d}
+	if d.RefreshLimiter == nil {
+		d.RefreshLimiter = NewMemoryRefreshLimiter(d.Clock)
+	}
+	return &Auth{AuthDeps: d, failures: newFailureAudit(d.Clock)}
 }
 
 // Session is the result of a login, refresh or password change.
@@ -136,9 +142,15 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	if len(fields) > 0 {
 		return Session{}, domain.NewValidation(fields...)
 	}
-	if wait := a.Limiter.Check(in.IP, login); wait > 0 {
+	// The attempt is counted before the slow password check, not after it, so a burst of parallel
+	// requests cannot all pass while the counters still read zero. Only a credential failure keeps
+	// the reservation; successes and server-side errors give it back.
+	release, wait := a.Limiter.Reserve(in.IP, login)
+	if wait > 0 {
 		return Session{}, domain.NewRateLimited(wait)
 	}
+	credentialFailure := false
+	defer func() { release(credentialFailure) }()
 	if err := a.Tokens.Ping(ctx); err != nil {
 		return Session{}, a.storeErr("login", err)
 	}
@@ -161,8 +173,13 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok || hash == "" || !rec.IsActive {
-		a.Limiter.Fail(in.IP, login)
-		a.audit(ctx, domain.AccountAuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP})
+		credentialFailure = true
+		// One row per address and login per minute: every row would otherwise let an anonymous
+		// flood push real administrative actions out of the capped audit log.
+		if emit, n := a.failures.sample(in.IP, login); emit {
+			a.audit(ctx, domain.AccountAuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP,
+				Meta: map[string]any{"count": n}})
+		}
 		return Session{}, domain.ErrBadCredentials
 	}
 	a.Limiter.Succeed(in.IP, login)
@@ -402,9 +419,12 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 		return Session{}, domain.NewValidation(domain.FieldError{Field: "new", Reason: "must differ from the current password"})
 	}
 	throttleKey := "pw:" + actor.UserID
-	if wait := a.Limiter.Check(in.IP, throttleKey); wait > 0 {
+	release, wait := a.Limiter.Reserve(in.IP, throttleKey)
+	if wait > 0 {
 		return Session{}, domain.NewRateLimited(wait)
 	}
+	credentialFailure := false
+	defer func() { release(credentialFailure) }()
 	// Epoch before user, as in Login: hashing below can take long enough for a role change to land.
 	epoch := a.Epoch.Load()
 	rec, err := a.Users.GetByID(ctx, actor.UserID)
@@ -422,7 +442,7 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok {
-		a.Limiter.Fail(in.IP, throttleKey)
+		credentialFailure = true
 		// Reported as a field error, not 401, so the client does not mistake it for a lost session.
 		return Session{}, domain.NewValidation(domain.FieldError{Field: "current", Reason: "is incorrect"})
 	}

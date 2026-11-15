@@ -51,14 +51,22 @@ type PasswordGenerator interface {
 	NewPassword() (string, error)
 }
 
-// LoginLimiter throttles failed logins per IP and per IP+login pair.
+// LoginLimiter throttles password checks per IP, per IP+login pair and per login, and bounds how
+// many run at once.
 type LoginLimiter interface {
-	// Check returns a positive duration when the attempt must be rejected with RATE_LIMITED.
-	Check(ip, login string) (retryAfter time.Duration)
-	// Fail records a failed attempt.
-	Fail(ip, login string)
+	// Reserve counts an attempt before its password is checked, so that parallel requests cannot
+	// slip past the budget. A positive retryAfter means the attempt must be rejected with
+	// RATE_LIMITED (nothing was reserved). Otherwise the caller must call release exactly once;
+	// failed is true only when the credentials were wrong, any other outcome gives the attempt back.
+	Reserve(ip, login string) (release func(failed bool), retryAfter time.Duration)
 	// Succeed clears the pair counter after a successful login.
 	Succeed(ip, login string)
+}
+
+// RefreshLimiter throttles POST /auth/refresh per login chain (family) and per client address.
+type RefreshLimiter interface {
+	// Allow counts a refresh attempt; a positive duration means reject with RATE_LIMITED.
+	Allow(ip, family string) (retryAfter time.Duration)
 }
 
 // AvatarProcessor validates and normalizes uploaded avatars (implemented by the imaging stream).
