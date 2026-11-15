@@ -13,6 +13,9 @@ import (
 
 const minSecretBytes = 32
 
+// placeholderMarker is the (lower-case) text the example env files use for values to fill in.
+const placeholderMarker = "change_me"
+
 // Secret is a sensitive string that never renders its value through fmt or logging verbs.
 type Secret string
 
@@ -119,7 +122,7 @@ func Load(getenv func(string) string) (Config, error) {
 
 		RedisFailMode:       FailMode(l.str("REDIS_FAIL_MODE", string(FailOpen))),
 		ForcePasswordChange: l.boolean("FORCE_PASSWORD_CHANGE", false),
-		SwaggerEnabled:      l.boolean("SWAGGER_ENABLED", true),
+		SwaggerEnabled:      l.boolean("SWAGGER_ENABLED", false),
 		GrafanaURL:          l.optionalURL("GRAFANA_URL"),
 		CookieSecure:        l.boolean("COOKIE_SECURE", true),
 
@@ -149,6 +152,20 @@ func Load(getenv func(string) string) (Config, error) {
 }
 
 func (c Config) validate(l *loader) {
+	// An example file copied without editing must not boot: its placeholders are public, so a
+	// secret built from them is known to everyone who has read the repository.
+	for _, s := range []struct {
+		name string
+		val  Secret
+	}{
+		{"DATABASE_URL", c.DatabaseURL}, {"REDIS_URL", c.RedisURL}, {"JWT_ACCESS_SECRET", c.JWTAccessSecret},
+		{"JWT_REFRESH_SECRET", c.JWTRefreshSecret}, {"PASSWORD_PEPPER", c.PasswordPepper},
+		{"BOOTSTRAP_ADMIN_PASSWORD", c.BootstrapAdminPassword},
+	} {
+		if strings.Contains(strings.ToLower(s.val.Reveal()), placeholderMarker) {
+			l.fail("%s still contains the %s placeholder from the example file; set a real value", s.name, strings.ToUpper(placeholderMarker))
+		}
+	}
 	for _, s := range []struct {
 		name string
 		val  Secret

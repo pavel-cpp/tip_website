@@ -14,14 +14,14 @@ type TokenStore interface {
 	Ping(ctx context.Context) error
 	// Revocation looks up all requested revocation keys in one round trip.
 	Revocation(ctx context.Context, q domain.RevocationQuery) (domain.RevocationState, error)
-	// BurnRefresh marks a refresh token id as used for ttl. burned is true only for the call
-	// that created the mark; otherwise burnedAt is the time recorded by the winner.
-	BurnRefresh(ctx context.Context, jti string, at time.Time, ttl time.Duration) (burned bool, burnedAt time.Time, err error)
-	// StoreReplay remembers the refresh token issued in exchange for the burnt token jti.
-	StoreReplay(ctx context.Context, jti, newRefresh string, ttl time.Duration) error
-	// Replay returns the refresh token stored by StoreReplay while its window is open.
-	Replay(ctx context.Context, jti string) (newRefresh string, ok bool, err error)
-	// CloseFamily revokes a whole login chain.
+	// RotateRefresh atomically exchanges the current refresh token of a family for a new one. The
+	// store keeps O(1) state per family (current jti, previous jti, rotation time), so a client
+	// that refreshes in a loop cannot grow it. Of several concurrent exchanges of the same token
+	// exactly one gets RotateOK; the others see RotateReplay while the window is open. A token
+	// that is neither the current nor the just-replaced one, or a replaced one after the window,
+	// is RotateReuse and the caller closes the family.
+	RotateRefresh(ctx context.Context, r domain.RefreshRotation) (domain.RotateResult, error)
+	// CloseFamily revokes a whole login chain and frees its rotation state.
 	CloseFamily(ctx context.Context, family string, ttl time.Duration) error
 	// RevokeAccess blacklists one access token id until its natural expiry.
 	RevokeAccess(ctx context.Context, jti string, ttl time.Duration) error
@@ -51,14 +51,22 @@ type PasswordGenerator interface {
 	NewPassword() (string, error)
 }
 
-// LoginLimiter throttles failed logins per IP and per IP+login pair.
+// LoginLimiter throttles password checks per IP, per IP+login pair and per login, and bounds how
+// many run at once.
 type LoginLimiter interface {
-	// Check returns a positive duration when the attempt must be rejected with RATE_LIMITED.
-	Check(ip, login string) (retryAfter time.Duration)
-	// Fail records a failed attempt.
-	Fail(ip, login string)
+	// Reserve counts an attempt before its password is checked, so that parallel requests cannot
+	// slip past the budget. A positive retryAfter means the attempt must be rejected with
+	// RATE_LIMITED (nothing was reserved). Otherwise the caller must call release exactly once;
+	// failed is true only when the credentials were wrong, any other outcome gives the attempt back.
+	Reserve(ip, login string) (release func(failed bool), retryAfter time.Duration)
 	// Succeed clears the pair counter after a successful login.
 	Succeed(ip, login string)
+}
+
+// RefreshLimiter throttles POST /auth/refresh per login chain (family) and per client address.
+type RefreshLimiter interface {
+	// Allow counts a refresh attempt; a positive duration means reject with RATE_LIMITED.
+	Allow(ip, family string) (retryAfter time.Duration)
 }
 
 // AvatarProcessor validates and normalizes uploaded avatars (implemented by the imaging stream).

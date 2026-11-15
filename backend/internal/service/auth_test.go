@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,7 +67,6 @@ func newRig(t *testing.T, o rigOpts) *rig {
 		OnTokenStoreError: func(op string, err error) {
 			r.storeErrs = append(r.storeErrs, op)
 		},
-		Sleep: func(d time.Duration) { r.clock.Advance(d) },
 	})
 	r.users = NewUsers(UsersDeps{
 		Users: r.db, Avatars: r.db, Roles: r.db.roleStore(), Authz: r.db, Epoch: r.epoch, Tx: acctFakeTx{},
@@ -285,8 +285,8 @@ func TestRefreshRotation(t *testing.T) {
 		t.Fatal("rotation must change the token and keep the family")
 	}
 	old := r.codec.refresh[s.Pair.RefreshToken]
-	if _, burned := r.store.burned[old.TokenID]; !burned {
-		t.Fatal("old refresh not burnt")
+	if st := r.store.rot[old.Family]; st == nil || st.prev != old.TokenID || st.cur == old.TokenID {
+		t.Fatalf("old refresh not retired: %+v", st)
 	}
 	// The new refresh keeps working.
 	if _, err := r.auth.Refresh(ctx, n.Pair.RefreshToken); err != nil {
@@ -316,27 +316,19 @@ func TestRefreshReplayWithinWindowIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestRefreshReplayWaitsForSlowWinner(t *testing.T) {
+func TestRefreshReplayWithoutTokenFails(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	ctx := context.Background()
 	s := r.login(t, "worker1", "worker-pass")
 	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); err != nil {
 		t.Fatal(err)
 	}
-	r.store.replayMisses = 3
-	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); err != nil {
-		t.Fatalf("replay after misses: %v", err)
-	}
-}
-
-func TestRefreshReplayWithoutEntryFails(t *testing.T) {
-	r := newRig(t, rigOpts{})
-	ctx := context.Background()
-	s := r.login(t, "worker1", "worker-pass")
-	claims := r.codec.refresh[s.Pair.RefreshToken]
-	r.store.burned[claims.TokenID] = r.clock.Now() // burnt by a winner that never published a pair
+	r.store.rot[s.Pair.Family].replay = "" // the replay token expired a moment early
 	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); !isErr(err, domain.ErrRefreshInvalid) {
 		t.Fatalf("err = %v", err)
+	}
+	if r.store.families[s.Pair.Family] {
+		t.Fatal("a missing replay token is not theft and must not close the family")
 	}
 }
 
@@ -364,7 +356,40 @@ func TestRefreshReuseAfterWindowClosesFamily(t *testing.T) {
 	}
 }
 
-func TestRefreshLostBurnRace(t *testing.T) {
+// Several tabs presenting the same token at once: one rotates, the rest are answered with its result.
+func TestRefreshConcurrentExchangesHaveOneWinner(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	s := r.login(t, "worker1", "worker-pass")
+	const n = 20
+	results := make([]Session, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			results[i], errs[i] = r.auth.Refresh(context.Background(), s.Pair.RefreshToken)
+		}()
+	}
+	close(start)
+	wg.Wait()
+	for i := range n {
+		if errs[i] != nil {
+			t.Fatalf("exchange %d: %v", i, errs[i])
+		}
+		if results[i].Pair.RefreshToken != results[0].Pair.RefreshToken {
+			t.Fatal("every exchange must end with the winner's refresh token")
+		}
+	}
+	if r.store.families[s.Pair.Family] {
+		t.Fatal("concurrent exchanges are not reuse")
+	}
+}
+
+// A token older than the previous one is not a harmless retry; it closes the chain at once.
+func TestRefreshOlderTokenCloses(t *testing.T) {
 	r := newRig(t, rigOpts{})
 	ctx := context.Background()
 	s := r.login(t, "worker1", "worker-pass")
@@ -372,28 +397,119 @@ func TestRefreshLostBurnRace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate Revocation() having run before the winner burned: BurnRefresh then loses the race.
-	claims := r.codec.refresh[s.Pair.RefreshToken]
-	st := &raceStore{fakeTokenStore: r.store, hide: claims.TokenID}
-	r.auth.Tokens = st
-	n2, err := r.auth.Refresh(ctx, s.Pair.RefreshToken)
-	if err != nil || n2.Pair.RefreshToken != n1.Pair.RefreshToken {
-		t.Fatalf("n2=%+v err=%v", n2, err)
+	if _, err := r.auth.Refresh(ctx, n1.Pair.RefreshToken); err != nil {
+		t.Fatal(err)
+	}
+	r.clock.Advance(time.Second)
+	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); !isErr(err, domain.ErrRefreshInvalid) {
+		t.Fatalf("err = %v", err)
+	}
+	if !r.store.families[s.Pair.Family] {
+		t.Fatal("family must be closed")
 	}
 }
 
-// raceStore hides the burn mark from Revocation once, as if the lookup preceded the winner.
-type raceStore struct {
-	*fakeTokenStore
-	hide string
+// Rotating must not grow the store: one state entry per family however often it refreshes, and
+// closing the family frees it.
+func TestRefreshStateIsBoundedPerFamily(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	ctx := context.Background()
+	s := r.login(t, "worker1", "worker-pass")
+	tok := s.Pair.RefreshToken
+	for range 100 {
+		r.clock.Advance(3 * time.Second) // keeps under the refresh rate limit
+		n, err := r.auth.Refresh(ctx, tok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tok = n.Pair.RefreshToken
+	}
+	if len(r.store.rot) != 1 {
+		t.Fatalf("%d state entries", len(r.store.rot))
+	}
+	_ = r.store.CloseFamily(ctx, s.Pair.Family, time.Hour)
+	if len(r.store.rot) != 0 {
+		t.Fatal("closing a family must free its rotation state")
+	}
 }
 
-func (s *raceStore) Revocation(ctx context.Context, q domain.RevocationQuery) (domain.RevocationState, error) {
-	st, err := s.fakeTokenStore.Revocation(ctx, q)
-	if q.RefreshJTI == s.hide {
-		st.RefreshBurnedAt = time.Time{}
+// Rotation must never be consumed by a failure that happens before it: a database error leaves
+// the presented token usable.
+func TestRefreshDatabaseErrorDoesNotBurnToken(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	ctx := context.Background()
+	s := r.login(t, "worker1", "worker-pass")
+	saved := r.auth.Users
+	r.auth.Users = failingUsers{UserStore: saved}
+	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); err == nil {
+		t.Fatal("expected the database error")
 	}
-	return st, err
+	r.auth.Users = saved
+	if _, err := r.auth.Refresh(ctx, s.Pair.RefreshToken); err != nil {
+		t.Fatalf("token must still work: %v", err)
+	}
+}
+
+type failingUsers struct{ UserStore }
+
+func (failingUsers) GetByID(context.Context, string) (domain.UserRecord, error) {
+	return domain.UserRecord{}, errBoom
+}
+
+// The 31st refresh of one family inside a minute is refused through the public path, a
+// different family is unaffected and the window reopens.
+func TestRefreshRateLimitPerFamily(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	ctx := WithClientIP(context.Background(), "1.2.3.4")
+	s := r.login(t, "worker1", "worker-pass")
+	other := r.login(t, "admin", "admin-pass")
+	tok := s.Pair.RefreshToken
+	for i := range refreshFamilyLimit {
+		n, err := r.auth.Refresh(ctx, tok)
+		if err != nil {
+			t.Fatalf("refresh %d: %v", i+1, err)
+		}
+		tok = n.Pair.RefreshToken
+	}
+	_, err := r.auth.Refresh(ctx, tok)
+	if !isErr(err, domain.ErrRateLimited) {
+		t.Fatalf("refresh %d: err = %v", refreshFamilyLimit+1, err)
+	}
+	var de *domain.Error
+	if !errors.As(err, &de) || de.Details["retryAfter"].(time.Duration) <= 0 {
+		t.Fatalf("missing retry-after: %v", err)
+	}
+	if _, err := r.auth.Refresh(ctx, other.Pair.RefreshToken); err != nil {
+		t.Fatalf("another family: %v", err)
+	}
+	// A rejected attempt must not burn the token.
+	r.clock.Advance(time.Minute)
+	if _, err := r.auth.Refresh(ctx, tok); err != nil {
+		t.Fatalf("after the window: %v", err)
+	}
+}
+
+func TestRefreshRateLimitPerAddress(t *testing.T) {
+	r := newRig(t, rigOpts{})
+	var results []string
+	r.auth.OnRefresh = func(res string) { results = append(results, res) }
+	ctx := WithClientIP(context.Background(), "2001:db8::1")
+	// Many families behind one /64: each stays far below its own limit.
+	toks := make([]string, 0, refreshIPLimit+1)
+	for range refreshIPLimit + 1 {
+		toks = append(toks, r.login(t, "worker1", "worker-pass").Pair.RefreshToken)
+	}
+	for i, tok := range toks[:refreshIPLimit] {
+		if _, err := r.auth.Refresh(WithClientIP(ctx, "2001:db8::"+string(rune('a'+i%6))), tok); err != nil {
+			t.Fatalf("refresh %d: %v", i, err)
+		}
+	}
+	if _, err := r.auth.Refresh(ctx, toks[refreshIPLimit]); !isErr(err, domain.ErrRateLimited) {
+		t.Fatalf("err = %v", err)
+	}
+	if results[len(results)-1] != RefreshRateLimited {
+		t.Fatalf("outcomes = %v", results)
+	}
 }
 
 func TestRefreshRejections(t *testing.T) {
@@ -622,21 +738,33 @@ func TestEpochSubscribe(t *testing.T) {
 func TestMemoryLoginLimiterIPBudget(t *testing.T) {
 	c := newClock()
 	l := NewMemoryLoginLimiter(c)
-	for i := range 20 {
-		l.Fail("1.1.1.1", "user"+string(rune('a'+i)))
+	// check reserves and immediately gives the attempt back, like a request that did not fail.
+	check := func(ip, login string) time.Duration {
+		release, wait := l.Reserve(ip, login)
+		if wait == 0 {
+			release(false)
+		}
+		return wait
 	}
-	if l.Check("1.1.1.1", "fresh") <= 0 {
+	for i := range 20 {
+		release, wait := l.Reserve("1.1.1.1", "user"+string(rune('a'+i)))
+		if wait != 0 {
+			t.Fatalf("attempt %d rejected", i)
+		}
+		release(true)
+	}
+	if check("1.1.1.1", "fresh") <= 0 {
 		t.Fatal("per-IP budget must block other logins")
 	}
-	if l.Check("2.2.2.2", "fresh") != 0 {
+	if check("2.2.2.2", "fresh") != 0 {
 		t.Fatal("other IP must be free")
 	}
 	l.Succeed("1.1.1.1", "usera")
-	if l.Check("1.1.1.1", "fresh") <= 0 {
+	if check("1.1.1.1", "fresh") <= 0 {
 		t.Fatal("Succeed must not reset the IP budget")
 	}
 	c.Advance(loginWindow)
-	if l.Check("1.1.1.1", "fresh") != 0 {
+	if check("1.1.1.1", "fresh") != 0 {
 		t.Fatal("window must expire")
 	}
 }

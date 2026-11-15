@@ -53,9 +53,14 @@ func (acctFakeTx) Do(ctx context.Context, fn func(context.Context) error) error 
 type fakeHasher struct {
 	rehash   bool
 	failHash error
+	// slow runs inside Hash and Verify, standing in for argon2 queueing behind other requests.
+	slow func()
 }
 
 func (h fakeHasher) Hash(_ context.Context, pw string) (string, error) {
+	if h.slow != nil {
+		h.slow()
+	}
 	if h.failHash != nil {
 		return "", h.failHash
 	}
@@ -63,6 +68,9 @@ func (h fakeHasher) Hash(_ context.Context, pw string) (string, error) {
 }
 
 func (h fakeHasher) Verify(_ context.Context, pw, hash string) (bool, bool, error) {
+	if h.slow != nil {
+		h.slow()
+	}
 	if hash == "" {
 		return false, false, nil
 	}
@@ -135,23 +143,23 @@ type fakeTokenStore struct {
 	mu    sync.Mutex
 	down  error
 
-	burned   map[string]time.Time
-	replays  map[string]entry
+	// rot is the rotation state per family: one entry however often the family rotates.
+	rot      map[string]*fakeRotation
 	families map[string]bool
 	access   map[string]bool
 	cutoffs  map[string]time.Time
-	// replayDelay hides replay entries for this many Replay calls (simulates an in-flight winner).
-	replayMisses int
 }
 
-type entry struct {
-	val     string
-	expires time.Time
+// fakeRotation mirrors the rf:{fam} hash plus the short-lived rg:{fam} replay token.
+type fakeRotation struct {
+	cur, prev string
+	at        time.Time
+	replay    string
 }
 
 func newTokenStore(c *acctFakeClock) *fakeTokenStore {
 	return &fakeTokenStore{
-		clock: c, burned: map[string]time.Time{}, replays: map[string]entry{},
+		clock: c, rot: map[string]*fakeRotation{},
 		families: map[string]bool{}, access: map[string]bool{}, cutoffs: map[string]time.Time{},
 	}
 }
@@ -165,51 +173,35 @@ func (s *fakeTokenStore) Revocation(_ context.Context, q domain.RevocationQuery)
 		return domain.RevocationState{}, s.down
 	}
 	return domain.RevocationState{
-		AccessRevoked:   q.AccessJTI != "" && s.access[q.AccessJTI],
-		RefreshBurnedAt: s.burned[q.RefreshJTI],
-		FamilyClosed:    q.Family != "" && s.families[q.Family],
-		UserCutoff:      s.cutoffs[q.UserID],
+		AccessRevoked: q.AccessJTI != "" && s.access[q.AccessJTI],
+		FamilyClosed:  q.Family != "" && s.families[q.Family],
+		UserCutoff:    s.cutoffs[q.UserID],
 	}, nil
 }
 
-func (s *fakeTokenStore) BurnRefresh(_ context.Context, jti string, at time.Time, _ time.Duration) (bool, time.Time, error) {
+// RotateRefresh follows the Lua script of the Redis implementation step by step.
+func (s *fakeTokenStore) RotateRefresh(_ context.Context, r domain.RefreshRotation) (domain.RotateResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.down != nil {
-		return false, time.Time{}, s.down
+		return domain.RotateResult{}, s.down
 	}
-	if t, ok := s.burned[jti]; ok {
-		return false, t, nil
+	if s.families[r.Family] {
+		return domain.RotateResult{Outcome: domain.RotateClosed}, nil
 	}
-	s.burned[jti] = at
-	return true, at, nil
-}
-
-func (s *fakeTokenStore) StoreReplay(_ context.Context, jti, next string, ttl time.Duration) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.down != nil {
-		return s.down
+	st := s.rot[r.Family]
+	if st != nil && st.cur != r.Presented {
+		if st.prev == r.Presented && r.At.Sub(st.at) <= r.Window {
+			tok := ""
+			if s.clock.Now().Before(st.at.Add(r.Window)) {
+				tok = st.replay
+			}
+			return domain.RotateResult{Outcome: domain.RotateReplay, ReplayToken: tok}, nil
+		}
+		return domain.RotateResult{Outcome: domain.RotateReuse}, nil
 	}
-	s.replays[jti] = entry{val: next, expires: s.clock.Now().Add(ttl)}
-	return nil
-}
-
-func (s *fakeTokenStore) Replay(_ context.Context, jti string) (string, bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.down != nil {
-		return "", false, s.down
-	}
-	if s.replayMisses > 0 {
-		s.replayMisses--
-		return "", false, nil
-	}
-	e, ok := s.replays[jti]
-	if !ok || !s.clock.Now().Before(e.expires) {
-		return "", false, nil
-	}
-	return e.val, true, nil
+	s.rot[r.Family] = &fakeRotation{cur: r.NextJTI, prev: r.Presented, at: r.At, replay: r.NextToken}
+	return domain.RotateResult{Outcome: domain.RotateOK}, nil
 }
 
 func (s *fakeTokenStore) CloseFamily(_ context.Context, fam string, _ time.Duration) error {
@@ -219,6 +211,7 @@ func (s *fakeTokenStore) CloseFamily(_ context.Context, fam string, _ time.Durat
 		return s.down
 	}
 	s.families[fam] = true
+	delete(s.rot, fam)
 	return nil
 }
 

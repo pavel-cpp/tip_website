@@ -64,22 +64,55 @@ type AccountAuditEntry struct {
 // RevocationQuery selects which revocation keys to look up in one round trip. Empty fields
 // are skipped.
 type RevocationQuery struct {
-	AccessJTI  string
-	RefreshJTI string
-	UserID     string
-	Family     string
+	AccessJTI string
+	UserID    string
+	Family    string
 }
 
 // RevocationState is the answer to a RevocationQuery.
 type RevocationState struct {
 	// AccessRevoked is set when the access token id is blacklisted.
 	AccessRevoked bool
-	// RefreshBurnedAt is the moment the refresh token was rotated; zero when it was not.
-	RefreshBurnedAt time.Time
 	// FamilyClosed is set after logout or detected refresh reuse.
 	FamilyClosed bool
 	// UserCutoff invalidates every token of the user issued at or before it; zero when unset.
 	UserCutoff time.Time
+}
+
+// RotateOutcome is the verdict of a refresh rotation attempt.
+type RotateOutcome int
+
+// Rotation verdicts.
+const (
+	// RotateOK means the presented token was the current one of its family and the family now
+	// holds the new token.
+	RotateOK RotateOutcome = iota
+	// RotateReplay means the presented token was the one rotated just before, inside the replay
+	// window; ReplayToken is the refresh token issued in exchange (empty if it is already gone).
+	RotateReplay
+	// RotateReuse means an already rotated token was presented outside the window: theft.
+	RotateReuse
+	// RotateClosed means the family was closed (logout, reuse) before or during the attempt.
+	RotateClosed
+)
+
+// RefreshRotation is the input of TokenStore.RotateRefresh. The new token is issued before the
+// call so that publishing it and retiring the old one is a single atomic step.
+type RefreshRotation struct {
+	Family string
+	// Presented is the jti of the refresh token being exchanged; NextJTI and NextToken are the
+	// jti and the encoded form of its replacement.
+	Presented, NextJTI, NextToken string
+	At                            time.Time
+	// Window is the idempotent replay window; TTL is the lifetime of the new token, which the
+	// family state must outlive.
+	Window, TTL time.Duration
+}
+
+// RotateResult is the answer to a RefreshRotation.
+type RotateResult struct {
+	Outcome     RotateOutcome
+	ReplayToken string
 }
 
 // RevokedByCutoff reports whether a token issued at iat predates the user cutoff.

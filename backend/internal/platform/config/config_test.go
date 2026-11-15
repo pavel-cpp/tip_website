@@ -37,7 +37,7 @@ func TestLoadDefaults(t *testing.T) {
 	if c.AccessTokenTTL != 15*time.Minute || c.RefreshTokenTTL != 720*time.Hour {
 		t.Errorf("unexpected ttl: %v %v", c.AccessTokenTTL, c.RefreshTokenTTL)
 	}
-	if c.RedisFailMode != FailOpen || !c.SwaggerEnabled || c.ForcePasswordChange {
+	if c.RedisFailMode != FailOpen || c.SwaggerEnabled || c.ForcePasswordChange {
 		t.Errorf("unexpected flags: %v", c)
 	}
 	if c.MaxImageMB != 10 || c.MaxImagePixels != 16000000 || c.MinFreeDiskMB != 1024 ||
@@ -85,6 +85,12 @@ func TestLoadErrors(t *testing.T) {
 		{"bad db scheme", func(e map[string]string) { e["DATABASE_URL"] = "mysql://x" }, "DATABASE_URL must be"},
 		{"bad redis scheme", func(e map[string]string) { e["REDIS_URL"] = "http://x" }, "REDIS_URL must be"},
 		{"bad grafana url", func(e map[string]string) { e["GRAFANA_URL"] = "grafana.local" }, "GRAFANA_URL must be an absolute"},
+		{"placeholder refresh secret", func(e map[string]string) { e["JWT_REFRESH_SECRET"] = "CHANGE_ME_64_hex_chars_different" }, "JWT_REFRESH_SECRET still contains"},
+		{"placeholder pepper lower case", func(e map[string]string) { e["PASSWORD_PEPPER"] = "xx-change_me-" + secA }, "PASSWORD_PEPPER still contains"},
+		{"placeholder bootstrap password", func(e map[string]string) {
+			e["BOOTSTRAP_ADMIN_LOGIN"], e["BOOTSTRAP_ADMIN_PASSWORD"] = "root", "CHANGE_ME_strong_password"
+		}, "BOOTSTRAP_ADMIN_PASSWORD still contains"},
+		{"placeholder database password", func(e map[string]string) { e["DATABASE_URL"] = "postgres://tip:CHANGE_ME@db/tip" }, "DATABASE_URL still contains"},
 		{"retention too long", func(e map[string]string) { e["OBS_RETENTION_DAYS"] = "9" }, "OBS_RETENTION_DAYS"},
 	}
 	for _, tt := range tests {
@@ -139,5 +145,14 @@ func TestCookieSecureDefaultsToTrue(t *testing.T) {
 	cfg, err = load(env)
 	if err != nil || cfg.CookieSecure {
 		t.Fatalf("disabled: %v, %v", cfg.CookieSecure, err)
+	}
+}
+
+func TestSwaggerDisabledByDefault(t *testing.T) {
+	env := baseEnv()
+	env["SWAGGER_ENABLED"] = "true"
+	cfg, err := load(env)
+	if err != nil || !cfg.SwaggerEnabled {
+		t.Fatalf("enabled: %v, %v", cfg.SwaggerEnabled, err)
 	}
 }

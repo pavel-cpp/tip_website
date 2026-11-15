@@ -24,6 +24,8 @@ const (
 	RefreshIdempotentReplay = "idempotent_replay"
 	// RefreshReuseDetected is a use of an already rotated token after the replay window; the chain is closed.
 	RefreshReuseDetected = "reuse_detected"
+	// RefreshRateLimited is an exchange refused by the per-family or per-address refresh limit.
+	RefreshRateLimited = "rate_limited"
 	// RefreshInvalid is a rejected token (bad signature, expired, revoked chain, unknown user).
 	RefreshInvalid = "invalid"
 	// RefreshError is any other failure, for example an unavailable token store.
@@ -57,23 +59,28 @@ type AuthDeps struct {
 	Codec   TokenCodec
 	Hasher  PasswordHasher
 	Limiter LoginLimiter
-	Audit   AccountAudit
-	Epoch   *Epoch
-	Clock   Clock
-	IDs     IDGen
+	// RefreshLimiter nil means the default in-memory limiter.
+	RefreshLimiter RefreshLimiter
+	Audit          AccountAudit
+	Epoch          *Epoch
+	Clock          Clock
+	IDs            IDGen
 	// OnTokenStoreError is called with the underlying error whenever the token store fails, in
 	// any mode. The service does not log; the composition root wires logging and metrics here.
 	OnTokenStoreError func(op string, err error)
+	// OnUserRevoked is called after logout or a password change so the realtime hub can close the
+	// user's sockets (the same hook Users uses for deactivation). It must not block. A logout closes
+	// every socket of the user, including other devices, which reconnect with their own valid token.
+	OnUserRevoked func(userID string)
 	// OnRefresh receives the outcome of every refresh attempt, one of the Refresh* constants.
 	// The service does not count; the composition root wires metrics here.
 	OnRefresh func(result string)
-	// Sleep pauses between replay lookups; nil means time.Sleep.
-	Sleep func(time.Duration)
 }
 
 // Auth implements login, token rotation, logout, password change and request authentication.
 type Auth struct {
 	AuthDeps
+	failures *failureAudit
 }
 
 // NewAuth builds the auth service.
@@ -81,10 +88,10 @@ func NewAuth(d AuthDeps) *Auth {
 	if d.Config.ReplayWindow <= 0 {
 		d.Config.ReplayWindow = DefaultReplayWindow
 	}
-	if d.Sleep == nil {
-		d.Sleep = time.Sleep
+	if d.RefreshLimiter == nil {
+		d.RefreshLimiter = NewMemoryRefreshLimiter(d.Clock)
 	}
-	return &Auth{AuthDeps: d}
+	return &Auth{AuthDeps: d, failures: newFailureAudit(d.Clock)}
 }
 
 // Session is the result of a login, refresh or password change.
@@ -132,13 +139,24 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	if len(fields) > 0 {
 		return Session{}, domain.NewValidation(fields...)
 	}
-	if wait := a.Limiter.Check(in.IP, login); wait > 0 {
+	// The attempt is counted before the slow password check, not after it, so a burst of parallel
+	// requests cannot all pass while the counters still read zero. Only a credential failure keeps
+	// the reservation; successes and server-side errors give it back.
+	release, wait := a.Limiter.Reserve(in.IP, login)
+	if wait > 0 {
 		return Session{}, domain.NewRateLimited(wait)
 	}
+	credentialFailure := false
+	defer func() { release(credentialFailure) }()
 	if err := a.Tokens.Ping(ctx); err != nil {
 		return Session{}, a.storeErr("login", err)
 	}
 
+	// The epoch is read before the user: the password check below can queue for seconds, and a role
+	// change that commits meanwhile bumps the epoch. Read in this order, the token can only carry
+	// permissions that are at least as fresh as its epoch, so a stale grant is rejected as
+	// TOKEN_STALE instead of passing with a current epoch.
+	epoch := a.Epoch.Load()
 	rec, err := a.Users.GetByLogin(ctx, login)
 	hash := rec.PasswordHash
 	switch {
@@ -152,8 +170,13 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok || hash == "" || !rec.IsActive {
-		a.Limiter.Fail(in.IP, login)
-		a.audit(ctx, domain.AccountAuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP})
+		credentialFailure = true
+		// One row per address and login per minute: every row would otherwise let an anonymous
+		// flood push real administrative actions out of the capped audit log.
+		if emit, n := a.failures.sample(in.IP, login); emit {
+			a.audit(ctx, domain.AccountAuditEntry{Action: "login_failed", ActorID: rec.ID, IP: in.IP,
+				Meta: map[string]any{"count": n}})
+		}
 		return Session{}, domain.ErrBadCredentials
 	}
 	a.Limiter.Succeed(in.IP, login)
@@ -170,8 +193,7 @@ func (a *Auth) Login(ctx context.Context, in LoginInput) (Session, error) {
 	}
 	rec.LastLoginAt = &now
 
-	epoch := a.Epoch.Load()
-	pair, err := a.issuePair(rec, a.IDs.NewID(), epoch, now, "")
+	pair, err := a.issuePair(rec, a.IDs.NewID(), epoch, now, a.IDs.NewID())
 	if err != nil {
 		return Session{}, err
 	}
@@ -183,9 +205,9 @@ func (a *Auth) expiresIn(p domain.TokenPair, now time.Time) int {
 	return max(0, int(p.AccessExpiresAt.Sub(now).Seconds()))
 }
 
-// issuePair signs a pair for rec. iat is the issue time; existingRefresh, when set, is reused
-// instead of signing a new refresh token (idempotent replays).
-func (a *Auth) issuePair(rec domain.UserRecord, family string, epoch int64, iat time.Time, existingRefresh string) (domain.TokenPair, error) {
+// issuePair signs a pair for rec. iat is the issue time and refreshJTI the id of the new refresh
+// token, which the caller needs to know to rotate the family atomically.
+func (a *Auth) issuePair(rec domain.UserRecord, family string, epoch int64, iat time.Time, refreshJTI string) (domain.TokenPair, error) {
 	roles := make([]string, len(rec.Roles))
 	for i, r := range rec.Roles {
 		roles[i] = r.Name
@@ -208,12 +230,8 @@ func (a *Auth) issuePair(rec domain.UserRecord, family string, epoch int64, iat 
 	if err != nil {
 		return domain.TokenPair{}, fmt.Errorf("issue access token: %w", err)
 	}
-	if existingRefresh != "" {
-		pair.RefreshToken = existingRefresh
-		return pair, nil
-	}
 	pair.RefreshToken, err = a.Codec.IssueRefresh(domain.RefreshClaims{
-		Subject: rec.ID, TokenID: a.IDs.NewID(), Family: family,
+		Subject: rec.ID, TokenID: refreshJTI, Family: family,
 		IssuedAt: iat, ExpiresAt: pair.RefreshExpiresAt, Type: domain.TokenRefresh,
 	})
 	if err != nil {
@@ -233,6 +251,8 @@ func (a *Auth) Refresh(ctx context.Context, refreshToken string) (Session, error
 			a.OnRefresh(RefreshOK)
 		case reuse:
 			a.OnRefresh(RefreshReuseDetected)
+		case domain.CodeOf(err) == domain.CodeRateLimited:
+			a.OnRefresh(RefreshRateLimited)
 		case domain.CodeOf(err) == domain.CodeRefreshInvalid:
 			a.OnRefresh(RefreshInvalid)
 		default:
@@ -250,9 +270,12 @@ func (a *Auth) refresh(ctx context.Context, refreshToken string) (s Session, reu
 	if err != nil {
 		return Session{}, false, false, err
 	}
-	st, err := a.Tokens.Revocation(ctx, domain.RevocationQuery{
-		RefreshJTI: claims.TokenID, UserID: claims.Subject, Family: claims.Family,
-	})
+	// Every refresh costs a database read and a token signature, and rotation state lives in Redis
+	// for the whole token lifetime, so one session must not be able to loop on it.
+	if wait := a.RefreshLimiter.Allow(clientIPFrom(ctx), claims.Family); wait > 0 {
+		return Session{}, false, false, domain.NewRateLimited(wait)
+	}
+	st, err := a.Tokens.Revocation(ctx, domain.RevocationQuery{UserID: claims.Subject, Family: claims.Family})
 	if err != nil {
 		return Session{}, false, false, a.storeErr("refresh", err)
 	}
@@ -260,82 +283,46 @@ func (a *Auth) refresh(ctx context.Context, refreshToken string) (s Session, reu
 		return Session{}, false, false, domain.ErrRefreshInvalid
 	}
 
-	burnedAt := st.RefreshBurnedAt
-	if burnedAt.IsZero() {
-		burned, at, err := a.Tokens.BurnRefresh(ctx, claims.TokenID, now, claims.ExpiresAt.Sub(now))
-		if err != nil {
-			return Session{}, false, false, a.storeErr("refresh", err)
-		}
-		if burned {
-			s, err := a.rotate(ctx, claims, now)
-			return s, false, false, err
-		}
-		burnedAt = at // lost a race with a concurrent exchange of the same token
+	// The replacement is issued before the store decides who wins, so that retiring the old token
+	// and publishing the new one is one atomic step. A concurrent loser merely discards its pair,
+	// and a database failure here leaves the presented token unused instead of burnt.
+	epoch := a.Epoch.Load()
+	rec, err := a.activeUser(ctx, claims.Subject)
+	if err != nil {
+		return Session{}, false, false, err
 	}
-	if now.Sub(burnedAt) > a.Config.ReplayWindow {
+	nextJTI := a.IDs.NewID()
+	pair, err := a.issuePair(rec, claims.Family, epoch, now, nextJTI)
+	if err != nil {
+		return Session{}, false, false, err
+	}
+	res, err := a.Tokens.RotateRefresh(ctx, domain.RefreshRotation{
+		Family: claims.Family, Presented: claims.TokenID, NextJTI: nextJTI, NextToken: pair.RefreshToken,
+		At: now, Window: a.Config.ReplayWindow, TTL: pair.RefreshExpiresAt.Sub(now),
+	})
+	if err != nil {
+		return Session{}, false, false, a.storeErr("refresh", err)
+	}
+	switch res.Outcome {
+	case domain.RotateOK:
+		return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, false, false, nil
+	case domain.RotateReplay:
+		// A second presentation of the token that was just rotated (two tabs, a lost response) gets
+		// the same new refresh token back, with a fresh access token.
+		next, err := a.Codec.VerifyRefresh(res.ReplayToken, now)
+		if err != nil || next.Subject != claims.Subject || next.Family != claims.Family {
+			return Session{}, false, false, domain.ErrRefreshInvalid
+		}
+		pair.RefreshToken, pair.RefreshExpiresAt = res.ReplayToken, next.ExpiresAt
+		return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, false, true, nil
+	case domain.RotateReuse:
 		if err := a.Tokens.CloseFamily(ctx, claims.Family, a.Config.RefreshTTL); err != nil {
 			return Session{}, false, false, a.storeErr("refresh", err)
 		}
 		return Session{}, true, false, domain.ErrRefreshInvalid
+	default:
+		return Session{}, false, false, domain.ErrRefreshInvalid
 	}
-	s, err = a.replay(ctx, claims, now)
-	return s, false, err == nil, err
-}
-
-// rotate issues the new pair after the old refresh token has been burnt.
-func (a *Auth) rotate(ctx context.Context, claims domain.RefreshClaims, now time.Time) (Session, error) {
-	epoch := a.Epoch.Load()
-	rec, err := a.activeUser(ctx, claims.Subject)
-	if err != nil {
-		return Session{}, err
-	}
-	pair, err := a.issuePair(rec, claims.Family, epoch, now, "")
-	if err != nil {
-		return Session{}, err
-	}
-	if err := a.Tokens.StoreReplay(ctx, claims.TokenID, pair.RefreshToken, a.Config.ReplayWindow); err != nil {
-		return Session{}, a.storeErr("refresh", err)
-	}
-	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
-}
-
-// replay answers a second presentation of an already rotated refresh token inside the replay
-// window with the same new refresh token; later presentations close the chain in refresh.
-func (a *Auth) replay(ctx context.Context, claims domain.RefreshClaims, now time.Time) (Session, error) {
-	// The winner may still be issuing its pair; give it a moment to publish the replay entry.
-	const attempts = 20
-	var next string
-	for i := range attempts {
-		s, ok, err := a.Tokens.Replay(ctx, claims.TokenID)
-		if err != nil {
-			return Session{}, a.storeErr("refresh", err)
-		}
-		if ok {
-			next = s
-			break
-		}
-		if i < attempts-1 {
-			a.Sleep(50 * time.Millisecond)
-		}
-	}
-	if next == "" {
-		return Session{}, domain.ErrRefreshInvalid
-	}
-	nextClaims, err := a.Codec.VerifyRefresh(next, now)
-	if err != nil || nextClaims.Subject != claims.Subject || nextClaims.Family != claims.Family {
-		return Session{}, domain.ErrRefreshInvalid
-	}
-	epoch := a.Epoch.Load()
-	rec, err := a.activeUser(ctx, claims.Subject)
-	if err != nil {
-		return Session{}, err
-	}
-	pair, err := a.issuePair(rec, claims.Family, epoch, now, next)
-	if err != nil {
-		return Session{}, err
-	}
-	pair.RefreshExpiresAt = nextClaims.ExpiresAt
-	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 
 // activeUser loads the current user state for a refresh; a missing or deactivated user ends the chain.
@@ -364,7 +351,15 @@ func (a *Auth) Logout(ctx context.Context, actor domain.Actor) error {
 	if err := a.Tokens.CloseFamily(ctx, actor.Family, a.Config.RefreshTTL); err != nil {
 		return a.storeErr("logout", err)
 	}
+	// Open sockets would otherwise outlive the session until their access token expires.
+	a.userRevoked(actor.UserID)
 	return nil
+}
+
+func (a *Auth) userRevoked(userID string) {
+	if a.OnUserRevoked != nil {
+		a.OnUserRevoked(userID)
+	}
 }
 
 // ChangePasswordInput carries the own-password change request.
@@ -380,10 +375,20 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 	if err := domain.ValidatePassword("new", in.New); err != nil {
 		return Session{}, err
 	}
+	// A temporary password must really be replaced, otherwise FORCE_PASSWORD_CHANGE is a no-op. Both
+	// values come from the caller, so comparing them leaks nothing about the stored hash.
+	if in.New == in.Current {
+		return Session{}, domain.NewValidation(domain.FieldError{Field: "new", Reason: "must differ from the current password"})
+	}
 	throttleKey := "pw:" + actor.UserID
-	if wait := a.Limiter.Check(in.IP, throttleKey); wait > 0 {
+	release, wait := a.Limiter.Reserve(in.IP, throttleKey)
+	if wait > 0 {
 		return Session{}, domain.NewRateLimited(wait)
 	}
+	credentialFailure := false
+	defer func() { release(credentialFailure) }()
+	// Epoch before user, as in Login: hashing below can take long enough for a role change to land.
+	epoch := a.Epoch.Load()
 	rec, err := a.Users.GetByID(ctx, actor.UserID)
 	if errors.Is(err, domain.ErrNotFound) {
 		return Session{}, domain.ErrUnauthenticated
@@ -399,7 +404,7 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok {
-		a.Limiter.Fail(in.IP, throttleKey)
+		credentialFailure = true
 		// Reported as a field error, not 401, so the client does not mistake it for a lost session.
 		return Session{}, domain.NewValidation(domain.FieldError{Field: "current", Reason: "is incorrect"})
 	}
@@ -420,11 +425,12 @@ func (a *Auth) ChangePassword(ctx context.Context, actor domain.Actor, in Change
 	rec.PasswordTemporary = false
 
 	iat := cutoff.Add(time.Millisecond)
-	pair, err := a.issuePair(rec, a.IDs.NewID(), a.Epoch.Load(), iat, "")
+	pair, err := a.issuePair(rec, a.IDs.NewID(), epoch, iat, a.IDs.NewID())
 	if err != nil {
 		return Session{}, err
 	}
 	a.audit(ctx, domain.AccountAuditEntry{Action: "password.change", ActorID: rec.ID, TargetID: rec.ID, IP: in.IP})
+	a.userRevoked(rec.ID)
 	return Session{Pair: pair, ExpiresIn: a.expiresIn(pair, now), User: ProfileOf(rec)}, nil
 }
 

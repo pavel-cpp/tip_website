@@ -64,7 +64,7 @@ func TestEnsureAdminCreatesWithFirstPaletteColor(t *testing.T) {
 
 func TestAccountAuditRecordsTargetLogin(t *testing.T) {
 	r := newRig(t, rigOpts{})
-	mgr := acctActorWith("u-admin", domain.PermUserManage)
+	mgr := acctActorWith("u-admin", domain.PermUserManage, domain.PermRoleManage)
 	c, err := r.users.CreateUser(ctx, mgr, CreateUserInput{Login: "target.one", DisplayName: "T"})
 	if err != nil {
 		t.Fatal(err)
