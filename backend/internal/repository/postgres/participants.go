@@ -97,7 +97,7 @@ func (r *ParticipantRepo) Count(ctx context.Context, projectID string) (int, err
 func (r *ParticipantRepo) Get(ctx context.Context, id string) (domain.Participant, error) {
 	p, err := scanParticipant(Querier(ctx, r.db).QueryRowContext(ctx,
 		`SELECT `+participantColumns+` FROM participants p WHERE p.id = $1`, id))
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) || pgCode(err) == pgInvalidText {
 		return domain.Participant{}, domain.ErrNotFound
 	}
 	if err != nil {
@@ -176,18 +176,45 @@ func (r *ParticipantRepo) explainNoProject(ctx context.Context, q DBTX, projectI
 	}
 }
 
+// activeProject is the guard every participant UPDATE carries. FOR SHARE makes the statement wait
+// for a concurrent Finish (which holds the project row exclusively) and re-check the status
+// afterwards, so no write lands after the project was finished; a plain status read would only
+// see the statement snapshot. Writers share the lock and do not block each other.
+const activeProject = `EXISTS (SELECT 1 FROM projects pr WHERE pr.id = p.project_id AND pr.status = 'active' FOR SHARE OF pr)`
+
+// ensureNotFinished turns an empty write result into ErrProjectFinished when the cause is the
+// project status. It runs only on that failure path.
+func (r *ParticipantRepo) ensureNotFinished(ctx context.Context, projectID string) error {
+	var finished bool
+	err := Querier(ctx, r.db).QueryRowContext(ctx,
+		`SELECT status = 'finished' FROM projects WHERE id = $1`, projectID).Scan(&finished)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return fmt.Errorf("check project status: %w", err)
+	case finished:
+		return domain.ErrProjectFinished
+	}
+	return nil
+}
+
 // UpdateIfVersion stores name and phone of p, which already holds the NEW state as produced
 // by Participant.Edited: p.Version is the new version, so the row is updated only while the
 // stored version is p.Version-1. When nothing matches it returns domain.ErrVersionConflict
-// (also for a row deleted meanwhile); the service then attaches the current row.
+// (also for a row deleted meanwhile); the service then attaches the current row. A project
+// finished meanwhile yields domain.ErrProjectFinished.
 func (r *ParticipantRepo) UpdateIfVersion(ctx context.Context, p domain.Participant) (domain.Participant, error) {
 	const q = `UPDATE participants p SET name = $2, phone = $3, version = $4,
 			updated_by = nullif($5, '')::uuid, updated_at = $6
-		WHERE p.id = $1 AND p.version = $4 - 1
+		WHERE p.id = $1 AND p.version = $4 - 1 AND ` + activeProject + `
 		RETURNING ` + participantColumns
 	out, err := scanParticipant(Querier(ctx, r.db).QueryRowContext(ctx, q,
 		p.ID, p.Name, p.Phone, p.Version, p.UpdatedBy, p.UpdatedAt))
 	if errors.Is(err, sql.ErrNoRows) {
+		if err := r.ensureNotFinished(ctx, p.ProjectID); err != nil {
+			return domain.Participant{}, err
+		}
 		return domain.Participant{}, domain.ErrVersionConflict
 	}
 	if err != nil {
@@ -205,7 +232,7 @@ UPDATE participants p SET
 	version = p.version + 1, updated_by = nullif($7, '')::uuid, updated_at = $8
 FROM unnest($2::text[]::uuid[], $3::bool[], $4::bool[], $5::text[], $6::text[], $9::bigint[])
 	AS v(id, set_name, set_phone, name, phone, version)
-WHERE p.project_id = $1 AND p.id = v.id AND p.version = v.version
+WHERE p.project_id = $1 AND p.id = v.id AND p.version = v.version AND ` + activeProject + `
 RETURNING ` + participantColumns
 
 // UpdateMany applies the changes whose expected version still matches and returns the stored
@@ -217,7 +244,7 @@ func (r *ParticipantRepo) UpdateMany(ctx context.Context, projectID string, chan
 	for i, c := range changes {
 		ids[i], setN[i], setP[i], names[i], phones[i], vers[i] = c.ID, c.SetName, c.SetPhone, c.Name, c.Phone, int64(c.Version)
 	}
-	return r.queryRows(ctx, updateMany, projectID, ids, setN, setP, names, phones, byUser, now, vers)
+	return r.writeRows(ctx, projectID, n, updateMany, projectID, ids, setN, setP, names, phones, byUser, now, vers)
 }
 
 // ClearByIDs empties name and phone of the given rows that are not empty yet, bumping their
@@ -226,9 +253,10 @@ func (r *ParticipantRepo) ClearByIDs(ctx context.Context, projectID string, ids 
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return r.queryRows(ctx, `UPDATE participants p SET name = '', phone = '', version = p.version + 1,
+	return r.writeRows(ctx, projectID, len(ids), `UPDATE participants p SET name = '', phone = '', version = p.version + 1,
 			updated_by = nullif($3, '')::uuid, updated_at = $4
 		WHERE p.project_id = $1 AND p.id = ANY($2::text[]::uuid[]) AND (p.name <> '' OR p.phone <> '')
+			AND `+activeProject+`
 		RETURNING `+participantColumns, projectID, ids, byUser, now)
 }
 
@@ -239,6 +267,17 @@ func (r *ParticipantRepo) ListByIDs(ctx context.Context, projectID string, ids [
 	}
 	return r.queryRows(ctx, `SELECT `+participantColumns+` FROM participants p
 		WHERE p.project_id = $1 AND p.id = ANY($2::text[]::uuid[])`, projectID, ids)
+}
+
+// writeRows runs a participant UPDATE guarded by activeProject. An empty result for a
+// non-empty request is ambiguous (stale versions, empty rows, or a finished project), so only
+// then is the status read to report domain.ErrProjectFinished.
+func (r *ParticipantRepo) writeRows(ctx context.Context, projectID string, requested int, query string, args ...any) ([]domain.Participant, error) {
+	out, err := r.queryRows(ctx, query, args...)
+	if err != nil || len(out) > 0 || requested == 0 {
+		return out, err
+	}
+	return nil, r.ensureNotFinished(ctx, projectID)
 }
 
 func (r *ParticipantRepo) queryRows(ctx context.Context, query string, args ...any) ([]domain.Participant, error) {

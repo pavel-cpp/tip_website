@@ -87,7 +87,7 @@ func (r *ProjectRepo) GetForUpdate(ctx context.Context, id string) (domain.Proje
 func (r *ProjectRepo) get(ctx context.Context, id, lock string) (domain.Project, error) {
 	q := Querier(ctx, r.db)
 	p, err := scanProject(q.QueryRowContext(ctx, `SELECT `+projectColumns+` FROM projects WHERE id = $1`+lock, id))
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) || pgCode(err) == pgInvalidText {
 		return domain.Project{}, domain.ErrNotFound
 	}
 	if err != nil {
