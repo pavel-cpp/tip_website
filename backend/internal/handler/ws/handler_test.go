@@ -813,7 +813,7 @@ func TestConnectionBurstNeverExceedsCap(t *testing.T) {
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			c, _, err := websocket.Dial(ctx, url, nil)
+			c, err := dialURL(ctx, url)
 			if err != nil {
 				return
 			}
@@ -926,7 +926,7 @@ func dialJoin(t *testing.T, url, token string) *client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, url, nil)
+	c, err := dialURL(ctx, url)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1005,7 +1005,7 @@ func (e *env) dialRaw(t *testing.T, url, token string) *client {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, url, nil)
+	c, err := dialURL(ctx, url)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1013,4 +1013,13 @@ func (e *env) dialRaw(t *testing.T, url, token string) *client {
 	cl := &client{t: t, c: c}
 	cl.send(map[string]any{"t": "auth", "token": token})
 	return cl
+}
+
+// dialURL dials a WebSocket URL and releases the upgrade response body.
+func dialURL(ctx context.Context, url string) (*websocket.Conn, error) {
+	c, resp, err := websocket.Dial(ctx, url, nil)
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	return c, err
 }

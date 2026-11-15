@@ -75,13 +75,30 @@ func TestDBCollector(t *testing.T) {
 	}
 }
 
-func TestPprofServed(t *testing.T) {
-	srv := New("v", "c").NewInternalServer(":0")
-	for _, path := range []string{"/debug/pprof/", "/debug/pprof/goroutine?debug=1", "/debug/pprof/cmdline"} {
-		rec := httptest.NewRecorder()
-		srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
-		if rec.Code != http.StatusOK {
-			t.Errorf("%s: status %d", path, rec.Code)
-		}
+func TestPprofIsOptIn(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []InternalOption
+		want int
+	}{
+		{"off by default", nil, http.StatusNotFound},
+		{"enabled", []InternalOption{WithPprof()}, http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := New("v", "c").NewInternalServer(":0", tt.opts...)
+			for _, path := range []string{"/debug/pprof/", "/debug/pprof/goroutine?debug=1", "/debug/pprof/cmdline"} {
+				rec := httptest.NewRecorder()
+				srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+				if rec.Code != tt.want {
+					t.Errorf("%s: status %d, want %d", path, rec.Code, tt.want)
+				}
+			}
+			rec := httptest.NewRecorder()
+			srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			if rec.Code != http.StatusOK {
+				t.Errorf("/metrics: status %d", rec.Code)
+			}
+		})
 	}
 }

@@ -1,5 +1,5 @@
 // Package metrics owns the Prometheus registry, HTTP instrumentation and the internal
-// (non-public) server that exposes /metrics and pprof.
+// (non-public) server that exposes /metrics and, on request, pprof.
 package metrics
 
 import (
@@ -168,16 +168,31 @@ func (m *Metrics) Middleware(next http.Handler) http.Handler {
 // RegisterDB exposes database/sql pool statistics as tip_db_* metrics.
 func (m *Metrics) RegisterDB(db *sql.DB) { m.Registry.MustRegister(newDBCollector(db)) }
 
-// NewInternalServer builds the internal HTTP server with /metrics and /debug/pprof/*.
-// It must only be reachable from the internal network.
-func (m *Metrics) NewInternalServer(addr string) *http.Server {
+// InternalOption customizes NewInternalServer.
+type InternalOption func(*internalConfig)
+
+type internalConfig struct{ pprof bool }
+
+// WithPprof also serves /debug/pprof/*. pprof is opt-in: the internal listener is reachable
+// from every container on the compose network, and heap or goroutine dumps expose internals.
+func WithPprof() InternalOption { return func(c *internalConfig) { c.pprof = true } }
+
+// NewInternalServer builds the internal HTTP server with /metrics, plus /debug/pprof/* when
+// WithPprof is given. It must only be reachable from the internal network.
+func (m *Metrics) NewInternalServer(addr string, opts ...InternalOption) *http.Server {
+	var cfg internalConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.HandlerFor(m.Registry, promhttp.HandlerOpts{}))
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	if cfg.pprof {
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+	}
 	return &http.Server{
 		Addr:              addr,
 		Handler:           mux,

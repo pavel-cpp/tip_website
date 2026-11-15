@@ -27,22 +27,35 @@ const (
 	clientErrorRatePerMin   = 20
 	clientErrorLimiterCap   = 10000
 	clientErrorLimiterEvery = time.Minute
+	// clientErrorGlobalPerSec caps accepted reports across all IPs. The per-IP map is bounded, so a
+	// flood from many source addresses could otherwise fill it and starve every new, honest client;
+	// this ceiling also bounds the log volume this public endpoint can produce.
+	clientErrorGlobalPerSec = 20
 )
 
 // ClientErrorsHandler implements the public frontend error sink.
 type ClientErrorsHandler struct {
 	limiter *clientErrorLimiter
+	global  *clientErrorLimiter
 }
 
 // NewClientErrorsHandler builds the handler; now is the clock used by the per-IP limiter.
 func NewClientErrorsHandler(now func() time.Time) *ClientErrorsHandler {
-	return &ClientErrorsHandler{limiter: newClientErrorLimiter(clientErrorRatePerMin, clientErrorLimiterEvery, now)}
+	return &ClientErrorsHandler{
+		limiter: newClientErrorLimiter(clientErrorRatePerMin, clientErrorLimiterEvery, now),
+		global:  newClientErrorLimiter(clientErrorGlobalPerSec, time.Second, now),
+	}
 }
 
 // ReportClientError handles POST /client-errors: it validates the report and writes it to
 // the structured log stream with source=browser. Nothing is stored.
 func (h *ClientErrorsHandler) ReportClientError(w http.ResponseWriter, r *http.Request) {
 	if ok, retry := h.limiter.allow(clientIP(r)); !ok {
+		fail(w, r, domain.NewRateLimited(retry))
+		return
+	}
+	// Checked after the per-IP budget so a client that is already over its own limit does not use up the shared one.
+	if ok, retry := h.global.allow("*"); !ok {
 		fail(w, r, domain.NewRateLimited(retry))
 		return
 	}
