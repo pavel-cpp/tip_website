@@ -50,10 +50,16 @@
 
 # Application -------------------------------------------------------------
 
-{$DOMAIN} {
+# DOMAIN is the primary host name; DOMAIN_ALIASES are further names served by the same site (a second domain while
+# DNS moves). DOMAIN_REDIRECT_HOSTS lists names that only forward visitors to DOMAIN with a permanent redirect
+# (the old domain after a move); its default matches nothing.
+{$DOMAIN} {$DOMAIN_ALIASES} {
 	import security_headers
 	import access_log
 	encode zstd gzip
+
+	@moved host {$DOMAIN_REDIRECT_HOSTS}
+	redir @moved https://{$DOMAIN}{uri} permanent
 
 	# Metrics and pprof live on the internal listener; never expose them even
 	# if the app ever serves them on the public port.

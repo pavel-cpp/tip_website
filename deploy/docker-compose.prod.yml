@@ -37,6 +37,8 @@ services:
     environment:
       GOMEMLIMIT: 28MiB
       DOMAIN: ${DOMAIN:?set DOMAIN}
+      DOMAIN_ALIASES: ${DOMAIN_ALIASES:-}
+      DOMAIN_REDIRECT_HOSTS: ${DOMAIN_REDIRECT_HOSTS:-no-redirect.invalid}
       # Whole option lines for the Caddyfile global block; empty (so omitted) when the variable is unset or empty.
       # ACME_CA example (Let's Encrypt staging for a first run): https://acme-staging-v02.api.letsencrypt.org/directory
       ACME_EMAIL_OPT: ${ACME_EMAIL:+email ${ACME_EMAIL}}
