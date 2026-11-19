@@ -1,7 +1,7 @@
 # 08. CI/CD и развёртывание на сервере
 
 > Целевой сервер: общий (на нём живут и другие проекты), 2 vCPU, 2 ГБ RAM, Ubuntu 24.04.
-> Домен: `tip.pavel-and-vera.ru`. Принцип: **собирает GitHub, сервер только скачивает готовые образы**.
+> Домен: `www.textip.ru`. Принцип: **собирает GitHub, сервер только скачивает готовые образы**.
 > Единственная точка входа — **Caddy в docker**: он сам получает и продлевает сертификат. Ни nginx, ни certbot на хосте не нужны.
 
 ## 1. Схема
@@ -108,7 +108,7 @@ GitHub Release с заметками, собранными из коммитов
 
 | Имя | Значение |
 |---|---|
-| `DEPLOY_HOST` | `tip.pavel-and-vera.ru` |
+| `DEPLOY_HOST` | `www.textip.ru` |
 | `DEPLOY_USER` | `deploy` (можно не создавать, это значение по умолчанию) |
 | `DEPLOY_PORT` | `22` (можно не создавать) |
 
@@ -117,7 +117,7 @@ GitHub Release с заметками, собранными из коммитов
 | Имя | Значение |
 |---|---|
 | `DEPLOY_SSH_KEY` | **приватный** ключ ed25519 целиком, с первой строкой `-----BEGIN OPENSSH PRIVATE KEY-----` и последней `-----END OPENSSH PRIVATE KEY-----` |
-| `DEPLOY_KNOWN_HOSTS` | строка(и) с ключом сервера: `ssh-keyscan -t ed25519 tip.pavel-and-vera.ru` (вставьте вывод целиком). **Сверьте отпечаток** с серверным: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` на сервере |
+| `DEPLOY_KNOWN_HOSTS` | строка(и) с ключом сервера: `ssh-keyscan -t ed25519 www.textip.ru` (вставьте вывод целиком). **Сверьте отпечаток** с серверным: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` на сервере |
 
 `GITHUB_TOKEN` создавать не нужно: он выдаётся автоматически и используется для публикации образов и скачивания их на сервере.
 Никаких паролей и PAT нигде не хранится.
@@ -143,7 +143,7 @@ GitHub Release с заметками, собранными из коммитов
 
 1. Подготовьте сервер (раздел 6), создайте environment, переменные и секреты (раздел 4).
 2. **Actions → cd → Run workflow** (ветка `main`). С другой ветки запуск ничего не делает: в `production` попадает только `main`. Если включены reviewers — подтвердите деплой.
-3. Откройте `https://tip.pavel-and-vera.ru`. Пароль первого администратора (логин `admin`) читается на сервере:
+3. Откройте `https://www.textip.ru`. Пароль первого администратора (логин `admin`) читается на сервере:
    `grep BOOTSTRAP_ADMIN_PASSWORD /opt/tip/prod.env`; смена пароля при первом входе принудительная.
 4. Дальше: слияние в `main` → деплой. Нужен другой коммит — слейте его (или откатите изменение) в `main`; быстрый возврат к прошлому образу — `rollback.sh` на сервере.
 
@@ -166,19 +166,19 @@ GitHub Release с заметками, собранными из коммитов
 
 ```sh
 # с машины, где лежит репозиторий и публичный ключ tip_deploy.pub
-scp -r deploy root@tip.pavel-and-vera.ru:/root/tip-bootstrap
-scp tip_deploy.pub root@tip.pavel-and-vera.ru:/root/tip-bootstrap/deploy.pub
+scp -r deploy root@www.textip.ru:/root/tip-bootstrap
+scp tip_deploy.pub root@www.textip.ru:/root/tip-bootstrap/deploy.pub
 
 # 1) только показать, что будет сделано
-ssh root@tip.pavel-and-vera.ru 'bash /root/tip-bootstrap/scripts/bootstrap-server.sh --dry-run \
-  --domain tip.pavel-and-vera.ru --expect-hostname humo --deploy-key-file /root/tip-bootstrap/deploy.pub'
+ssh root@www.textip.ru 'bash /root/tip-bootstrap/scripts/bootstrap-server.sh --dry-run \
+  --domain www.textip.ru --expect-hostname humo --deploy-key-file /root/tip-bootstrap/deploy.pub'
 
 # 2) боевой запуск (--force разрешает уже существующий /opt/tip; существующий prod.env не перезаписывается)
-ssh root@tip.pavel-and-vera.ru 'bash /root/tip-bootstrap/scripts/bootstrap-server.sh --force \
-  --domain tip.pavel-and-vera.ru --expect-hostname humo --deploy-key-file /root/tip-bootstrap/deploy.pub'
+ssh root@www.textip.ru 'bash /root/tip-bootstrap/scripts/bootstrap-server.sh --force \
+  --domain www.textip.ru --expect-hostname humo --deploy-key-file /root/tip-bootstrap/deploy.pub'
 ```
 
-Требования: DNS `tip.pavel-and-vera.ru` указывает на сервер, на сервере есть docker и compose-плагин, порты 80 и 443 не заняты чужим процессом
+Требования: DNS `www.textip.ru` указывает на сервер, на сервере есть docker и compose-плагин, порты 80 и 443 не заняты чужим процессом
 (**nginx и certbot прежней схемы нужно остановить и убрать до запуска**: скрипт отказывается работать, если 80/443 держит не docker).
 Скрипт также отказывается работать, если имя хоста не совпало с `--expect-hostname`.
 

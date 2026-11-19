@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws' // the global WebSocket cannot set the Origin header the server checks
 
-export const BASE = process.env.TIP_BASE ?? 'https://tip.pavel-and-vera.ru'
+export const BASE = process.env.TIP_BASE ?? 'https://www.textip.ru'
 export const STATE = process.env.TIP_STATE ?? fileURLToPath(new URL('./state.json', import.meta.url))
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
