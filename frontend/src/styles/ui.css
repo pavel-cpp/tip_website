@@ -705,9 +705,9 @@
 .psb-rail {
   position: absolute;
   top: 0;
-  right: calc((var(--psb-gutter, 10px) - 6px) / 2);
+  right: calc((var(--psb-gutter, 10px) - var(--psb-base, 6px)) / 2);
   bottom: 0;
-  width: 15px;
+  width: var(--psb-wide, 15px);
   pointer-events: none;
   z-index: 2;
 }
@@ -718,7 +718,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: 15px;
+  width: var(--psb-wide, 15px);
   border-radius: 8px;
   background: var(--border-strong);
   transform-origin: right center;

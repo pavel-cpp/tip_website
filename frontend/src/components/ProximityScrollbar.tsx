@@ -1,9 +1,9 @@
 import { type RefObject, useEffect, useRef } from 'react'
 
-/** Visible width of the thumb at rest: what the native scrollbar thumb is (10px gutter, 2px transparent border). */
-const BASE = 6
-/** Visible width when the pointer is on the scrollbar. */
-const WIDE = 15
+/** Space the native thumb leaves around itself inside the gutter (Chromium: 10px gutter, 6px thumb). */
+const INSET = 4
+/** Visible width when the pointer is on the scrollbar, at least; always wider than the resting one. */
+const WIDE_MIN = 15
 /** The thumb starts to grow when the pointer is this close (px) to the scrollbar side of the area. */
 const NEAR = 90
 const MIN_THUMB = 28
@@ -38,10 +38,12 @@ export function ProximityScrollbar({ target, watch }: Props) {
     let dragging = false
     let thumbH = 0
     let travel = 0 // how far the thumb can move, px
+    let base = 6 // resting width: what the native thumb was
+    let wide = WIDE_MIN
 
     const paint = () => {
       const p = dragging ? 1 : near
-      const scale = (BASE + (WIDE - BASE) * p) / WIDE
+      const scale = (base + (wide - base) * p) / wide
       const y = travel > 0 ? (el.scrollTop / (el.scrollHeight - el.clientHeight)) * travel : 0
       thumbEl.style.transform = `translateY(${y}px) scaleX(${scale})`
       thumbEl.toggleAttribute('data-near', p > 0.5)
@@ -56,7 +58,12 @@ export function ProximityScrollbar({ target, watch }: Props) {
         return
       }
       el.dataset.psb = ''
+      // The resting thumb keeps the native one's size, whatever the browser's scrollbar is.
+      base = Math.max(4, gutter - INSET)
+      wide = Math.max(WIDE_MIN, base + 9)
+      railEl.style.setProperty('--psb-base', `${base}px`)
       railEl.style.setProperty('--psb-gutter', `${gutter}px`)
+      railEl.style.setProperty('--psb-wide', `${wide}px`)
       const over = el.scrollHeight > el.clientHeight + 1
       railEl.hidden = !over
       if (!over) return
