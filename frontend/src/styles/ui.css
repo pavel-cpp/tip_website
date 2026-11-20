@@ -693,21 +693,20 @@
   width: min(360px, 100%);
 }
 
-/* ProximityScrollbar: drawn over the native gutter (which keeps its width), the native thumb is hidden. */
-[data-psb]::-webkit-scrollbar-thumb {
-  background: transparent;
+/* ProximityScrollbar: the native bar is hidden and a 10px strip is reserved for the drawn one (same in every browser). */
+[data-psb] {
+  scrollbar-width: none;
+  padding-right: 10px;
 }
-@supports (-moz-appearance: none) {
-  [data-psb] {
-    scrollbar-color: transparent transparent;
-  }
+[data-psb]::-webkit-scrollbar {
+  display: none;
 }
 .psb-rail {
   position: absolute;
   top: 0;
-  right: calc((var(--psb-gutter, 10px) - var(--psb-base, 6px)) / 2);
+  right: 2px;
   bottom: 0;
-  width: var(--psb-wide, 15px);
+  width: 15px;
   pointer-events: none;
   z-index: 2;
 }
@@ -718,7 +717,7 @@
   position: absolute;
   top: 0;
   right: 0;
-  width: var(--psb-wide, 15px);
+  width: 15px;
   border-radius: 8px;
   background: var(--border-strong);
   transform-origin: right center;
@@ -726,6 +725,7 @@
   touch-action: none;
   transition:
     transform var(--dur-fast) var(--ease-standard),
+    border-radius var(--dur-fast) var(--ease-standard),
     background-color var(--dur-fast) var(--ease-standard);
 }
 .psb-thumb[data-near] {

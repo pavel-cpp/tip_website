@@ -17,7 +17,7 @@ import {
 } from 'react'
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
-import { ProximityScrollbar } from '../../components/ProximityScrollbar'
+import { ProximityScrollbar, PSB_GUTTER } from '../../components/ProximityScrollbar'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
@@ -238,7 +238,11 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
     const el = scroller.current
     const gridEl = grid.current
     if (!el || !gridEl) return
-    const sync = () => gridEl.style.setProperty('--sbw', `${el.offsetWidth - el.clientWidth}px`)
+    const sync = () =>
+      gridEl.style.setProperty(
+        '--sbw',
+        `${'psb' in el.dataset ? PSB_GUTTER : el.offsetWidth - el.clientWidth}px`,
+      )
     sync()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(sync)
