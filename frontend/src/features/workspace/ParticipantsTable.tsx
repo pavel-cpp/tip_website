@@ -1,6 +1,7 @@
 // biome-ignore-all lint/a11y/useSemanticElements: virtualized spreadsheet grid needs the ARIA grid pattern, not <table>
 // biome-ignore-all lint/a11y/useFocusableInteractive: focus is managed on the grid via aria-activedescendant
 // biome-ignore-all lint/a11y/useAriaPropsSupportedByRole: row/cell state attributes follow the ARIA grid pattern
+
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   type ClipboardEvent,
@@ -16,6 +17,7 @@ import {
 } from 'react'
 import { Button } from '../../components/Button'
 import { Icon } from '../../components/Icon'
+import { ProximityScrollbar } from '../../components/ProximityScrollbar'
 import { Skeleton, useSkeleton } from '../../components/Skeleton'
 import { useI18n } from '../../i18n'
 import type { Participant } from './api'
@@ -1018,68 +1020,74 @@ export function ParticipantsTable(props: ParticipantsTableProps) {
             </div>
           </div>
 
-          <div
-            ref={scroller}
-            className="pt-scroll"
-            tabIndex={-1}
-            role={emptyOrLoading ? undefined : 'rowgroup'}
-          >
-            {emptyOrLoading ?? (
-              <div className="pt-sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
-                <UnderLayer
-                  runs={runs}
-                  spot={
-                    spotlight && indexOfId.has(spotlight.rowId)
-                      ? { index: indexOfId.get(spotlight.rowId) as number, color: spotlight.color }
-                      : null
-                  }
-                  rowHeight={ROW_HEIGHT}
-                />
-                {items.map((item) => {
-                  const row = visible[item.index]
-                  if (!row) return null
-                  return (
-                    <ParticipantRow
-                      key={row.id}
-                      row={row}
-                      index={item.index}
-                      top={item.start}
-                      selected={selected.has(row.id)}
-                      current={currentId === row.id}
-                      activeCol={active?.row === item.index ? active.col : null}
-                      editing={edit?.id === row.id ? edit : null}
-                      lockedBy={lockFor(row.id)}
-                      leaving={leaving.has(row.id)}
-                      fresh={freshIds.has(row.id)}
-                      freshColor={freshColor}
-                      shake={shakes.get(row.id) ?? 0}
-                      tipOpen={tipId === row.id}
-                      conflict={conflicts.get(row.id) ?? null}
-                      failed={failed.get(row.id) ?? null}
-                      unsent={unsentIds.has(row.id)}
-                      rowCount={visible.length}
-                      handlers={handlers}
-                    />
-                  )
-                })}
-                <CurrentMark
-                  index={currentId ? (indexOfId.get(currentId) ?? null) : null}
-                  rowHeight={ROW_HEIGHT}
-                />
-                {cursorLayer}
-                {active && active.row < visible.length && (
-                  <span
-                    className="pt-ring"
-                    aria-hidden="true"
-                    style={{ transform: `translateY(${active.row * ROW_HEIGHT}px)`, height: ROW_HEIGHT - 1 }}
-                  >
-                    {COLUMNS.map((c, col) => (
-                      <span key={c} data-on={active.col === col || undefined} />
-                    ))}
-                  </span>
-                )}
-              </div>
-            )}
+          <div className="pt-scrollbox">
+            <div
+              ref={scroller}
+              className="pt-scroll"
+              tabIndex={-1}
+              role={emptyOrLoading ? undefined : 'rowgroup'}
+            >
+              {emptyOrLoading ?? (
+                <div className="pt-sizer" style={{ height: rowVirtualizer.getTotalSize() }}>
+                  <UnderLayer
+                    runs={runs}
+                    spot={
+                      spotlight && indexOfId.has(spotlight.rowId)
+                        ? { index: indexOfId.get(spotlight.rowId) as number, color: spotlight.color }
+                        : null
+                    }
+                    rowHeight={ROW_HEIGHT}
+                  />
+                  {items.map((item) => {
+                    const row = visible[item.index]
+                    if (!row) return null
+                    return (
+                      <ParticipantRow
+                        key={row.id}
+                        row={row}
+                        index={item.index}
+                        top={item.start}
+                        selected={selected.has(row.id)}
+                        current={currentId === row.id}
+                        activeCol={active?.row === item.index ? active.col : null}
+                        editing={edit?.id === row.id ? edit : null}
+                        lockedBy={lockFor(row.id)}
+                        leaving={leaving.has(row.id)}
+                        fresh={freshIds.has(row.id)}
+                        freshColor={freshColor}
+                        shake={shakes.get(row.id) ?? 0}
+                        tipOpen={tipId === row.id}
+                        conflict={conflicts.get(row.id) ?? null}
+                        failed={failed.get(row.id) ?? null}
+                        unsent={unsentIds.has(row.id)}
+                        rowCount={visible.length}
+                        handlers={handlers}
+                      />
+                    )
+                  })}
+                  <CurrentMark
+                    index={currentId ? (indexOfId.get(currentId) ?? null) : null}
+                    rowHeight={ROW_HEIGHT}
+                  />
+                  {cursorLayer}
+                  {active && active.row < visible.length && (
+                    <span
+                      className="pt-ring"
+                      aria-hidden="true"
+                      style={{
+                        transform: `translateY(${active.row * ROW_HEIGHT}px)`,
+                        height: ROW_HEIGHT - 1,
+                      }}
+                    >
+                      {COLUMNS.map((c, col) => (
+                        <span key={c} data-on={active.col === col || undefined} />
+                      ))}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <ProximityScrollbar target={scroller} watch={visible.length} />
           </div>
         </div>
       )}

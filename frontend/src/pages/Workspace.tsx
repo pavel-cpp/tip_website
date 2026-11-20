@@ -734,6 +734,15 @@ function WorkspaceView({ project }: { project: Project }) {
         <div className="ws-toolbar" role="toolbar" aria-label={t('workspace.toolbar')}>
           {canPrint && (
             <>
+              <SaveButton
+                count={actions.targetCount}
+                mode={actions.saveMode}
+                folderSupported={folderSupported()}
+                disabled={!current || !source}
+                disabledReason={notReadyReason}
+                onSave={() => void actions.save()}
+                onSaveAs={(m) => void actions.saveAs(m)}
+              />
               <ToolButton
                 icon="copy"
                 variant="primary"
@@ -743,15 +752,6 @@ function WorkspaceView({ project }: { project: Project }) {
                 disabled={!current || !source}
                 disabledReason={notReadyReason}
                 onClick={actions.copy}
-              />
-              <SaveButton
-                count={actions.targetCount}
-                mode={actions.saveMode}
-                folderSupported={folderSupported()}
-                disabled={!current || !source}
-                disabledReason={notReadyReason}
-                onSave={() => void actions.save()}
-                onSaveAs={(m) => void actions.saveAs(m)}
               />
             </>
           )}
